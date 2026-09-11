@@ -4,6 +4,7 @@ import { CityGenerator, CityData } from './CityGenerator';
 import { RoadGenerator } from './RoadGenerator';
 import { VegetationGenerator, TreeDef } from './VegetationGenerator';
 import { FallingLeaves } from './FallingLeaves';
+import { FluidBillboard } from './FluidBillboard';
 import { ProceduralTextures } from '../core/ProceduralTextures';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
@@ -48,9 +49,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
   return (
     <group name="CityDistrictCentral">
-      {/* 1. Base Ground Substrate (320x320m) */}
+      {/* 1. Base Ground Substrate (2400x2400m for 3km Metropolis) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
-        <planeGeometry args={[320, 320]} />
+        <planeGeometry args={[2400, 2400]} />
         <meshStandardMaterial color="#060912" roughness={roadRoughness + 0.2} metalness={0.4} />
       </mesh>
 
@@ -275,6 +276,34 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
       {/* 8. Dynamic Wind-Driven Falling Leaves Particle System */}
       <FallingLeaves trees={trees} count={800} />
+
+      {/* 9. Giant Skyscraper Fluid Motion Cyber-Billboards */}
+      {/* Central Plaza North Facade Billboard (Cyan / Magenta) */}
+      <FluidBillboard
+        position={[0, 22, -26]}
+        rotationY={0}
+        width={22}
+        height={13}
+        theme="CYAN_MAGENTA"
+      />
+
+      {/* Apex Tower East Avenue Facade Billboard (Gold / Emerald) */}
+      <FluidBillboard
+        position={[24, 28, 0]}
+        rotationY={-Math.PI / 2}
+        width={18}
+        height={11}
+        theme="GOLD_EMERALD"
+      />
+
+      {/* Neon Lounge West Avenue Facade Billboard (Plasma Violet) */}
+      <FluidBillboard
+        position={[-24, 26, 0]}
+        rotationY={Math.PI / 2}
+        width={18}
+        height={11}
+        theme="PLASMA_VIOLET"
+      />
     </group>
   );
 };

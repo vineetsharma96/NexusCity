@@ -24,22 +24,32 @@ Unlike typical WebGL demonstrations that rely on multi-gigabyte downloaded 3D as
 - **Procedural IK Gait System**: Real-time forward kinematics for idle breathing, walk stride, sprint velocity, jump ascent, falling, and ground impact.
 - **Collision-Aware Spring-Arm Camera**: Raycasting collision solver that automatically pulls the third-person camera in front of obstacles.
 
-### 🏙️ Metropolis Architecture & 8×8 Spatial Chunk Streaming
+### 🏙️ Metropolis Architecture & 3km World Streaming (24×24 Chunks)
 - **16 Skyscraper Archetypes**: Monoliths, Stepped Ziggurats, Cantilevers, and Twin Spires connected by high-altitude skybridges at 60m elevation.
 - **7 Thematic Urban Districts**: Central City, Neural District, Sky District, Industrial Zone, Old Metro Sector, Biosphere Green District, and Classified Sector.
-- **64 Spatial Chunks (960m × 960m World Scale)**: 4 distance-based LOD tiers and 120+ instanced distant skyline silhouettes maintaining 60 FPS.
+- **576 Spatial Chunks (~3,000m × 3,000m World Scale)**: Thrice expanded world bounds with 4 distance-based LOD tiers and 240 instanced distant skyline silhouettes maintaining smooth 60 FPS.
+
+### 🚗 Autonomous Dual-Layer Traffic System
+- **32 Ground Hover-Cruisers**: Autonomous vehicles navigating multi-lane avenues with glowing twin LED headlights and red rear taillight bars.
+- **24 High-Altitude Skyway Commuters**: Sleek airborne commuters gliding between skyscraper spires along aerial transit corridors with cyan plasma exhaust trails.
+- **Boundary Wrapping & High Performance**: 100% instanced rendering for zero-overhead vehicular movement.
+
+### 🌊 Skyscraper Fluid Motion Billboards
+- **Procedural Navier-Stokes Liquid Simulation**: Giant monolithic holographic displays mounted to skyscraper facades.
+- **Multi-Frequency Domain-Warped Shaders**: Real-time turbulent fluid eddies, chromatic edge aberration, scanlines, and neon bezels with custom color themes (Cyan/Magenta, Gold/Emerald, Plasma/Violet).
 
 ### 🌳 Dynamic Vegetation & Instanced Leaves
 - Procedural street trees with tapered cylindrical bark trunks, multi-tier branches, and faceted dodecahedral canopy clouds.
 - 800 instanced falling leaves with procedural wind gusts, 3D tumbling rotation, ground settling, and vertical recycling.
 
-### ☀️ Continuous Day/Night Cycle & Hybrid Global Illumination
-- Continuous 24-hour celestial orbit (Dawn, Day, Sunset, Dusk, Night) with solar and lunar trajectories.
-- Dynamic sky colors, atmospheric fog, sunset ground bounce, and night-scaling emissive neon streetlights.
+### ☀️ Realtime Celestial Sun & Dynamic Moving Shadows
+- Continuous 24-hour celestial orbit (Dawn, Day, Sunset, Dusk, Night) with radiant sun sphere and outer glowing coronal aura.
+- **Dynamic Real-Time Moving Shadows**: Sun trajectory continuously swings and stretches sharp directional shadow cascades across building facades, streets, vehicles, and pedestrians in real time.
+- Dynamic atmospheric Rayleigh/Mie scattering colors, altitude fog, sunset ground bounce, and night-scaling emissive neon streetlights.
 
-### 👥 Living NPC City Life & Cyberpunk Dialogue
-- Autonomous procedural citizens (Dr. Vance Kael, Kira Jin, Officer Chen, Patrol Unit Echo-7) traversing sidewalk waypoints on daily routines.
-- Interactive cyberpunk dialogue modal with branching dialogue trees and lore.
+### 👥 50+ Living NPCs & Cyberpunk Dialogue
+- **52 Autonomous Procedural Citizens**: Story characters (Dr. Vance Kael, Kira Jin, Officer Chen, Echo-7) alongside 48 procedural citizens (Netrunners, Technicians, Synthetic Civilians, Couriers) with randomized cyber-armor palettes and visors.
+- **Sidewalk Waypoint Navigation**: Dynamic pacing, directional turning, procedural breathing/walking IK, and ambient chatter fallback.
 
 ### 🚪 Enterable Buildings & Procedural Interiors
 - Automated proximity double sliding glass doors on **Nexus Advanced Labs** and **Neon Velocity Lounge**.

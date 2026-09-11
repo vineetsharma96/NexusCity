@@ -27,28 +27,28 @@ export class CityGenerator {
     KinematicCollisionSolver.clear();
 
     // 1. Road Avenues (North-South Main Blvd & East-West Cross Blvd)
-    // Main North-South Boulevard (20m wide, 300m long)
+    // Main North-South Boulevard (20m wide, 900m long)
     avenues.push({
       position: new THREE.Vector3(0, 0.02, 0),
-      size: new THREE.Vector3(20, 0.05, 300),
+      size: new THREE.Vector3(20, 0.05, 900),
       rotationY: 0,
     });
-    // Secondary East-West Cross Boulevard (16m wide, 300m long)
+    // Secondary East-West Cross Boulevard (16m wide, 900m long)
     avenues.push({
       position: new THREE.Vector3(0, 0.025, 0),
-      size: new THREE.Vector3(16, 0.05, 300),
+      size: new THREE.Vector3(16, 0.05, 900),
       rotationY: Math.PI / 2,
     });
     // North Cross Street (14m wide)
     avenues.push({
       position: new THREE.Vector3(0, 0.025, -75),
-      size: new THREE.Vector3(14, 0.05, 300),
+      size: new THREE.Vector3(14, 0.05, 900),
       rotationY: Math.PI / 2,
     });
     // South Cross Street (14m wide)
     avenues.push({
       position: new THREE.Vector3(0, 0.025, 75),
-      size: new THREE.Vector3(14, 0.05, 300),
+      size: new THREE.Vector3(14, 0.05, 900),
       rotationY: Math.PI / 2,
     });
 

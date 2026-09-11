@@ -7,7 +7,7 @@ export const SkylineSilhouettes: React.FC = () => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const beaconMeshRef = useRef<THREE.InstancedMesh>(null);
 
-  const count = 120; // 120 distant skyline skyscrapers
+  const count = 240; // 240 distant skyline skyscrapers spanning 3km horizon
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
@@ -17,7 +17,7 @@ export const SkylineSilhouettes: React.FC = () => {
     const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
     const sphereGeometry = new THREE.SphereGeometry(1, 6, 6);
 
-    // Instances generated in outer ring: radius 180m to 550m
+    // Instances generated in outer ring: radius 280m to 1400m
     const instances: {
       position: THREE.Vector3;
       scale: THREE.Vector3;
@@ -28,15 +28,15 @@ export const SkylineSilhouettes: React.FC = () => {
 
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + rng.range(-0.05, 0.05);
-      const dist = rng.range(190, 520);
+      const dist = rng.range(280, 1400);
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
 
       // Consult district profile for height and theme color
       const district = DistrictGenerator.getDistrictAt(x, z);
-      const height = rng.range(district.buildingHeightRange[0], district.buildingHeightRange[1]);
-      const width = rng.range(18, 38);
-      const depth = rng.range(18, 38);
+      const height = rng.range(district.buildingHeightRange[0] * 1.1, district.buildingHeightRange[1] * 1.35);
+      const width = rng.range(24, 55);
+      const depth = rng.range(24, 55);
 
       const color = new THREE.Color(district.accentColor).multiplyScalar(0.25);
       const beaconColor = new THREE.Color(district.primaryLightColor);

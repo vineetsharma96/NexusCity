@@ -26,7 +26,7 @@ export class ChunkManager {
   private static instance: ChunkManager;
 
   public static readonly CHUNK_SIZE = 120; // meters
-  public static readonly GRID_RADIUS = 4;  // -4 .. 3 (8x8 grid = 960m x 960m)
+  public static readonly GRID_RADIUS = 12; // -12 .. 11 (24x24 grid = 2880m x 2880m, roughly 3km wide)
 
   private chunks: Map<string, ChunkInfo> = new Map();
   private activeDistrict: DistrictInfo = DistrictGenerator.getDistrictAt(0, 0);
@@ -93,11 +93,11 @@ export class ChunkManager {
       const dist = playerPos.distanceTo(chunk.center);
       chunk.distanceToPlayer = dist;
 
-      if (dist < 140) {
+      if (dist < 150) {
         chunk.lod = 'HIGH';
-      } else if (dist < 280) {
+      } else if (dist < 320) {
         chunk.lod = 'MEDIUM';
-      } else if (dist < 650) {
+      } else if (dist < 850) {
         chunk.lod = 'LOW';
       } else {
         chunk.lod = 'UNLOADED';

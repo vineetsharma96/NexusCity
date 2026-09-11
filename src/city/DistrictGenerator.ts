@@ -100,38 +100,38 @@ export class DistrictGenerator {
   public static getDistrictAt(x: number, z: number): DistrictInfo {
     const distFromOrigin = Math.sqrt(x * x + z * z);
 
-    // Central City within 130m of origin
-    if (distFromOrigin < 130) {
+    // Central City within 280m of origin
+    if (distFromOrigin < 280) {
       return DISTRICT_PROFILES.CENTRAL_CITY;
     }
 
     // Directional sectors in outer ring:
-    // North (z < -130): Sky District
-    if (z < -130 && Math.abs(x) < 180) {
+    // North (z < -280): Sky District
+    if (z < -280 && Math.abs(x) < 450) {
       return DISTRICT_PROFILES.SKY_DISTRICT;
     }
 
-    // East (x > 130): Neural District
-    if (x > 130 && z >= -130 && z <= 130) {
+    // East (x > 280): Neural District
+    if (x > 280 && z >= -350 && z <= 350) {
       return DISTRICT_PROFILES.NEURAL_DISTRICT;
     }
 
-    // West (x < -130): Industrial District
-    if (x < -130 && z >= -130 && z <= 130) {
+    // West (x < -280): Industrial District
+    if (x < -280 && z >= -350 && z <= 350) {
       return DISTRICT_PROFILES.INDUSTRIAL_DISTRICT;
     }
 
-    // South-East (x > 100 && z > 130): Green District
-    if (x > 80 && z > 130) {
+    // South-East (x > 180 && z > 280): Green District
+    if (x > 180 && z > 280) {
       return DISTRICT_PROFILES.GREEN_DISTRICT;
     }
 
-    // South-West (x < -80 && z > 130): Old City
-    if (x < -80 && z > 130) {
+    // South-West (x < -180 && z > 280): Old City
+    if (x < -180 && z > 280) {
       return DISTRICT_PROFILES.OLD_CITY;
     }
 
-    // Far North-West / Outer fringes: Unknown District
+    // Far Peripheries / Outer fringes: Unknown District
     return DISTRICT_PROFILES.UNKNOWN_DISTRICT;
   }
 }

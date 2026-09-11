@@ -10,6 +10,7 @@ import { ProceduralInterior } from '../city/ProceduralInterior';
 import { NavigationRibbon } from '../map/NavigationRibbon';
 import { WorldManager } from '../world/WorldManager';
 import { RainParticles } from '../city/RainParticles';
+import { TrafficSystem } from '../city/TrafficSystem';
 import { InteriorManager, InteriorState } from '../world/InteriorManager';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 import { PerformanceMonitor } from '../rendering/PerformanceMonitor';
@@ -77,12 +78,13 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       style={{ width: '100vw', height: '100vh' }}
     >
       <SceneFrameLoop />
-      <LightingManager quality={quality} />
+      <LightingManager quality={quality} playerPosRef={playerPosRef} />
 
       {/* Exterior City District & Entrances */}
       <CityDistrict seed={847291} />
       <NavigationRibbon />
       <WorldManager playerPosRef={playerPosRef} />
+      {interiorState.current === 'NONE' && <TrafficSystem playerPosRef={playerPosRef} />}
       {interiorState.current === 'NONE' && <RainParticles playerPosRef={playerPosRef} />}
 
       {/* Enterable Building Entrance 1: Nexus Advanced Labs (East Avenue) */}

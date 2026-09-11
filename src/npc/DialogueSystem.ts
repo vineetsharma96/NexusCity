@@ -191,11 +191,33 @@ export class DialogueSystem {
     this.conversations.set(conv.npcId, conv);
   }
 
-  public startDialogue(npcId: string): boolean {
+  public startDialogue(npcId: string, citizenName?: string, citizenRole?: string): boolean {
     const conv = this.conversations.get(npcId);
-    if (!conv) return false;
-
-    this.currentNode = conv.nodes[conv.startNodeId] || null;
+    if (conv) {
+      this.currentNode = conv.nodes[conv.startNodeId] || null;
+    } else {
+      // Procedural Citizen ambient dialogue chatter
+      const ambientQuotes = [
+        "The skyward magnetic grid is experiencing high flux today. Fascinating readings.",
+        "Heading toward Central Plaza. The holographic news broadcast is updating sector trade tariffs.",
+        "Have you seen the weather atmospheric condensers? The rainfall patterns are completely synthetic.",
+        "Always watch the skybridge crossings when the high-altitude winds pick up.",
+        "Dr. Vance Kael's team at Nexus Labs just stabilized the quantum reactor core.",
+        "The Neon Velocity Lounge on West Avenue has the best synthesized espresso in District 1.",
+        "Beautiful day in Nexus City. The solar arrays are running at 100% capacity.",
+      ];
+      const randomQuote = ambientQuotes[Math.floor(Math.random() * ambientQuotes.length)];
+      this.currentNode = {
+        id: `dialogue_${npcId}`,
+        speaker: citizenName || 'Nexus Citizen',
+        role: citizenRole || 'Metropolis Resident',
+        text: randomQuote,
+        choices: [
+          { text: 'Understood. Safe travels in the city.', nextNodeId: 'exit' },
+          { text: 'Catch you later.', nextNodeId: 'exit' },
+        ],
+      };
+    }
     this.notify();
     return !!this.currentNode;
   }
