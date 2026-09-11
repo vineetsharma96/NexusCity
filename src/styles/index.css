@@ -1,0 +1,225 @@
+:root {
+  --bg-dark: #050811;
+  --bg-panel: rgba(9, 14, 28, 0.78);
+  --bg-panel-solid: #0c1224;
+  --neon-cyan: #00f0ff;
+  --neon-cyan-glow: rgba(0, 240, 255, 0.45);
+  --neon-amber: #ffaa00;
+  --neon-amber-glow: rgba(255, 170, 0, 0.45);
+  --neon-magenta: #ff0077;
+  --neon-emerald: #00ffaa;
+  --text-primary: #e6f1ff;
+  --text-secondary: #8ba2c4;
+  --text-muted: #536988;
+  --border-glass: rgba(0, 240, 255, 0.22);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --font-display: 'Orbitron', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Rajdhani', monospace, sans-serif;
+  --font-body: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html, body, #root {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--bg-dark);
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  touch-action: none;
+}
+
+canvas {
+  outline: none;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Glassmorphic UI utilities */
+.glass-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-glass);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6), inset 0 0 16px rgba(0, 240, 255, 0.05);
+  border-radius: 8px;
+}
+
+.glass-panel-amber {
+  background: rgba(20, 14, 8, 0.82);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 170, 0, 0.3);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6), inset 0 0 16px rgba(255, 170, 0, 0.05);
+}
+
+.neon-text-cyan {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 12px var(--neon-cyan-glow);
+}
+
+.neon-text-amber {
+  color: var(--neon-amber);
+  text-shadow: 0 0 12px var(--neon-amber-glow);
+}
+
+.cyber-badge {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border-glass);
+  background: rgba(0, 240, 255, 0.08);
+}
+
+/* Hologram scanlines overlay */
+.scanlines-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 10;
+  opacity: 0.35;
+}
+
+/* Subtle vignette */
+.vignette-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 60%, rgba(5, 8, 17, 0.75) 100%);
+  z-index: 9;
+}
+
+/* Crosshair in center */
+.center-reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0, 240, 255, 0.65);
+  box-shadow: 0 0 10px var(--neon-cyan);
+  pointer-events: none;
+  z-index: 15;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.center-reticle::before, .center-reticle::after {
+  content: '';
+  position: absolute;
+  background: rgba(0, 240, 255, 0.35);
+}
+
+.center-reticle::before {
+  top: 50%;
+  left: -12px;
+  width: 32px;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.center-reticle::after {
+  top: -12px;
+  left: 50%;
+  width: 1px;
+  height: 32px;
+  transform: translateX(-50%);
+}
+
+/* Button & Select styling */
+button.cyber-btn {
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+button.cyber-btn:hover {
+  background: var(--neon-cyan);
+  color: #050811;
+  box-shadow: 0 0 16px var(--neon-cyan-glow);
+}
+
+select.cyber-select {
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--border-glass);
+  color: var(--neon-cyan);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Mobile responsive layout optimizations */
+@media (max-width: 768px) {
+  .hud-top-left {
+    top: 10px !important;
+    left: 10px !important;
+    padding: 8px 10px !important;
+    max-width: 95vw !important;
+  }
+
+  .hud-top-right {
+    top: auto !important;
+    bottom: 12px !important;
+    left: 12px !important;
+    right: auto !important;
+    padding: 6px 10px !important;
+    font-size: 0.72rem !important;
+    z-index: 25 !important;
+  }
+
+  .hud-time-weather-row {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+
+  .center-reticle {
+    opacity: 0.3 !important;
+    transform: translate(-50%, -50%) scale(0.7) !important;
+  }
+
+  .cyber-badge {
+    font-size: 0.65rem !important;
+    padding: 2px 6px !important;
+  }
+
+  button.cyber-btn {
+    font-size: 0.7rem !important;
+  }
+}
