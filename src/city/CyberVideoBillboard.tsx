@@ -36,10 +36,28 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
   useEffect(() => {
     canvasRef.current = canvas;
     textureRef.current = texture;
+
+    // Draw initial test pattern immediately
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#040714';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#00f0ff';
+      ctx.font = 'bold 24px monospace';
+      ctx.fillText('NEXUS BROADCAST // ONLINE', 60, 160);
+      texture.needsUpdate = true;
+    }
   }, [canvas, texture]);
 
   // Frame update for dynamic video rendering
-  useFrame(({ clock }) => {
+  useFrame(({ clock, camera }) => {
+    const camDist = Math.hypot(
+      camera.position.x - position[0],
+      camera.position.y - position[1],
+      camera.position.z - position[2]
+    );
+    if (camDist > 220) return; // Skip 2D canvas redraws when distant
+
     const time = clock.getElapsedTime();
 
     // Throttle canvas draw to ~30 FPS for optimal performance
@@ -338,37 +356,39 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
 
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
-      {/* Heavy Industrial Screen Enclosure / Bezel */}
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[width + 1.6, height + 1.4, 0.8]} />
-        <meshStandardMaterial color="#0b0f19" roughness={0.3} metalness={0.9} />
+      {/* Heavy Industrial Screen Enclosure / Backing */}
+      <mesh position={[0, 0, -0.25]} castShadow receiveShadow>
+        <boxGeometry args={[width + 1.6, height + 1.4, 0.5]} />
+        <meshStandardMaterial color="#070b14" roughness={0.3} metalness={0.9} />
       </mesh>
 
-      {/* Screen Frame Recess */}
-      <mesh position={[0, 0, 0.2]}>
-        <boxGeometry args={[width + 0.4, height + 0.4, 0.6]} />
-        <meshStandardMaterial color="#020617" roughness={0.8} />
-      </mesh>
-
-      {/* Dynamic Video Display Surface */}
-      <mesh position={[0, 0, 0.45]}>
+      {/* Dynamic Video Display Surface (in front of backing) */}
+      <mesh position={[0, 0, 0.05]}>
         <planeGeometry args={[width, height]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
+        <meshBasicMaterial map={texture} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Outer Glowing Neon Bezel Rim Tubes */}
-      <mesh position={[0, height / 2 + 0.6, 0.48]}>
-        <boxGeometry args={[width + 1.2, 0.08, 0.08]} />
+      <mesh position={[0, height / 2 + 0.35, 0.08]}>
+        <boxGeometry args={[width + 0.8, 0.12, 0.12]} />
         <meshBasicMaterial color={channel === 1 ? '#00f0ff' : channel === 2 ? '#ec4899' : '#10b981'} />
       </mesh>
-      <mesh position={[0, -height / 2 - 0.6, 0.48]}>
-        <boxGeometry args={[width + 1.2, 0.08, 0.08]} />
+      <mesh position={[0, -height / 2 - 0.35, 0.08]}>
+        <boxGeometry args={[width + 0.8, 0.12, 0.12]} />
+        <meshBasicMaterial color={channel === 1 ? '#00f0ff' : channel === 2 ? '#ec4899' : '#10b981'} />
+      </mesh>
+      <mesh position={[-width / 2 - 0.35, 0, 0.08]}>
+        <boxGeometry args={[0.12, height + 0.8, 0.12]} />
+        <meshBasicMaterial color={channel === 1 ? '#00f0ff' : channel === 2 ? '#ec4899' : '#10b981'} />
+      </mesh>
+      <mesh position={[width / 2 + 0.35, 0, 0.08]}>
+        <boxGeometry args={[0.12, height + 0.8, 0.12]} />
         <meshBasicMaterial color={channel === 1 ? '#00f0ff' : channel === 2 ? '#ec4899' : '#10b981'} />
       </mesh>
 
       {/* Structural Catwalk Grate Platform Below Screen */}
-      <mesh position={[0, -height / 2 - 1.2, 1.2]}>
-        <boxGeometry args={[width + 2, 0.15, 2.0]} />
+      <mesh position={[0, -height / 2 - 0.8, 0.8]}>
+        <boxGeometry args={[width + 2, 0.15, 1.6]} />
         <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.4} />
       </mesh>
     </group>

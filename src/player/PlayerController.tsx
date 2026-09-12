@@ -20,6 +20,7 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
     velocity: controllerRef.current.velocity,
     rotationY: controllerRef.current.rotationY,
     speed: 0,
+    bankAngle: 0,
     isGrounded: true,
     gait: 'IDLE',
   }));

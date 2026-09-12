@@ -14,32 +14,83 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
   const rightLegRef = useRef<THREE.Group>(null);
   const leftArmRef = useRef<THREE.Group>(null);
   const rightArmRef = useRef<THREE.Group>(null);
-
+  const torsoRef = useRef<THREE.Group>(null);
+  const headRef = useRef<THREE.Group>(null);
   const walkTimer = useRef(Math.random() * 10);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (!rootRef.current) return;
 
-    // Sync position and facing yaw
+    // Distance LOD & culling optimization: cull NPCs beyond 115m
+    const camDist = state.camera.position.distanceTo(npc.position);
+    if (camDist > 115) {
+      if (rootRef.current.visible) rootRef.current.visible = false;
+      return;
+    }
+    if (!rootRef.current.visible) rootRef.current.visible = true;
+
+    // 1. Sync position & smoothly interpolate facing yaw (eliminates abrupt turn snaps)
     rootRef.current.position.copy(npc.position);
-    rootRef.current.rotation.y = npc.facingYaw;
+    
+    // Shortest angular distance slerp
+    let diff = npc.facingYaw - rootRef.current.rotation.y;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    rootRef.current.rotation.y += diff * Math.min(1.0, delta * 9.0);
+
+    // Skip fine joint transforms for distant NPCs (>65m) to maximize FPS
+    const isClose = camDist <= 65;
 
     if (npc.isWalking) {
-      walkTimer.current += delta * 7.0;
-      const stride = Math.sin(walkTimer.current) * 0.55;
+      walkTimer.current += delta * (npc.walkSpeed * 3.2);
+      const t = walkTimer.current;
+      const stride = Math.sin(t) * 0.58;
 
+      // Limb swing
       if (leftLegRef.current) leftLegRef.current.rotation.x = stride;
       if (rightLegRef.current) rightLegRef.current.rotation.x = -stride;
-      if (leftArmRef.current) leftArmRef.current.rotation.x = -stride * 0.8;
-      if (rightArmRef.current) rightArmRef.current.rotation.x = stride * 0.8;
-    } else {
-      // Idle relaxation
+
+      if (isClose) {
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.x = -stride * 0.85;
+          leftArmRef.current.rotation.z = 0.06;
+        }
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.x = stride * 0.85;
+          rightArmRef.current.rotation.z = -0.06;
+        }
+
+        // Natural torso counter-rotation & hip bounce
+        if (torsoRef.current) {
+          torsoRef.current.rotation.y = -Math.sin(t) * 0.08;
+          torsoRef.current.position.y = 0.26 + Math.abs(Math.sin(t)) * 0.03;
+        }
+      }
+    } else if (isClose) {
+      // Idle breathing & gentle relaxation (only for close NPCs)
       walkTimer.current += delta * 2.0;
-      const breathe = Math.sin(walkTimer.current) * 0.04;
+      const breathe = Math.sin(walkTimer.current) * 0.035;
       if (leftLegRef.current) leftLegRef.current.rotation.x = 0;
       if (rightLegRef.current) rightLegRef.current.rotation.x = 0;
-      if (leftArmRef.current) leftArmRef.current.rotation.x = breathe;
-      if (rightArmRef.current) rightArmRef.current.rotation.x = -breathe;
+      if (leftArmRef.current) {
+        leftArmRef.current.rotation.x = breathe;
+        leftArmRef.current.rotation.z = 0.1;
+      }
+      if (rightArmRef.current) {
+        rightArmRef.current.rotation.x = -breathe;
+        rightArmRef.current.rotation.z = -0.1;
+      }
+      if (torsoRef.current) {
+        torsoRef.current.rotation.y = 0;
+        torsoRef.current.position.y = 0.26 + breathe * 0.4;
+      }
+    }
+
+    // Look slightly towards player if nearby
+    if (headRef.current && isNearby) {
+      headRef.current.rotation.y = THREE.MathUtils.lerp(headRef.current.rotation.y, 0.15, delta * 4);
+    } else if (headRef.current && isClose) {
+      headRef.current.rotation.y = THREE.MathUtils.lerp(headRef.current.rotation.y, 0, delta * 4);
     }
   });
 
@@ -62,7 +113,7 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
         </mesh>
 
         {/* Torso with Custom Armor Palette */}
-        <group position={[0, 0.26, 0]}>
+        <group ref={torsoRef} position={[0, 0.26, 0]}>
           <mesh castShadow receiveShadow>
             <boxGeometry args={[0.42, 0.38, 0.24]} />
             <meshStandardMaterial color={npc.armorColor} metalness={0.7} roughness={0.3} />
@@ -75,7 +126,7 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
         </group>
 
         {/* Head & Stylized Cyber Visor */}
-        <group position={[0, 0.58, 0]}>
+        <group ref={headRef} position={[0, 0.58, 0]}>
           <mesh castShadow>
             <sphereGeometry args={[0.15, 16, 16]} />
             <meshStandardMaterial color="#0a0f1d" metalness={0.9} roughness={0.2} />

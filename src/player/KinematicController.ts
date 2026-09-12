@@ -12,6 +12,7 @@ export interface KinematicState {
   speed: number;
   isGrounded: boolean;
   gait: MovementGait;
+  bankAngle: number;
 }
 
 export class KinematicController {
@@ -19,21 +20,22 @@ export class KinematicController {
   public velocity: THREE.Vector3 = new THREE.Vector3();
   public rotationY: number = 0;
   public targetRotationY: number = 0;
+  public bankAngle: number = 0;
 
-  // Movement physics constants
-  public readonly walkSpeed = 6.5;
-  public readonly sprintSpeed = 13.5;
-  public readonly acceleration = 38.0;
-  public readonly friction = 28.0;
-  public readonly gravity = -26.0;
-  public readonly jumpImpulse = 9.8;
+  // Movement physics constants (snappy, responsive cyber-locomotion)
+  public readonly walkSpeed = 6.8;
+  public readonly sprintSpeed = 14.2;
+  public readonly acceleration = 52.0;
+  public readonly friction = 38.0;
+  public readonly gravity = -25.0;
+  public readonly jumpImpulse = 10.5;
   public readonly playerRadius = 0.45;
   public readonly playerHeight = 1.8;
 
   // Ground and jump timing
   public isGrounded: boolean = true;
   private coyoteTimer: number = 0;
-  private readonly coyoteTime = 0.15; // seconds
+  private readonly coyoteTime = 0.18; // seconds
   private jumpCooldown: number = 0;
   private footstepTimer: number = 0;
 
@@ -61,22 +63,27 @@ export class KinematicController {
     const targetVelX = isMoving ? worldDir.x * maxSpeed : 0;
     const targetVelZ = isMoving ? worldDir.z * maxSpeed : 0;
 
-    // 2. Horizontal Acceleration / Deceleration
+    // 2. Horizontal Acceleration / Deceleration (tighter, more responsive damping)
     const accelRate = isMoving ? this.acceleration : this.friction;
     this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, accelRate, dt);
     this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, accelRate, dt);
 
     const horizontalSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z);
 
-    // 3. Smooth Facing Direction (Slerp-like angle dampening)
+    // 3. Smooth Facing Direction & Dynamic Lean / Bank Angle on Turns
+    let turnRate = 0;
     if (isMoving && horizontalSpeed > 0.4) {
       this.targetRotationY = Math.atan2(this.velocity.x, this.velocity.z);
-      // Smooth shortest angular distance interpolation
       let angleDiff = this.targetRotationY - this.rotationY;
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-      this.rotationY += angleDiff * Math.min(1.0, dt * 16.0);
+      turnRate = angleDiff;
+      this.rotationY += angleDiff * Math.min(1.0, dt * 18.0);
     }
+
+    // Compute bank / lean angle into turns proportional to turn rate and speed
+    const targetBank = THREE.MathUtils.clamp(-turnRate * (horizontalSpeed / this.sprintSpeed) * 0.45, -0.28, 0.28);
+    this.bankAngle = THREE.MathUtils.lerp(this.bankAngle, targetBank, dt * 10);
 
     // 4. Ground Check & Gravity
     const groundInfo = KinematicCollisionSolver.getGroundHeightAt(
@@ -164,6 +171,7 @@ export class KinematicController {
       speed: horizontalSpeed,
       isGrounded: this.isGrounded,
       gait: this.gait,
+      bankAngle: this.bankAngle,
     };
   }
 }

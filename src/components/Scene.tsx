@@ -94,8 +94,8 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       {interiorState.current === 'NONE' && <CrosswalkMarkings position={[0, 0, 0]} />}
       {interiorState.current === 'NONE' && <ParkSanctuary position={[75, 0, 75]} />}
       {interiorState.current === 'NONE' && <RainParticles playerPosRef={playerPosRef} />}
-      {interiorState.current === 'NONE' && <NaturalClouds />}
-      {interiorState.current === 'NONE' && <DirtParticles playerPosRef={playerPosRef} />}
+      {interiorState.current === 'NONE' && quality.cloudsEnabled && <NaturalClouds />}
+      {interiorState.current === 'NONE' && quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
 
       {/* 11 Enterable Building Entrances Across City Districts */}
       {interiorState.current === 'NONE' && (

@@ -546,7 +546,7 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
               </button>
             </div>
 
-            {/* Graphics Preset */}
+            {/* Graphics Preset & Custom Controls */}
             <div className="glass-panel" style={{ padding: 18 }}>
               <div
                 style={{
@@ -555,24 +555,183 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
                   fontSize: '1rem',
                   marginBottom: 12,
                   fontWeight: 700,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                 }}
               >
-                ⚙️ GRAPHICS PRESET
+                <span>⚙️ GRAPHICS & RENDERING</span>
+                {qualityPreset === 'CUSTOM' && (
+                  <span className="cyber-badge" style={{ color: '#f59e0b', borderColor: '#f59e0b' }}>
+                    CUSTOM MODE
+                  </span>
+                )}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>PRESET:</span>
+
+              {/* Preset Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>PROFILE:</span>
                 <select
                   value={qualityPreset}
                   onChange={(e) => QualityManager.setPreset(e.target.value as QualityPreset)}
                   className="cyber-select"
                   style={{ flex: 1, padding: 8 }}
                 >
-                  <option value="ULTRA">ULTRA (Maximum Shadows & Draw Distance)</option>
-                  <option value="HIGH">HIGH (Standard High-End)</option>
-                  <option value="MEDIUM">MEDIUM (Balanced Mobile/Laptop)</option>
-                  <option value="LOW">LOW (Optimized Performance)</option>
-                  <option value="LITE">LITE (Zero Shadows & Low Shader)</option>
+                  <option value="ULTRA">ULTRA (2600m Far, 2K Shadows, Full FX)</option>
+                  <option value="HIGH">HIGH (1800m Far, 1K Shadows)</option>
+                  <option value="MEDIUM">MEDIUM (1200m Far, Balanced Mobile)</option>
+                  <option value="LOW">LOW (800m Far, Zero Shadows)</option>
+                  <option value="LITE">LITE (500m Far, Minimal Shaders)</option>
+                  <option value="CUSTOM">CUSTOM (User Overrides Active)</option>
                 </select>
+              </div>
+
+              {/* Custom Sliders & Toggles */}
+              <div
+                style={{
+                  borderTop: '1px solid rgba(0, 240, 255, 0.15)',
+                  paddingTop: 14,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                }}
+              >
+                {/* 1. Draw Distance Slider */}
+                <div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.8rem',
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span>DRAW DISTANCE:</span>
+                    <strong style={{ color: 'var(--neon-cyan)' }}>
+                      {QualityManager.current.drawDistance}m
+                    </strong>
+                  </div>
+                  <input
+                    type="range"
+                    min="400"
+                    max="3000"
+                    step="50"
+                    value={QualityManager.current.drawDistance}
+                    onChange={(e) =>
+                      QualityManager.updateCustomSettings({ drawDistance: Number(e.target.value) })
+                    }
+                    style={{ width: '100%', accentColor: 'var(--neon-cyan)', cursor: 'pointer' }}
+                  />
+                </div>
+
+                {/* 2. Resolution / DPR Slider */}
+                <div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.8rem',
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span>RESOLUTION SCALE (DPR):</span>
+                    <strong style={{ color: '#00ffaa' }}>
+                      {Math.round((QualityManager.current.dpr[1] || 1) * 100)}%
+                    </strong>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.05"
+                    value={QualityManager.current.dpr[1] || 1}
+                    onChange={(e) => {
+                      const maxDpr = Number(e.target.value);
+                      QualityManager.updateCustomSettings({
+                        dpr: [Math.min(1, maxDpr), maxDpr],
+                      });
+                    }}
+                    style={{ width: '100%', accentColor: '#00ffaa', cursor: 'pointer' }}
+                  />
+                </div>
+
+                {/* 3. Realtime Toggles Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 4 }}>
+                  {/* Dynamic Shadows */}
+                  <button
+                    onClick={() =>
+                      QualityManager.updateCustomSettings({
+                        shadows: !QualityManager.current.shadows,
+                        shadowMapSize: QualityManager.current.shadows ? 256 : 1024,
+                      })
+                    }
+                    className="cyber-btn"
+                    style={{
+                      padding: '8px 10px',
+                      fontSize: '0.75rem',
+                      color: QualityManager.current.shadows ? '#00ffaa' : '#94a3b8',
+                      borderColor: QualityManager.current.shadows ? '#00ffaa' : '#334155',
+                    }}
+                  >
+                    {QualityManager.current.shadows ? '🌑 SHADOWS: ON' : '🌑 SHADOWS: OFF'}
+                  </button>
+
+                  {/* Volumetric Clouds */}
+                  <button
+                    onClick={() =>
+                      QualityManager.updateCustomSettings({
+                        cloudsEnabled: !QualityManager.current.cloudsEnabled,
+                      })
+                    }
+                    className="cyber-btn"
+                    style={{
+                      padding: '8px 10px',
+                      fontSize: '0.75rem',
+                      color: QualityManager.current.cloudsEnabled ? '#38bdf8' : '#94a3b8',
+                      borderColor: QualityManager.current.cloudsEnabled ? '#38bdf8' : '#334155',
+                    }}
+                  >
+                    {QualityManager.current.cloudsEnabled ? '☁️ CLOUDS: ON' : '☁️ CLOUDS: OFF'}
+                  </button>
+
+                  {/* Wind & Dirt Particles */}
+                  <button
+                    onClick={() =>
+                      QualityManager.updateCustomSettings({
+                        windParticlesEnabled: !QualityManager.current.windParticlesEnabled,
+                      })
+                    }
+                    className="cyber-btn"
+                    style={{
+                      padding: '8px 10px',
+                      fontSize: '0.75rem',
+                      color: QualityManager.current.windParticlesEnabled ? '#f59e0b' : '#94a3b8',
+                      borderColor: QualityManager.current.windParticlesEnabled ? '#f59e0b' : '#334155',
+                    }}
+                  >
+                    {QualityManager.current.windParticlesEnabled ? '💨 PARTICLES: ON' : '💨 PARTICLES: OFF'}
+                  </button>
+
+                  {/* Night Streetlights */}
+                  <button
+                    onClick={() =>
+                      QualityManager.updateCustomSettings({
+                        nightLightsEnabled: !QualityManager.current.nightLightsEnabled,
+                      })
+                    }
+                    className="cyber-btn"
+                    style={{
+                      padding: '8px 10px',
+                      fontSize: '0.75rem',
+                      color: QualityManager.current.nightLightsEnabled ? '#ec4899' : '#94a3b8',
+                      borderColor: QualityManager.current.nightLightsEnabled ? '#ec4899' : '#334155',
+                    }}
+                  >
+                    {QualityManager.current.nightLightsEnabled ? '💡 NIGHT LIGHTS: ON' : '💡 NIGHT LIGHTS: OFF'}
+                  </button>
+                </div>
               </div>
 
               {/* Live Diagnostics */}
@@ -580,17 +739,20 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
                 style={{
                   marginTop: 16,
                   display: 'flex',
-                  gap: 16,
+                  justifyContent: 'space-between',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '0.8rem',
                   color: 'var(--text-muted)',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                  paddingTop: 10,
                 }}
               >
                 <div>
-                  FPS: <strong style={{ color: '#00ffaa' }}>{metrics.fps}</strong>
+                  FPS: <strong style={{ color: metrics.fps > 45 ? '#00ffaa' : '#f59e0b' }}>{metrics.fps}</strong>
                 </div>
                 <div>FRAME: {metrics.frameTimeMs}ms</div>
                 <div>CALLS: {metrics.drawCalls}</div>
+                <div>POLY: {Math.round(metrics.triangles / 1000)}k</div>
               </div>
             </div>
 

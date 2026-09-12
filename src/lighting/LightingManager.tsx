@@ -166,7 +166,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       />
 
       {/* Night Streetlamp & Neon Ground Bounce Arrays (dynamically activated at night) */}
-      {isNightTime && quality.maxLights >= 6 && (
+      {isNightTime && quality.nightLightsEnabled && quality.maxLights >= 4 && (
         <group>
           {/* Streetlamp pole lights snapped to player's intersection vicinity */}
           <pointLight

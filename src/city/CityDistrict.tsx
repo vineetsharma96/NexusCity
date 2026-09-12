@@ -323,7 +323,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
       {/* 9. Giant Skyscraper Dynamic Cyber-Video Billboards */}
       {/* Central Plaza North Facade Billboard (Channel 1: Nexus 24 Live News with ticker & globe) */}
       <CyberVideoBillboard
-        position={[0, 22, -26]}
+        position={[0, 18, -28]}
         rotationY={0}
         width={22}
         height={13}
@@ -332,20 +332,29 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
       {/* Apex Tower East Avenue Facade Billboard (Channel 2: Cyber-Corp Commercial Adverts) */}
       <CyberVideoBillboard
-        position={[24, 28, 0]}
+        position={[22, 18, 0]}
         rotationY={-Math.PI / 2}
-        width={18}
-        height={11}
+        width={20}
+        height={12}
         channel={2}
       />
 
       {/* Neon Lounge West Avenue Facade Billboard (Channel 3: Metropolis Grid Surveillance & Matrix) */}
       <CyberVideoBillboard
-        position={[-24, 26, 0]}
+        position={[-22, 18, 0]}
         rotationY={Math.PI / 2}
-        width={18}
-        height={11}
+        width={20}
+        height={12}
         channel={3}
+      />
+
+      {/* South Plaza Facade Billboard (Channel 1: Live News Ticker) */}
+      <CyberVideoBillboard
+        position={[0, 18, 32]}
+        rotationY={Math.PI}
+        width={22}
+        height={13}
+        channel={1}
       />
     </group>
   );

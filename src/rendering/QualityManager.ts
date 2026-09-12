@@ -1,4 +1,4 @@
-export type QualityPreset = 'ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE';
+export type QualityPreset = 'ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE' | 'CUSTOM';
 
 export interface QualitySettings {
   name: QualityPreset;
@@ -10,9 +10,12 @@ export interface QualitySettings {
   drawDistance: number;
   maxLights: number;
   particlesDensity: number;
+  cloudsEnabled: boolean;
+  windParticlesEnabled: boolean;
+  nightLightsEnabled: boolean;
 }
 
-export const QUALITY_PROFILES: Record<QualityPreset, QualitySettings> = {
+export const QUALITY_PROFILES: Record<Exclude<QualityPreset, 'CUSTOM'>, QualitySettings> = {
   ULTRA: {
     name: 'ULTRA',
     dpr: [1, 2],
@@ -23,6 +26,9 @@ export const QUALITY_PROFILES: Record<QualityPreset, QualitySettings> = {
     drawDistance: 2600,
     maxLights: 24,
     particlesDensity: 1.0,
+    cloudsEnabled: true,
+    windParticlesEnabled: true,
+    nightLightsEnabled: true,
   },
   HIGH: {
     name: 'HIGH',
@@ -34,6 +40,9 @@ export const QUALITY_PROFILES: Record<QualityPreset, QualitySettings> = {
     drawDistance: 1800,
     maxLights: 16,
     particlesDensity: 0.8,
+    cloudsEnabled: true,
+    windParticlesEnabled: true,
+    nightLightsEnabled: true,
   },
   MEDIUM: {
     name: 'MEDIUM',
@@ -45,6 +54,9 @@ export const QUALITY_PROFILES: Record<QualityPreset, QualitySettings> = {
     drawDistance: 1200,
     maxLights: 10,
     particlesDensity: 0.5,
+    cloudsEnabled: true,
+    windParticlesEnabled: true,
+    nightLightsEnabled: true,
   },
   LOW: {
     name: 'LOW',
@@ -56,6 +68,9 @@ export const QUALITY_PROFILES: Record<QualityPreset, QualitySettings> = {
     drawDistance: 800,
     maxLights: 6,
     particlesDensity: 0.25,
+    cloudsEnabled: false,
+    windParticlesEnabled: false,
+    nightLightsEnabled: true,
   },
   LITE: {
     name: 'LITE',
@@ -67,6 +82,9 @@ export const QUALITY_PROFILES: Record<QualityPreset, QualitySettings> = {
     drawDistance: 500,
     maxLights: 4,
     particlesDensity: 0.1,
+    cloudsEnabled: false,
+    windParticlesEnabled: false,
+    nightLightsEnabled: false,
   },
 };
 
@@ -74,6 +92,10 @@ type QualityChangeListener = (settings: QualitySettings) => void;
 
 class QualityManagerClass {
   private currentPreset: QualityPreset = 'HIGH';
+  private customSettings: QualitySettings = {
+    ...QUALITY_PROFILES.HIGH,
+    name: 'CUSTOM',
+  };
   private listeners: Set<QualityChangeListener> = new Set();
 
   constructor() {
@@ -92,6 +114,9 @@ class QualityManagerClass {
   }
 
   public get current(): QualitySettings {
+    if (this.currentPreset === 'CUSTOM') {
+      return this.customSettings;
+    }
     return QUALITY_PROFILES[this.currentPreset];
   }
 
@@ -102,7 +127,25 @@ class QualityManagerClass {
   public setPreset(preset: QualityPreset): void {
     if (this.currentPreset === preset) return;
     this.currentPreset = preset;
+    if (preset !== 'CUSTOM') {
+      // Sync custom settings baseline with selected preset
+      this.customSettings = {
+        ...QUALITY_PROFILES[preset],
+        name: 'CUSTOM',
+      };
+    }
     const settings = this.current;
+    this.listeners.forEach((listener) => listener(settings));
+  }
+
+  public updateCustomSettings(partial: Partial<QualitySettings>): void {
+    this.currentPreset = 'CUSTOM';
+    this.customSettings = {
+      ...this.customSettings,
+      ...partial,
+      name: 'CUSTOM',
+    };
+    const settings = this.customSettings;
     this.listeners.forEach((listener) => listener(settings));
   }
 
@@ -120,7 +163,7 @@ class QualityManagerClass {
   public throttleDown(): boolean {
     const order: QualityPreset[] = ['ULTRA', 'HIGH', 'MEDIUM', 'LOW', 'LITE'];
     const idx = order.indexOf(this.currentPreset);
-    if (idx < order.length - 1) {
+    if (idx !== -1 && idx < order.length - 1) {
       this.setPreset(order[idx + 1]);
       return true;
     }
@@ -129,3 +172,4 @@ class QualityManagerClass {
 }
 
 export const QualityManager = new QualityManagerClass();
+
