@@ -18,6 +18,154 @@ export interface TimeLightingState {
   ambientIntensity: number;
 }
 
+interface TimeKeyframe {
+  hour: number;
+  phase: TimeOfDayPhase;
+  skyColor: string;
+  fogColor: string;
+  celestialColor: string;
+  hemiSkyColor: string;
+  hemiGroundColor: string;
+  celestialIntensity: number;
+  ambientIntensity: number;
+  nightFactor: number;
+}
+
+const TIME_KEYFRAMES: TimeKeyframe[] = [
+  {
+    hour: 0.0,
+    phase: 'NIGHT',
+    skyColor: '#030612',
+    fogColor: '#030612',
+    celestialColor: '#93c5fd',
+    hemiSkyColor: '#101726',
+    hemiGroundColor: '#060912',
+    celestialIntensity: 0.8,
+    ambientIntensity: 0.24,
+    nightFactor: 1.0,
+  },
+  {
+    hour: 4.5,
+    phase: 'NIGHT',
+    skyColor: '#040816',
+    fogColor: '#040816',
+    celestialColor: '#a5b4fc',
+    hemiSkyColor: '#121a2d',
+    hemiGroundColor: '#080c18',
+    celestialIntensity: 0.9,
+    ambientIntensity: 0.26,
+    nightFactor: 0.9,
+  },
+  {
+    hour: 5.75,
+    phase: 'DAWN',
+    skyColor: '#121428',
+    fogColor: '#14172c',
+    celestialColor: '#fb923c',
+    hemiSkyColor: '#f59e0b',
+    hemiGroundColor: '#0e1626',
+    celestialIntensity: 1.6,
+    ambientIntensity: 0.35,
+    nightFactor: 0.5,
+  },
+  {
+    hour: 6.75,
+    phase: 'DAWN',
+    skyColor: '#1c1c38',
+    fogColor: '#222040',
+    celestialColor: '#fed7aa',
+    hemiSkyColor: '#f97316',
+    hemiGroundColor: '#172033',
+    celestialIntensity: 2.2,
+    ambientIntensity: 0.42,
+    nightFactor: 0.2,
+  },
+  {
+    hour: 9.0,
+    phase: 'DAY',
+    skyColor: '#132548',
+    fogColor: '#132548',
+    celestialColor: '#fffdf5',
+    hemiSkyColor: '#60a5fa',
+    hemiGroundColor: '#1e293b',
+    celestialIntensity: 2.5,
+    ambientIntensity: 0.48,
+    nightFactor: 0.0,
+  },
+  {
+    hour: 12.0,
+    phase: 'DAY',
+    skyColor: '#0f2244',
+    fogColor: '#0f2244',
+    celestialColor: '#fffbf0',
+    hemiSkyColor: '#6fa4db',
+    hemiGroundColor: '#202c3f',
+    celestialIntensity: 2.6,
+    ambientIntensity: 0.50,
+    nightFactor: 0.0,
+  },
+  {
+    hour: 16.5,
+    phase: 'DAY',
+    skyColor: '#15223e',
+    fogColor: '#15223e',
+    celestialColor: '#fef3c7',
+    hemiSkyColor: '#6ba6e8',
+    hemiGroundColor: '#1e283a',
+    celestialIntensity: 2.4,
+    ambientIntensity: 0.47,
+    nightFactor: 0.05,
+  },
+  {
+    hour: 17.75,
+    phase: 'SUNSET',
+    skyColor: '#2a1426',
+    fogColor: '#33162c',
+    celestialColor: '#ff7700',
+    hemiSkyColor: '#c084fc',
+    hemiGroundColor: '#ea580c',
+    celestialIntensity: 2.3,
+    ambientIntensity: 0.43,
+    nightFactor: 0.35,
+  },
+  {
+    hour: 19.25,
+    phase: 'DUSK',
+    skyColor: '#160e22',
+    fogColor: '#1a1028',
+    celestialColor: '#818cf8',
+    hemiSkyColor: '#7c3aed',
+    hemiGroundColor: '#7c2d12',
+    celestialIntensity: 1.5,
+    ambientIntensity: 0.34,
+    nightFactor: 0.7,
+  },
+  {
+    hour: 20.75,
+    phase: 'NIGHT',
+    skyColor: '#080a18',
+    fogColor: '#080a18',
+    celestialColor: '#60a5fa',
+    hemiSkyColor: '#1e293b',
+    hemiGroundColor: '#0c1322',
+    celestialIntensity: 1.0,
+    ambientIntensity: 0.28,
+    nightFactor: 0.95,
+  },
+  {
+    hour: 24.0,
+    phase: 'NIGHT',
+    skyColor: '#030612',
+    fogColor: '#030612',
+    celestialColor: '#93c5fd',
+    hemiSkyColor: '#101726',
+    hemiGroundColor: '#060912',
+    celestialIntensity: 0.8,
+    ambientIntensity: 0.24,
+    nightFactor: 1.0,
+  },
+];
+
 type TimeChangeListener = (state: TimeLightingState) => void;
 
 export class TimeSystem {
@@ -28,6 +176,8 @@ export class TimeSystem {
   private timeScale: number = 0.05; // ~1 real second = 3 game minutes
   private isPaused: boolean = false;
   private listeners: Set<TimeChangeListener> = new Set();
+
+  private constructor() {}
 
   public static getInstance(): TimeSystem {
     if (!TimeSystem.instance) {
@@ -44,7 +194,7 @@ export class TimeSystem {
   }
 
   public setHour(hour: number): void {
-    this.currentHour = Math.max(0, Math.min(24, hour)) % 24;
+    this.currentHour = ((hour % 24) + 24) % 24;
     this.notify();
   }
 
@@ -63,96 +213,66 @@ export class TimeSystem {
 
   public getState(): TimeLightingState {
     const h = this.currentHour;
-    let phase: TimeOfDayPhase = 'DAY';
-    let isNight = false;
-    let nightFactor = 0;
 
-    if (h >= 5.0 && h < 7.0) {
-      phase = 'DAWN';
-      // Transitions from 1.0 to 0.0
-      nightFactor = 1.0 - (h - 5.0) / 2.0;
-    } else if (h >= 7.0 && h < 17.5) {
-      phase = 'DAY';
-      nightFactor = 0.0;
-    } else if (h >= 17.5 && h < 19.5) {
-      phase = 'SUNSET';
-      // Transitions from 0.0 to 0.6
-      nightFactor = ((h - 17.5) / 2.0) * 0.6;
-    } else if (h >= 19.5 && h < 21.0) {
-      phase = 'DUSK';
-      // Transitions from 0.6 to 1.0
-      nightFactor = 0.6 + ((h - 19.5) / 1.5) * 0.4;
-    } else {
-      phase = 'NIGHT';
-      isNight = true;
-      nightFactor = 1.0;
+    // Find bounding keyframes for smooth continuous interpolation
+    let k0 = TIME_KEYFRAMES[0];
+    let k1 = TIME_KEYFRAMES[1];
+
+    for (let i = 0; i < TIME_KEYFRAMES.length - 1; i++) {
+      if (h >= TIME_KEYFRAMES[i].hour && h <= TIME_KEYFRAMES[i + 1].hour) {
+        k0 = TIME_KEYFRAMES[i];
+        k1 = TIME_KEYFRAMES[i + 1];
+        break;
+      }
     }
+
+    const span = k1.hour - k0.hour;
+    const rawT = span > 0 ? (h - k0.hour) / span : 0;
+    // Smooth cosine S-curve interpolation between keyframes
+    const t = 0.5 - 0.5 * Math.cos(rawT * Math.PI);
+
+    // Interpolate colors smoothly
+    const cSky = new THREE.Color(k0.skyColor).lerp(new THREE.Color(k1.skyColor), t);
+    const cFog = new THREE.Color(k0.fogColor).lerp(new THREE.Color(k1.fogColor), t);
+    const cCelestial = new THREE.Color(k0.celestialColor).lerp(new THREE.Color(k1.celestialColor), t);
+    const cHemiSky = new THREE.Color(k0.hemiSkyColor).lerp(new THREE.Color(k1.hemiSkyColor), t);
+    const cHemiGround = new THREE.Color(k0.hemiGroundColor).lerp(new THREE.Color(k1.hemiGroundColor), t);
+
+    // Interpolate scalar intensities
+    const celestialIntensity = THREE.MathUtils.lerp(k0.celestialIntensity, k1.celestialIntensity, t);
+    const ambientIntensity = THREE.MathUtils.lerp(k0.ambientIntensity, k1.ambientIntensity, t);
+    const nightFactor = THREE.MathUtils.lerp(k0.nightFactor, k1.nightFactor, t);
+
+    // Determine descriptive phase from current hour
+    let phase: TimeOfDayPhase = 'DAY';
+    if (h >= 5.0 && h < 7.5) phase = 'DAWN';
+    else if (h >= 7.5 && h < 17.0) phase = 'DAY';
+    else if (h >= 17.0 && h < 19.0) phase = 'SUNSET';
+    else if (h >= 19.0 && h < 20.75) phase = 'DUSK';
+    else phase = 'NIGHT';
 
     // Format HH:MM
     const hours = Math.floor(h);
     const minutes = Math.floor((h % 1) * 60);
     const formattedTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 
-    // Celestial Sun / Moon trajectory
-    // Sun rises East (+x), reaches zenith at noon (+y), sets West (-x)
-    const sunAngle = ((h - 6.0) / 12.0) * Math.PI; // 0 at 06:00, PI at 18:00
+    // Continuous 360-degree celestial orbit
+    // Sun rises East (+x) at 06:00, zenith at 12:00, sets West (-x) at 18:00
+    // Moon rises East at 18:00, zenith at 00:00, sets West at 06:00
     const celestialPos = new THREE.Vector3();
+    const isDaytime = h >= 6.0 && h <= 18.0;
 
-    let celestialColor = '#fff5e6';
-    let celestialIntensity = 2.4;
-    let skyColor = '#0b1428';
-    let fogColor = '#0b1428';
-    let hemiSkyColor = '#6085b3';
-    let hemiGroundColor = '#141d2d';
-    let ambientIntensity = 0.45;
-
-    if (phase === 'DAY') {
-      celestialPos.set(Math.cos(sunAngle) * 90, Math.sin(sunAngle) * 140, 45);
-      celestialColor = '#fffbf0';
-      celestialIntensity = 2.4;
-      skyColor = '#0f1d38';
-      fogColor = '#0f1d38';
-      hemiSkyColor = '#6fa4db';
-      hemiGroundColor = '#1e293b';
-      ambientIntensity = 0.48;
-    } else if (phase === 'SUNSET') {
-      celestialPos.set(Math.cos(sunAngle) * 90, Math.sin(sunAngle) * 60, 40);
-      celestialColor = '#ff8833'; // Fiery golden sunset
-      celestialIntensity = 2.2;
-      skyColor = '#1d1222';
-      fogColor = '#241424';
-      hemiSkyColor = '#a855f7'; // Purple-gold horizon
-      hemiGroundColor = '#ff6600'; // Warm ground bounce
-      ambientIntensity = 0.42;
-    } else if (phase === 'DAWN') {
-      celestialPos.set(Math.cos(sunAngle) * 90, Math.sin(sunAngle) * 60, 40);
-      celestialColor = '#ffaa66';
-      celestialIntensity = 1.8;
-      skyColor = '#131b2e';
-      fogColor = '#161e32';
-      hemiSkyColor = '#f59e0b';
-      hemiGroundColor = '#0f172a';
-      ambientIntensity = 0.38;
-    } else if (phase === 'DUSK') {
-      celestialPos.set(-70, 30, -30);
-      celestialColor = '#60a5fa';
-      celestialIntensity = 1.2;
-      skyColor = '#080d1a';
-      fogColor = '#080d1a';
-      hemiSkyColor = '#1e293b';
-      hemiGroundColor = '#0c1322';
-      ambientIntensity = 0.3;
+    if (isDaytime) {
+      const sunAngle = ((h - 6.0) / 12.0) * Math.PI;
+      const height = Math.sin(sunAngle) * 140;
+      const x = Math.cos(sunAngle) * 110;
+      celestialPos.set(x, Math.max(8, height), 45);
     } else {
-      // NIGHT
-      const moonAngle = ((h - 18.0) / 12.0) * Math.PI;
-      celestialPos.set(Math.cos(moonAngle) * 80, Math.sin(moonAngle) * 110, -40);
-      celestialColor = '#93c5fd'; // Cool pale moonlight
-      celestialIntensity = 0.75;
-      skyColor = '#03050c';
-      fogColor = '#03050c';
-      hemiSkyColor = '#141d30';
-      hemiGroundColor = '#070b14';
-      ambientIntensity = 0.22;
+      const moonHour = h > 18.0 ? h - 18.0 : h + 6.0;
+      const moonAngle = (moonHour / 12.0) * Math.PI;
+      const height = Math.sin(moonAngle) * 115;
+      const x = Math.cos(moonAngle) * 95;
+      celestialPos.set(x, Math.max(8, height), -45);
     }
 
     return {
@@ -162,12 +282,12 @@ export class TimeSystem {
       isNight: nightFactor > 0.5,
       nightFactor,
       celestialPosition: celestialPos,
-      celestialColor,
+      celestialColor: `#${cCelestial.getHexString()}`,
       celestialIntensity,
-      skyColor,
-      fogColor,
-      hemiSkyColor,
-      hemiGroundColor,
+      skyColor: `#${cSky.getHexString()}`,
+      fogColor: `#${cFog.getHexString()}`,
+      hemiSkyColor: `#${cHemiSky.getHexString()}`,
+      hemiGroundColor: `#${cHemiGround.getHexString()}`,
       ambientIntensity,
     };
   }

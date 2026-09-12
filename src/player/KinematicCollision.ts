@@ -73,10 +73,15 @@ export class KinematicCollisionSolver {
     const playerMinY = resolved.y;
     const playerMaxY = resolved.y + playerHeight;
 
-    // Check collision against world boundary (-98 .. +98)
-    const worldLimit = 95;
-    resolved.x = THREE.MathUtils.clamp(resolved.x, -worldLimit, worldLimit);
-    resolved.z = THREE.MathUtils.clamp(resolved.z, -worldLimit, worldLimit);
+    // Check bounds: interior space (-80m) vs exterior city (-98 .. +98)
+    if (playerMinY < -50) {
+      resolved.x = THREE.MathUtils.clamp(resolved.x, -10.2, 10.2);
+      resolved.z = THREE.MathUtils.clamp(resolved.z, -8.2, 8.2);
+    } else {
+      const worldLimit = 95;
+      resolved.x = THREE.MathUtils.clamp(resolved.x, -worldLimit, worldLimit);
+      resolved.z = THREE.MathUtils.clamp(resolved.z, -worldLimit, worldLimit);
+    }
 
     for (const box of this.boxes) {
       // Check vertical overlap
@@ -119,7 +124,7 @@ export class KinematicCollisionSolver {
    * Evaluates ground height under player at given (x, z).
    */
   public static getGroundHeightAt(x: number, z: number, currentY: number): { height: number; onRamp: boolean } {
-    let groundHeight = 0; // Default plaza ground plane
+    let groundHeight = currentY < -50 ? -80.0 : 0.0; // Interior floor at -80m vs plaza at 0m
     let onRamp = false;
 
     // Check ramps first

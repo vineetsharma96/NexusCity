@@ -36,7 +36,7 @@ export class NPCManager {
   }
 
   private initNPCs(): void {
-    // 1. Primary Story NPCs
+    // 1. Primary Story NPCs strictly placed on Footpaths / Sidewalks
     const storyNPCs: NPCDef[] = [
       {
         id: 'dr_vance',
@@ -44,12 +44,12 @@ export class NPCManager {
         role: 'Chief Neural Architect',
         armorColor: '#1e293b',
         visorColor: '#00f0ff',
-        position: new THREE.Vector3(8, 0.18, 8),
+        position: new THREE.Vector3(13.5, 0.18, 14),
         waypoints: [
-          new THREE.Vector3(8, 0.18, 8),
-          new THREE.Vector3(12, 0.18, 18),
-          new THREE.Vector3(17, 0.18, 35),
-          new THREE.Vector3(12, 0.18, 18),
+          new THREE.Vector3(13.5, 0.18, 14),
+          new THREE.Vector3(13.5, 0.18, 38),
+          new THREE.Vector3(13.5, 0.18, 65),
+          new THREE.Vector3(13.5, 0.18, 38),
         ],
         currentWaypointIdx: 0,
         facingYaw: 0,
@@ -64,18 +64,18 @@ export class NPCManager {
         role: 'Urban Courier',
         armorColor: '#3b0764',
         visorColor: '#f59e0b',
-        position: new THREE.Vector3(-17, 0.18, 25),
+        position: new THREE.Vector3(-13.5, 0.18, 45),
         waypoints: [
-          new THREE.Vector3(-17, 0.18, 25),
-          new THREE.Vector3(-17, 0.18, -25),
-          new THREE.Vector3(-17, 0.18, -60),
-          new THREE.Vector3(-17, 0.18, -25),
+          new THREE.Vector3(-13.5, 0.18, 45),
+          new THREE.Vector3(-13.5, 0.18, 15),
+          new THREE.Vector3(-13.5, 0.18, -45),
+          new THREE.Vector3(-13.5, 0.18, 15),
         ],
         currentWaypointIdx: 0,
         facingYaw: Math.PI,
         isWalking: true,
         isTalking: false,
-        walkSpeed: 3.5,
+        walkSpeed: 3.2,
         pauseTimer: 0,
       },
       {
@@ -84,12 +84,12 @@ export class NPCManager {
         role: 'Maintenance Android',
         armorColor: '#334155',
         visorColor: '#00ffaa',
-        position: new THREE.Vector3(17, 0.18, -35),
+        position: new THREE.Vector3(13.5, 0.18, 35),
         waypoints: [
-          new THREE.Vector3(17, 0.18, -35),
-          new THREE.Vector3(17, 0.18, -65),
-          new THREE.Vector3(17, 0.18, -10),
-          new THREE.Vector3(17, 0.18, -35),
+          new THREE.Vector3(13.5, 0.18, 35),
+          new THREE.Vector3(30, 0.18, 55),
+          new THREE.Vector3(60, 0.18, 65),
+          new THREE.Vector3(30, 0.18, 55),
         ],
         currentWaypointIdx: 0,
         facingYaw: 0,
@@ -104,12 +104,12 @@ export class NPCManager {
         role: 'Metropolis Peacekeeper',
         armorColor: '#0f172a',
         visorColor: '#ff0055',
-        position: new THREE.Vector3(-8, 0.18, -8),
+        position: new THREE.Vector3(-13.5, 0.18, -14),
         waypoints: [
-          new THREE.Vector3(-8, 0.18, -8),
-          new THREE.Vector3(-12, 0.18, 8),
-          new THREE.Vector3(-8, 0.18, 14),
-          new THREE.Vector3(-8, 0.18, -8),
+          new THREE.Vector3(-13.5, 0.18, -14), // West curb of North Zebra
+          new THREE.Vector3(13.5, 0.18, -14),  // East curb of North Zebra
+          new THREE.Vector3(35, 0.18, -11.5),  // East footpath
+          new THREE.Vector3(13.5, 0.18, -14),
         ],
         currentWaypointIdx: 0,
         facingYaw: Math.PI / 2,
@@ -135,105 +135,123 @@ export class NPCManager {
       const armorColor = armorColors[i % armorColors.length];
       const visorColor = visorColors[i % visorColors.length];
 
-      // Distribute across city corridors
+      // Distribute across footpaths and designated zebra crosswalks
       const corridorType = i % 6;
       const waypoints: THREE.Vector3[] = [];
       let initialPos = new THREE.Vector3();
 
       if (corridorType === 0) {
-        // North-South East Sidewalk (x = 17m)
-        const zStart = -85 + (i * 12) % 170;
-        initialPos = new THREE.Vector3(17, 0.18, zStart);
+        // North-South East Sidewalk (Footpath at x = 13.5m)
+        const zStart = -75 + (i * 14) % 150;
+        initialPos = new THREE.Vector3(13.5, 0.18, zStart);
         waypoints.push(
-          new THREE.Vector3(17, 0.18, zStart),
-          new THREE.Vector3(17, 0.18, Math.min(85, zStart + 35)),
-          new THREE.Vector3(17, 0.18, Math.max(-85, zStart - 35))
+          new THREE.Vector3(13.5, 0.18, zStart),
+          new THREE.Vector3(13.5, 0.18, Math.min(80, zStart + 35)),
+          new THREE.Vector3(13.5, 0.18, Math.max(-80, zStart - 35))
         );
       } else if (corridorType === 1) {
-        // North-South West Sidewalk (x = -17m)
-        const zStart = 85 - (i * 14) % 170;
-        initialPos = new THREE.Vector3(-17, 0.18, zStart);
+        // North-South West Sidewalk (Footpath at x = -13.5m)
+        const zStart = 75 - (i * 14) % 150;
+        initialPos = new THREE.Vector3(-13.5, 0.18, zStart);
         waypoints.push(
-          new THREE.Vector3(-17, 0.18, zStart),
-          new THREE.Vector3(-17, 0.18, Math.max(-85, zStart - 40)),
-          new THREE.Vector3(-17, 0.18, Math.min(85, zStart + 40))
+          new THREE.Vector3(-13.5, 0.18, zStart),
+          new THREE.Vector3(-13.5, 0.18, Math.max(-80, zStart - 40)),
+          new THREE.Vector3(-13.5, 0.18, Math.min(80, zStart + 40))
         );
       } else if (corridorType === 2) {
-        // East-West North Sidewalk (z = -17m)
-        const xStart = -85 + (i * 15) % 170;
-        initialPos = new THREE.Vector3(xStart, 0.18, -17);
+        // East-West North Sidewalk (Footpath at z = -11.5m)
+        const xStart = -75 + (i * 15) % 150;
+        initialPos = new THREE.Vector3(xStart, 0.18, -11.5);
         waypoints.push(
-          new THREE.Vector3(xStart, 0.18, -17),
-          new THREE.Vector3(Math.min(85, xStart + 35), 0.18, -17),
-          new THREE.Vector3(Math.max(-85, xStart - 35), 0.18, -17)
+          new THREE.Vector3(xStart, 0.18, -11.5),
+          new THREE.Vector3(Math.min(80, xStart + 35), 0.18, -11.5),
+          new THREE.Vector3(Math.max(-80, xStart - 35), 0.18, -11.5)
         );
       } else if (corridorType === 3) {
-        // East-West South Sidewalk (z = 17m)
-        const xStart = 85 - (i * 13) % 170;
-        initialPos = new THREE.Vector3(xStart, 0.18, 17);
+        // East-West South Sidewalk (Footpath at z = 11.5m)
+        const xStart = 75 - (i * 13) % 150;
+        initialPos = new THREE.Vector3(xStart, 0.18, 11.5);
         waypoints.push(
-          new THREE.Vector3(xStart, 0.18, 17),
-          new THREE.Vector3(Math.max(-85, xStart - 40), 0.18, 17),
-          new THREE.Vector3(Math.min(85, xStart + 40), 0.18, 17)
+          new THREE.Vector3(xStart, 0.18, 11.5),
+          new THREE.Vector3(Math.max(-80, xStart - 40), 0.18, 11.5),
+          new THREE.Vector3(Math.min(80, xStart + 40), 0.18, 11.5)
         );
       } else if (corridorType === 4) {
-        // Road Crosswalk Pedestrians (Crossing Avenue via Zebra Footpath)
+        // Zebra Crossings: crossing avenue between opposite sidewalk curbs
         const crossIdx = i % 4;
         if (crossIdx === 0) {
-          // North crosswalk across Z avenue
-          initialPos = new THREE.Vector3(17, 0.18, -14);
+          // North crosswalk (z = -14.0, crossing between East & West footpaths)
+          initialPos = new THREE.Vector3(13.5, 0.18, -14);
           waypoints.push(
-            new THREE.Vector3(17, 0.18, -14),
-            new THREE.Vector3(-17, 0.18, -14),
-            new THREE.Vector3(-17, 0.18, -32),
-            new THREE.Vector3(-17, 0.18, -14),
-            new THREE.Vector3(17, 0.18, -14),
-            new THREE.Vector3(17, 0.18, -32)
+            new THREE.Vector3(13.5, 0.18, -14),
+            new THREE.Vector3(-13.5, 0.18, -14),
+            new THREE.Vector3(-13.5, 0.18, -35),
+            new THREE.Vector3(-13.5, 0.18, -14),
+            new THREE.Vector3(13.5, 0.18, -14),
+            new THREE.Vector3(13.5, 0.18, -35)
           );
         } else if (crossIdx === 1) {
-          // South crosswalk across Z avenue
-          initialPos = new THREE.Vector3(-17, 0.18, 14);
+          // South crosswalk (z = 14.0, crossing between West & East footpaths)
+          initialPos = new THREE.Vector3(-13.5, 0.18, 14);
           waypoints.push(
-            new THREE.Vector3(-17, 0.18, 14),
-            new THREE.Vector3(17, 0.18, 14),
-            new THREE.Vector3(17, 0.18, 32),
-            new THREE.Vector3(17, 0.18, 14),
-            new THREE.Vector3(-17, 0.18, 14),
-            new THREE.Vector3(-17, 0.18, 32)
+            new THREE.Vector3(-13.5, 0.18, 14),
+            new THREE.Vector3(13.5, 0.18, 14),
+            new THREE.Vector3(13.5, 0.18, 35),
+            new THREE.Vector3(13.5, 0.18, 14),
+            new THREE.Vector3(-13.5, 0.18, 14),
+            new THREE.Vector3(-13.5, 0.18, 35)
           );
         } else if (crossIdx === 2) {
-          // East crosswalk across X avenue
-          initialPos = new THREE.Vector3(14, 0.18, -17);
+          // East crosswalk (x = 14.0, crossing between North & South footpaths)
+          initialPos = new THREE.Vector3(14, 0.18, -11.5);
           waypoints.push(
-            new THREE.Vector3(14, 0.18, -17),
-            new THREE.Vector3(14, 0.18, 17),
-            new THREE.Vector3(32, 0.18, 17),
-            new THREE.Vector3(14, 0.18, 17),
-            new THREE.Vector3(14, 0.18, -17),
-            new THREE.Vector3(32, 0.18, -17)
+            new THREE.Vector3(14, 0.18, -11.5),
+            new THREE.Vector3(14, 0.18, 11.5),
+            new THREE.Vector3(35, 0.18, 11.5),
+            new THREE.Vector3(14, 0.18, 11.5),
+            new THREE.Vector3(14, 0.18, -11.5),
+            new THREE.Vector3(35, 0.18, -11.5)
           );
         } else {
-          // West crosswalk across X avenue
-          initialPos = new THREE.Vector3(-14, 0.18, 17);
+          // West crosswalk (x = -14.0, crossing between South & North footpaths)
+          initialPos = new THREE.Vector3(-14, 0.18, 11.5);
           waypoints.push(
-            new THREE.Vector3(-14, 0.18, 17),
-            new THREE.Vector3(-14, 0.18, -17),
-            new THREE.Vector3(-32, 0.18, -17),
-            new THREE.Vector3(-14, 0.18, -17),
-            new THREE.Vector3(-14, 0.18, 17),
-            new THREE.Vector3(-32, 0.18, 17)
+            new THREE.Vector3(-14, 0.18, 11.5),
+            new THREE.Vector3(-14, 0.18, -11.5),
+            new THREE.Vector3(-35, 0.18, -11.5),
+            new THREE.Vector3(-14, 0.18, -11.5),
+            new THREE.Vector3(-14, 0.18, 11.5),
+            new THREE.Vector3(-35, 0.18, 11.5)
           );
         }
       } else {
-        // Central Plaza Loop Walkers (inside [-12..12, -12..12])
-        const angle = (i / 10) * Math.PI * 2;
-        const radius = 6 + (i % 6);
-        const px = Math.cos(angle) * radius;
-        const pz = Math.sin(angle) * radius;
-        initialPos = new THREE.Vector3(px, 0.18, pz);
-        for (let step = 0; step < 4; step++) {
-          const a = angle + (step * Math.PI) / 2;
-          waypoints.push(new THREE.Vector3(Math.cos(a) * radius, 0.18, Math.sin(a) * radius));
+        // Central Park Sanctuary Footpaths (around pond & footbridge)
+        const parkStep = i % 4;
+        if (parkStep === 0) {
+          initialPos = new THREE.Vector3(62, 0.18, 62);
+          waypoints.push(
+            new THREE.Vector3(62, 0.18, 62),
+            new THREE.Vector3(62, 0.18, 88),
+            new THREE.Vector3(88, 0.18, 88),
+            new THREE.Vector3(88, 0.18, 62)
+          );
+        } else if (parkStep === 1) {
+          // Walking across the arching footbridge over the pond
+          initialPos = new THREE.Vector3(66, 0.18, 75);
+          waypoints.push(
+            new THREE.Vector3(66, 0.18, 75),
+            new THREE.Vector3(75, 1.2, 75),
+            new THREE.Vector3(84, 0.18, 75),
+            new THREE.Vector3(75, 1.2, 75)
+          );
+        } else {
+          initialPos = new THREE.Vector3(85, 0.18, 65);
+          waypoints.push(
+            new THREE.Vector3(85, 0.18, 65),
+            new THREE.Vector3(85, 0.18, 85),
+            new THREE.Vector3(65, 0.18, 85),
+            new THREE.Vector3(65, 0.18, 65)
+          );
         }
       }
 
@@ -249,8 +267,8 @@ export class NPCManager {
         facingYaw: Math.random() * Math.PI * 2,
         isWalking: true,
         isTalking: false,
-        walkSpeed: 1.6 + (i % 5) * 0.25,
-        pauseTimer: (i % 3 === 0) ? Math.random() * 4 : 0,
+        walkSpeed: 1.6 + (i % 5) * 0.22,
+        pauseTimer: (i % 3 === 0) ? Math.random() * 3.5 : 0,
       });
     }
 
@@ -271,7 +289,6 @@ export class NPCManager {
       });
     });
 
-    // Close talking state when dialogue closes
     DialogueSystem.getInstance().subscribe((node) => {
       if (!node) {
         this.npcs.forEach((n) => (n.isTalking = false));
@@ -319,29 +336,33 @@ export class NPCManager {
         continue;
       }
 
-      // Check if entering a crosswalk and pedestrian signal is DONT_WALK
-      const isCrossingZRoad = Math.abs(target.x - npc.position.x) > 20 && Math.abs(npc.position.z) < 20;
-      const isCrossingXRoad = Math.abs(target.z - npc.position.z) > 20 && Math.abs(npc.position.x) < 20;
+      // Check if crossing an avenue zebra and pedestrian signal is red (DONT_WALK)
+      // 1. Crossing North or South zebra crosswalk (stepping across between East and West footpaths)
+      const isSteppingAcrossZRoad = Math.abs(target.x - npc.position.x) > 15 && (Math.abs(npc.position.z - (-14)) < 2.5 || Math.abs(npc.position.z - 14) < 2.5);
+      // 2. Crossing East or West zebra crosswalk (stepping across between North and South footpaths)
+      const isSteppingAcrossXRoad = Math.abs(target.z - npc.position.z) > 15 && (Math.abs(npc.position.x - (-14)) < 2.5 || Math.abs(npc.position.x - 14) < 2.5);
 
-      if (isCrossingZRoad) {
-        // Checking curb threshold: about to step onto Z avenue
-        if (Math.abs(npc.position.x) >= 14 && Math.abs(npc.position.x) <= 17.5) {
+      if (isSteppingAcrossZRoad) {
+        // At sidewalk curb threshold about to cross avenue
+        const atCurb = Math.abs(npc.position.x) >= 12.0 && Math.abs(npc.position.x) <= 15.0;
+        if (atCurb) {
           if (!TrafficLightSystem.getInstance().canPedestrianCross('z')) {
             npc.isWalking = false;
-            continue;
+            continue; // Wait at curb for walk signal
           }
         }
-      } else if (isCrossingXRoad) {
-        // Checking curb threshold: about to step onto X avenue
-        if (Math.abs(npc.position.z) >= 14 && Math.abs(npc.position.z) <= 17.5) {
+      } else if (isSteppingAcrossXRoad) {
+        // At sidewalk curb threshold about to cross avenue
+        const atCurb = Math.abs(npc.position.z) >= 10.0 && Math.abs(npc.position.z) <= 13.0;
+        if (atCurb) {
           if (!TrafficLightSystem.getInstance().canPedestrianCross('x')) {
             npc.isWalking = false;
-            continue;
+            continue; // Wait at curb for walk signal
           }
         }
       }
 
-      // Move toward target waypoint
+      // Move smoothly toward target waypoint
       const dir = target.clone().sub(npc.position).normalize();
       npc.position.addScaledVector(dir, npc.walkSpeed * delta);
       npc.facingYaw = Math.atan2(dir.x, dir.z);

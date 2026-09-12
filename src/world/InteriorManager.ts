@@ -51,9 +51,12 @@ export class InteriorManager {
     // Brief fade transition
     setTimeout(() => {
       this.currentInterior = type;
-      // Spawn player inside room near entrance door
-      const interiorSpawn = InteriorManager.INTERIOR_ORIGIN.clone().add(new THREE.Vector3(0, 0.15, 8.5));
+      // Spawn player inside room with clearance from doorway (facing inward)
+      const interiorSpawn = InteriorManager.INTERIOR_ORIGIN.clone().add(new THREE.Vector3(0, 0.2, 5.5));
       onTeleport(interiorSpawn);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: interiorSpawn }));
+      }
 
       setTimeout(() => {
         this.isTransitioning = false;
@@ -73,6 +76,9 @@ export class InteriorManager {
       // Restore player back to exterior sidewalk in front of entrance door
       const exitPos = this.savedExteriorPos.clone();
       onTeleport(exitPos);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: exitPos }));
+      }
 
       setTimeout(() => {
         this.isTransitioning = false;

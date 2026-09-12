@@ -125,9 +125,10 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
     const finalOffset = rayDir.multiplyScalar(currentRadius.current);
     const finalPos = currentFocus.current.clone().add(finalOffset);
 
-    // Ensure camera never sinks below floor
-    if (finalPos.y < 0.4) {
-      finalPos.y = 0.4;
+    // Ensure camera never sinks below floor (interior vs exterior)
+    const minFloorY = currentFocus.current.y < -50 ? -79.6 : 0.4;
+    if (finalPos.y < minFloorY) {
+      finalPos.y = minFloorY;
     }
 
     // 4. Position and orient camera
