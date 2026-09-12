@@ -1,7 +1,19 @@
 import * as THREE from 'three';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
 
-export type InteriorType = 'NONE' | 'LAB' | 'LOUNGE';
+export type InteriorType =
+  | 'NONE'
+  | 'LAB'
+  | 'LOUNGE'
+  | 'CLINIC'
+  | 'NETRUNNER_DEN'
+  | 'RAMEN_DINER'
+  | 'DRONE_HANGAR'
+  | 'PENTHOUSE'
+  | 'SERVER_VAULT'
+  | 'GREENHOUSE'
+  | 'METRO_STATION'
+  | 'ARCADE';
 
 export interface InteriorState {
   current: InteriorType;
@@ -71,10 +83,40 @@ export class InteriorManager {
 
   public getState(): InteriorState {
     let name = 'DISTRICT 1: CENTRAL METROPOLIS';
-    if (this.currentInterior === 'LAB') {
-      name = 'NEXUS ADVANCED LABS // LEVEL 1';
-    } else if (this.currentInterior === 'LOUNGE') {
-      name = 'NEON VELOCITY // CYBER LOUNGE';
+    switch (this.currentInterior) {
+      case 'LAB':
+        name = 'NEXUS ADVANCED LABS // LEVEL 1';
+        break;
+      case 'LOUNGE':
+        name = 'NEON VELOCITY // CYBER LOUNGE';
+        break;
+      case 'CLINIC':
+        name = 'KROM-DOC // AUGMENTATION CLINIC';
+        break;
+      case 'NETRUNNER_DEN':
+        name = 'BLACK-ICE // NETRUNNER SAFEHOUSE';
+        break;
+      case 'RAMEN_DINER':
+        name = 'TOKYO-NEO // SYNTH-RAMEN NOODLES';
+        break;
+      case 'DRONE_HANGAR':
+        name = 'AERO-CARGO // DRONE REPAIR BAY';
+        break;
+      case 'PENTHOUSE':
+        name = 'APEX TOWER // SKY OBSERVATION SUITE';
+        break;
+      case 'SERVER_VAULT':
+        name = 'MEGACORP // SECURE DATA CORES';
+        break;
+      case 'GREENHOUSE':
+        name = 'BIOSPHERE // HYDROPONIC LAB';
+        break;
+      case 'METRO_STATION':
+        name = 'HYPERLOOP // METRO TRANSIT HUB';
+        break;
+      case 'ARCADE':
+        name = 'CYBER-STRIKE // 2099 RETRO ARCADE';
+        break;
     }
 
     return {

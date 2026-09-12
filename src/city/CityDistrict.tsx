@@ -4,7 +4,7 @@ import { CityGenerator, CityData } from './CityGenerator';
 import { RoadGenerator } from './RoadGenerator';
 import { VegetationGenerator, TreeDef } from './VegetationGenerator';
 import { FallingLeaves } from './FallingLeaves';
-import { FluidBillboard } from './FluidBillboard';
+import { CyberVideoBillboard } from './CyberVideoBillboard';
 import { ProceduralTextures } from '../core/ProceduralTextures';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
@@ -154,11 +154,54 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                     <meshBasicMaterial color="#ff0055" />
                   </mesh>
                 </>
+              ) : eq.type === 'COOLING_TOWER' ? (
+                <group>
+                  {/* Wooden/Metal Cylindrical Water Tank */}
+                  <mesh position={[0, 0.5, 0]} castShadow>
+                    <cylinderGeometry args={[eq.size.x * 0.45, eq.size.x * 0.45, eq.size.y * 0.7, 12]} />
+                    <meshStandardMaterial color="#451a03" roughness={0.7} />
+                  </mesh>
+                  {/* Conical Roof Cap */}
+                  <mesh position={[0, 0.5 + eq.size.y * 0.35 + 0.3, 0]}>
+                    <coneGeometry args={[eq.size.x * 0.5, 0.7, 12]} />
+                    <meshStandardMaterial color="#1e293b" metalness={0.8} />
+                  </mesh>
+                  {/* Stilt Legs */}
+                  {[-0.8, 0.8].map((lx) =>
+                    [-0.8, 0.8].map((lz) => (
+                      <mesh key={`leg-${lx}-${lz}`} position={[lx, -eq.size.y * 0.25, lz]}>
+                        <cylinderGeometry args={[0.06, 0.06, eq.size.y * 0.4, 6]} />
+                        <meshStandardMaterial color="#1e293b" metalness={0.9} />
+                      </mesh>
+                    ))
+                  )}
+                </group>
+              ) : eq.type === 'DISH' ? (
+                <group rotation={[0.4, 0.6, 0]}>
+                  {/* Parabolic Communications Dish */}
+                  <mesh castShadow>
+                    <cylinderGeometry args={[eq.size.x * 0.5, 0.1, 0.4, 16]} />
+                    <meshStandardMaterial color="#e2e8f0" metalness={0.9} roughness={0.2} />
+                  </mesh>
+                  {/* Feed Horn Arm */}
+                  <mesh position={[0, 0.6, 0]}>
+                    <cylinderGeometry args={[0.04, 0.04, 0.8, 6]} />
+                    <meshStandardMaterial color="#0f172a" metalness={0.9} />
+                  </mesh>
+                </group>
               ) : (
-                <mesh castShadow receiveShadow>
-                  <boxGeometry args={[eq.size.x, eq.size.y, eq.size.z]} />
-                  <meshStandardMaterial color="#1e293b" metalness={0.85} roughness={0.3} />
-                </mesh>
+                /* HVAC Compressor Unit with Fan Grill */
+                <group>
+                  <mesh castShadow receiveShadow>
+                    <boxGeometry args={[eq.size.x, eq.size.y, eq.size.z]} />
+                    <meshStandardMaterial color="#1e293b" metalness={0.85} roughness={0.3} />
+                  </mesh>
+                  {/* Circular Ventilation Fan Grill on top */}
+                  <mesh position={[0, eq.size.y / 2 + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <circleGeometry args={[Math.min(eq.size.x, eq.size.z) * 0.35, 12]} />
+                    <meshBasicMaterial color="#00f0ff" wireframe />
+                  </mesh>
+                </group>
               )}
             </group>
           ))}
@@ -277,32 +320,32 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
       {/* 8. Dynamic Wind-Driven Falling Leaves Particle System */}
       <FallingLeaves trees={trees} count={800} />
 
-      {/* 9. Giant Skyscraper Fluid Motion Cyber-Billboards */}
-      {/* Central Plaza North Facade Billboard (Cyan / Magenta) */}
-      <FluidBillboard
+      {/* 9. Giant Skyscraper Dynamic Cyber-Video Billboards */}
+      {/* Central Plaza North Facade Billboard (Channel 1: Nexus 24 Live News with ticker & globe) */}
+      <CyberVideoBillboard
         position={[0, 22, -26]}
         rotationY={0}
         width={22}
         height={13}
-        theme="CYAN_MAGENTA"
+        channel={1}
       />
 
-      {/* Apex Tower East Avenue Facade Billboard (Gold / Emerald) */}
-      <FluidBillboard
+      {/* Apex Tower East Avenue Facade Billboard (Channel 2: Cyber-Corp Commercial Adverts) */}
+      <CyberVideoBillboard
         position={[24, 28, 0]}
         rotationY={-Math.PI / 2}
         width={18}
         height={11}
-        theme="GOLD_EMERALD"
+        channel={2}
       />
 
-      {/* Neon Lounge West Avenue Facade Billboard (Plasma Violet) */}
-      <FluidBillboard
+      {/* Neon Lounge West Avenue Facade Billboard (Channel 3: Metropolis Grid Surveillance & Matrix) */}
+      <CyberVideoBillboard
         position={[-24, 26, 0]}
         rotationY={Math.PI / 2}
         width={18}
         height={11}
-        theme="PLASMA_VIOLET"
+        channel={3}
       />
     </group>
   );

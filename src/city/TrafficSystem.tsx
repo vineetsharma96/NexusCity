@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 
+import { TrafficLightSystem } from './TrafficLightSystem';
+
 interface TrafficSystemProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
 }
@@ -12,11 +14,14 @@ interface VehicleSim {
   velocity: THREE.Vector3;
   rotationY: number;
   speed: number;
+  cruisingSpeed: number;
+  isBraking: boolean;
   type: 'GROUND' | 'AERIAL';
   color: string;
   boundMin: number;
   boundMax: number;
   axis: 'x' | 'z';
+  direction: number; // 1 or -1
 }
 
 const GROUND_COUNT = 32;
@@ -62,11 +67,14 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           velocity: new THREE.Vector3(0, 0, laneDirection * speed),
           rotationY: laneDirection === 1 ? 0 : Math.PI,
           speed,
+          cruisingSpeed: speed,
+          isBraking: false,
           type: 'GROUND',
           color,
           boundMin: -440,
           boundMax: 440,
           axis: 'z',
+          direction: laneDirection,
         });
       } else {
         const laneZ = laneDirection === 1 ? 4.5 : -4.5;
@@ -76,11 +84,14 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           velocity: new THREE.Vector3(laneDirection * speed, 0, 0),
           rotationY: laneDirection === 1 ? Math.PI / 2 : -Math.PI / 2,
           speed,
+          cruisingSpeed: speed,
+          isBraking: false,
           type: 'GROUND',
           color,
           boundMin: -440,
           boundMax: 440,
           axis: 'x',
+          direction: laneDirection,
         });
       }
     }
@@ -100,11 +111,14 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           velocity: new THREE.Vector3(laneDirection * speed, 0, 0),
           rotationY: laneDirection === 1 ? Math.PI / 2 : -Math.PI / 2,
           speed,
+          cruisingSpeed: speed,
+          isBraking: false,
           type: 'AERIAL',
           color: '#38bdf8',
           boundMin: -550,
           boundMax: 550,
           axis: 'x',
+          direction: laneDirection,
         });
       } else {
         const zStart = -500 + (i * 45) % 1000;
@@ -113,11 +127,14 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           velocity: new THREE.Vector3(0, 0, laneDirection * speed),
           rotationY: laneDirection === 1 ? 0 : Math.PI,
           speed,
+          cruisingSpeed: speed,
+          isBraking: false,
           type: 'AERIAL',
           color: '#a855f7',
           boundMin: -550,
           boundMax: 550,
           axis: 'z',
+          direction: laneDirection,
         });
       }
     }
@@ -141,6 +158,55 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
     for (let i = 0; i < vehicles.length; i++) {
       const v = vehicles[i];
+
+      // Handle ground vehicle intersection deceleration & traffic light rules
+      if (v.type === 'GROUND') {
+        const signal = TrafficLightSystem.getInstance().getVehicleSignal(v.axis);
+        let targetSpeed = v.cruisingSpeed;
+        v.isBraking = false;
+
+        // Check central intersection approach (-18m stop line)
+        if (v.axis === 'z') {
+          // NS Avenue
+          if (v.direction > 0 && v.position.z > -45 && v.position.z <= -16) {
+            // Approaching from North heading South
+            if (signal === 'RED' || signal === 'AMBER') {
+              targetSpeed = 0;
+              v.isBraking = true;
+            }
+          } else if (v.direction < 0 && v.position.z < 45 && v.position.z >= 16) {
+            // Approaching from South heading North
+            if (signal === 'RED' || signal === 'AMBER') {
+              targetSpeed = 0;
+              v.isBraking = true;
+            }
+          }
+        } else {
+          // EW Avenue
+          if (v.direction > 0 && v.position.x > -45 && v.position.x <= -16) {
+            // Approaching from West heading East
+            if (signal === 'RED' || signal === 'AMBER') {
+              targetSpeed = 0;
+              v.isBraking = true;
+            }
+          } else if (v.direction < 0 && v.position.x < 45 && v.position.x >= 16) {
+            // Approaching from East heading West
+            if (signal === 'RED' || signal === 'AMBER') {
+              targetSpeed = 0;
+              v.isBraking = true;
+            }
+          }
+        }
+
+        // Smooth acceleration/braking transition
+        const accelRate = targetSpeed === 0 ? 4.5 : 2.0;
+        v.speed = THREE.MathUtils.lerp(v.speed, targetSpeed, delta * accelRate);
+        if (v.axis === 'z') {
+          v.velocity.z = v.direction * v.speed;
+        } else {
+          v.velocity.x = v.direction * v.speed;
+        }
+      }
 
       // Integrate motion
       v.position.addScaledVector(v.velocity, delta);
@@ -180,15 +246,18 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           const forward = new THREE.Vector3(0, 0, 2.05).applyAxisAngle(new THREE.Vector3(0, 1, 0), v.rotationY);
           dummy.position.copy(v.position).add(forward);
           dummy.position.y += 0.05;
+          dummy.scale.set(1, 1, 1);
           dummy.updateMatrix();
           groundHeadlightMesh.current.setMatrixAt(groundIdx, dummy.matrix);
         }
 
-        // Taillights (rear relative offset)
+        // Taillights (rear relative offset): flare brighter/taller when braking or stopped
         if (groundTaillightMesh.current) {
           const rear = new THREE.Vector3(0, 0, -2.05).applyAxisAngle(new THREE.Vector3(0, 1, 0), v.rotationY);
           dummy.position.copy(v.position).add(rear);
           dummy.position.y += 0.05;
+          const brakeScale = v.isBraking || v.speed < 2.0 ? 1.8 : 1.0;
+          dummy.scale.set(1, brakeScale, 1);
           dummy.updateMatrix();
           groundTaillightMesh.current.setMatrixAt(groundIdx, dummy.matrix);
         }

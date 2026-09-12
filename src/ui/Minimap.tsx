@@ -31,7 +31,7 @@ export const Minimap: React.FC<MinimapProps> = ({ playerPosRef }) => {
 
   return (
     <div
-      className="glass-panel"
+      className="glass-panel minimap-panel"
       style={{
         position: 'absolute',
         top: 80,

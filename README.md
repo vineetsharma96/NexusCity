@@ -34,55 +34,48 @@ Unlike typical WebGL demonstrations that rely on multi-gigabyte downloaded 3D as
 - **24 High-Altitude Skyway Commuters**: Sleek airborne commuters gliding between skyscraper spires along aerial transit corridors with cyan plasma exhaust trails.
 - **Boundary Wrapping & High Performance**: 100% instanced rendering for zero-overhead vehicular movement.
 
-### 🌊 Skyscraper Fluid Motion Billboards
-- **Procedural Navier-Stokes Liquid Simulation**: Giant monolithic holographic displays mounted to skyscraper facades.
-- **Multi-Frequency Domain-Warped Shaders**: Real-time turbulent fluid eddies, chromatic edge aberration, scanlines, and neon bezels with custom color themes (Cyan/Magenta, Gold/Emerald, Plasma/Violet).
+### 🚦 Traffic Light System & Intersection Rules
+- **Overhead Signal Gantries (`TrafficLightGantry.tsx`)**: 3D cantilever signal masts over intersections with illuminated Red, Amber, Green emissive lenses and directional visors.
+- **Automated Signal Cycle Engine (`TrafficLightSystem.ts`)**: Coordinated North-South vs East-West signal phases, amber clearance intervals, and pedestrian walk/don't walk cycles.
+- **Vehicle Intersection Deceleration**: Ground hover-cruisers detect approaching stop lines, smoothly decelerating to a stop on Red/Amber with flaring bright red brake lights, and accelerating to cruising speed on Green.
 
-### 🌳 Dynamic Vegetation & Instanced Leaves
-- Procedural street trees with tapered cylindrical bark trunks, multi-tier branches, and faceted dodecahedral canopy clouds.
-- 800 instanced falling leaves with procedural wind gusts, 3D tumbling rotation, ground settling, and vertical recycling.
+### 🚶 NPC Road Crossing & Zebra Footpaths
+- **Zebra Crosswalks (`CrosswalkMarkings.tsx`)**: Delineated thermal striped pavement markings, vehicle stop bars, and illuminated curb ramps connecting sidewalks across multi-lane avenues.
+- **Pedestrian Signal Compliance (`NPCManager.ts`)**: Autonomous citizens observe pedestrian signals, safely walking across avenues via zebra footpaths during vehicle Red phases and waiting patiently at curbs during vehicle Green phases.
 
-### ☀️ Realtime Celestial Sun & Dynamic Moving Shadows
-- Continuous 24-hour celestial orbit (Dawn, Day, Sunset, Dusk, Night) with radiant sun sphere and outer glowing coronal aura.
-- **Dynamic Real-Time Moving Shadows**: Sun trajectory continuously swings and stretches sharp directional shadow cascades across building facades, streets, vehicles, and pedestrians in real time.
-- Dynamic atmospheric Rayleigh/Mie scattering colors, altitude fog, sunset ground bounce, and night-scaling emissive neon streetlights.
+### 🌳 Central Park & Reflective Water Pond Sanctuary
+- **Urban Sanctuary (`ParkSanctuary.tsx`)**: Organic 70m × 70m central park landscape with granite retaining walls and neon accent trims.
+- **Procedural Rippling Water Pond**: Custom GLSL water shader with surface sine wave displacement, deep emerald refraction, caustics, and cyan rim highlights.
+- **Arching Footbridge**: Physical wooden footbridge spanning across the pond that players and NPCs can walk across.
+- **Flora & Amenities**: Bioluminescent floating lotus blossoms, weeping willow cyber-trees, pink sakura cherry blossoms, and ergonomic park benches.
 
-### 👥 50+ Living NPCs & Cyberpunk Dialogue
-- **52 Autonomous Procedural Citizens**: Story characters (Dr. Vance Kael, Kira Jin, Officer Chen, Echo-7) alongside 48 procedural citizens (Netrunners, Technicians, Synthetic Civilians, Couriers) with randomized cyber-armor palettes and visors.
-- **Sidewalk Waypoint Navigation**: Dynamic pacing, directional turning, procedural breathing/walking IK, and ambient chatter fallback.
+### 📺 Skyscraper Dynamic Video Billboards
+- **Multi-Channel Procedural Video Simulation (`CyberVideoBillboard.tsx`)**:
+  - *Channel 1 (Nexus 24 Live News)*: Live scrolling news ticker tape, animated 3D rotating wireframe globe, and pulsing audio spectrum equalizer bars.
+  - *Channel 2 (Cyber-Corp Commercial Adverts)*: Cycling adverts ("NEO-COCA", "KROM-OPTICS", "VELOCITY-X") with glitch VHS scanlines, chromatic aberration, and flashing typography.
+  - *Channel 3 (Metropolis Grid Surveillance)*: 360° sweeping radar beam with blips, digital matrix code rain, and live security camera HUD telemetry.
 
-### 🚪 Enterable Buildings & Procedural Interiors
-- Automated proximity double sliding glass doors on **Nexus Advanced Labs** and **Neon Velocity Lounge**.
-- Seamless fade transitions with exterior coordinate preservation.
-- Procedurally generated interiors: quantum stabilizer reactor, multi-screen computer workstations, server racks, and curved lounge bar.
+### 🏢 11 Enterable Procedural Cyberpunk Interiors
+- Automated proximity sliding doors and distinct neon marquees on 11 enterable locations:
+  1. **Nexus Advanced Labs** — Quantum reactor core, scientific consoles, server racks.
+  2. **Neon Velocity Lounge** — Curved cyber bar counter, cocktail stools, VIP booths.
+  3. **Krom-Doc Augmentation Clinic** — Ripperdoc operating chair, surgical arm, cyber-prosthetics cases.
+  4. **Black-Ice Hacker Safehouse** — Server banks, green matrix terminal arrays, floor cable conduits.
+  5. **Tokyo-Neo Synth-Ramen** — L-shaped wooden ramen bar, broth vats, red paper lanterns.
+  6. **Aero-Cargo Drone Bay** — Quadcopter repair dock, hydraulic lift, industrial gantry crane.
+  7. **Apex Sky Suite Penthouse** — Floor-to-ceiling panoramic skyline glass, luxury couch, glass coffee table.
+  8. **Megacorp Secure Data Vault** — Hexagonal optical data core, rotating red security lasers.
+  9. **Biosphere Hydroponic Flora Lab** — Vertical growth racks, violet UV grow lights, nutrient tanks.
+  10. **Hyperloop Metro Transit Hub** — Subterranean train tracks, electrified 3rd rail, electronic schedule timetable.
+  11. **Cyber-Strike 2099 Retro Arcade** — CRT pixel art arcade cabinets, dance revolution flashing stage.
 
-### 🗺️ Fullscreen Holographic Map & In-World Navigation
-- Fullscreen 2D/SVG vector blueprint map (`M` key) with player heading pin, landmark inspection, and destination selection.
-- In-world glowing cyan chevron guidance ribbon on the pavement pointing directly to the active destination.
-
-### ⛈️ Dynamic Weather & Atmospheric Simulation
-- 5 weather modes: `CLEAR`, `CLOUDY`, `RAIN`, `HEAVY_RAIN`, `FOG`.
-- 1,800 instanced aerodynamic rain needles dynamically tilting with 3D wind velocity + 90 pavement ground splash ripples.
-- Dynamic road wetness: asphalt roughness drops from 0.35 down to 0.08 with mirror-like specular reflections.
-- Procedural double-pulse lightning strikes illuminating the sky and cityscape.
-
-### 📱 Mobile Optimization & Touch Controls
-- Left virtual analog thumbstick with resting guide for 360° omnidirectional movement.
-- Right-hand camera look orbit drag zone.
-- Dedicated touch action buttons (`RUN`, `JUMP`, `INTERACT`, `MAP`).
-- Two-finger pinch-to-zoom camera distance (3.5m to 18m).
-- Responsive mobile HUD layout and automatic mobile quality throttling.
-
-### 🤖 NEXUS-AI City Assistant
-- In-game holographic assistant terminal (`KeyI` or `~` shortcut).
-- Real-time world telemetry awareness (coordinates, district lore, weather, time, landmarks).
-- Dual-mode execution: online Gemini API integration (`gemini-2.5-flash`) + zero-latency offline heuristic NLP parser ("Take me to the lab", "Make it storm", "Set time to sunset", "Where am I?").
-
-### 🔊 100% Procedural Web Audio Synthesizer
-- Procedural district ambient soundscapes: low 55Hz traffic drone in Central City, high-altitude wind whistle in Sky District, server drone in Neural District.
-- Continuous bandpass-filtered rain patter and low-frequency thunder bursts on lightning strikes.
-- Procedural SFX: pavement footstep clicks synchronized to movement speed, jump jet-bursts, sliding door chimes, and UI blips.
-- HUD Speaker toggle (`🔇 AUDIO OFF` / `🔊 AUDIO ON`) with browser autoplay policy compliance.
+### 📱 Simplified Mobile UI & Cyberpunk System Menu
+- **Clutter-Free Mobile Viewport**: Streamlined single-line header on phones, desktop controls guide hidden on touch devices, and interaction prompts positioned for easy thumb taps.
+- **Unified System Menu (`CyberMenuModal.tsx`)**: Sleek slide-out menu with:
+  - **⚡ Fast-Travel Teleport Hub**: Instant warp to 14 key destinations across all districts and interiors.
+  - **☀️ Time of Day Presets**: Dawn, Noon, Dusk, Midnight.
+  - **⛈️ Atmospheric Weather Toggles**: Clear, Cloudy, Rain, Storm, Fog.
+  - **🔊 Audio & Settings**: Sound mute/unmute, graphics quality presets, and touch controls cheatsheet.
 
 ---
 

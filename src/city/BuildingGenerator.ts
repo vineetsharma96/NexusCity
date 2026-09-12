@@ -17,7 +17,7 @@ export interface BuildingLightStrip {
 export interface BuildingRooftopEquipment {
   position: THREE.Vector3;
   size: THREE.Vector3;
-  type: 'HVAC' | 'ANTENNA' | 'ELEVATOR_CORE' | 'DISH';
+  type: 'HVAC' | 'ANTENNA' | 'ELEVATOR_CORE' | 'DISH' | 'COOLING_TOWER';
 }
 
 export interface BuildingDef {
@@ -92,11 +92,26 @@ export class BuildingGenerator {
         color: neonColor,
       });
 
-      // Antenna mast
+      // Rooftop Equipment: Antenna mast, Cooling Tower, and HVAC units
       rooftopEquipment.push({
         position: new THREE.Vector3(0, mainH + pentH + 8, 0),
         size: new THREE.Vector3(0.4, 16, 0.4),
         type: 'ANTENNA',
+      });
+      rooftopEquipment.push({
+        position: new THREE.Vector3(pentW * 0.28, mainH + pentH + 2.4, pentD * 0.28),
+        size: new THREE.Vector3(2.8, 3.8, 2.8),
+        type: 'COOLING_TOWER',
+      });
+      rooftopEquipment.push({
+        position: new THREE.Vector3(-pentW * 0.28, mainH + pentH + 1.2, -pentD * 0.28),
+        size: new THREE.Vector3(3.5, 2.4, 2.8),
+        type: 'HVAC',
+      });
+      rooftopEquipment.push({
+        position: new THREE.Vector3(pentW * 0.28, mainH + pentH + 1.8, -pentD * 0.28),
+        size: new THREE.Vector3(2.2, 3.2, 2.2),
+        type: 'DISH',
       });
 
       // Collision box for whole monolith
@@ -134,16 +149,35 @@ export class BuildingGenerator {
           )
         );
 
+        // Add setback terrace HVAC on lower tiers
+        if (i < numTiers - 1 && i > 0) {
+          rooftopEquipment.push({
+            position: new THREE.Vector3(currentW * 0.38, currentY + 1.2, currentD * 0.38),
+            size: new THREE.Vector3(2.4, 2.0, 2.4),
+            type: 'HVAC',
+          });
+        }
+
         currentY += tierH;
         currentW *= 0.78;
         currentD *= 0.78;
       }
 
-      // Top HVAC equipment
+      // Top Rooftop Equipment
       rooftopEquipment.push({
-        position: new THREE.Vector3(0, currentY + 1.5, 0),
-        size: new THREE.Vector3(currentW * 0.6, 3, currentD * 0.6),
+        position: new THREE.Vector3(-currentW * 0.2, currentY + 1.5, -currentD * 0.2),
+        size: new THREE.Vector3(currentW * 0.5, 2.8, currentD * 0.5),
         type: 'HVAC',
+      });
+      rooftopEquipment.push({
+        position: new THREE.Vector3(currentW * 0.25, currentY + 2.4, currentD * 0.25),
+        size: new THREE.Vector3(2.6, 3.6, 2.6),
+        type: 'COOLING_TOWER',
+      });
+      rooftopEquipment.push({
+        position: new THREE.Vector3(0, currentY + 6, 0),
+        size: new THREE.Vector3(0.3, 12, 0.3),
+        type: 'ANTENNA',
       });
     } else if (archetype === 'CANTILEVER') {
       // Slender base with expanding cantilever upper volume
@@ -167,6 +201,23 @@ export class BuildingGenerator {
         position: new THREE.Vector3(0, baseH - 0.1, 0),
         size: new THREE.Vector3(baseW, 0.2, baseD),
         color: neonColor,
+      });
+
+      // Rooftop assets
+      rooftopEquipment.push({
+        position: new THREE.Vector3(baseW * 0.25, height + 2.4, baseD * 0.25),
+        size: new THREE.Vector3(2.8, 3.6, 2.8),
+        type: 'COOLING_TOWER',
+      });
+      rooftopEquipment.push({
+        position: new THREE.Vector3(-baseW * 0.25, height + 1.2, -baseD * 0.25),
+        size: new THREE.Vector3(3.2, 2.4, 2.8),
+        type: 'HVAC',
+      });
+      rooftopEquipment.push({
+        position: new THREE.Vector3(0, height + 7, 0),
+        size: new THREE.Vector3(0.35, 14, 0.35),
+        type: 'ANTENNA',
       });
 
       collisionBounds.push(
@@ -207,6 +258,23 @@ export class BuildingGenerator {
         position: new THREE.Vector3(0, bridgeY - bridgeH / 2, 0),
         size: new THREE.Vector3(baseW, 0.2, towerD * 0.4),
         color: neonColor,
+      });
+
+      // Spire Antennas and Cooling Towers
+      rooftopEquipment.push({
+        position: new THREE.Vector3(leftCenterX, height + 7, 0),
+        size: new THREE.Vector3(0.3, 14, 0.3),
+        type: 'ANTENNA',
+      });
+      rooftopEquipment.push({
+        position: new THREE.Vector3(rightCenterX, height * 0.9 + 2.2, 0),
+        size: new THREE.Vector3(2.6, 3.4, 2.6),
+        type: 'COOLING_TOWER',
+      });
+      rooftopEquipment.push({
+        position: new THREE.Vector3(rightCenterX, height * 0.9 + 1.2, -towerD * 0.3),
+        size: new THREE.Vector3(2.2, 2.0, 2.2),
+        type: 'DISH',
       });
 
       collisionBounds.push(

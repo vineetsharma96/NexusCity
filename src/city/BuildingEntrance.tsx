@@ -91,8 +91,32 @@ export const BuildingEntrance: React.FC<BuildingEntranceProps> = ({
       <mesh position={[0, 3.8, 0.35]}>
         <boxGeometry args={[3.8, 0.65, 0.1]} />
         <meshStandardMaterial
-          color={type === 'LAB' ? '#00f0ff' : '#ffaa00'}
-          emissive={type === 'LAB' ? '#00f0ff' : '#ffaa00'}
+          color={
+            type === 'LAB' ? '#00f0ff' :
+            type === 'LOUNGE' ? '#ec4899' :
+            type === 'CLINIC' ? '#06b6d4' :
+            type === 'NETRUNNER_DEN' ? '#10b981' :
+            type === 'RAMEN_DINER' ? '#f59e0b' :
+            type === 'DRONE_HANGAR' ? '#f97316' :
+            type === 'PENTHOUSE' ? '#38bdf8' :
+            type === 'SERVER_VAULT' ? '#3b82f6' :
+            type === 'GREENHOUSE' ? '#22c55e' :
+            type === 'METRO_STATION' ? '#fbbf24' :
+            type === 'ARCADE' ? '#d946ef' : '#00f0ff'
+          }
+          emissive={
+            type === 'LAB' ? '#00f0ff' :
+            type === 'LOUNGE' ? '#ec4899' :
+            type === 'CLINIC' ? '#06b6d4' :
+            type === 'NETRUNNER_DEN' ? '#10b981' :
+            type === 'RAMEN_DINER' ? '#f59e0b' :
+            type === 'DRONE_HANGAR' ? '#f97316' :
+            type === 'PENTHOUSE' ? '#38bdf8' :
+            type === 'SERVER_VAULT' ? '#3b82f6' :
+            type === 'GREENHOUSE' ? '#22c55e' :
+            type === 'METRO_STATION' ? '#fbbf24' :
+            type === 'ARCADE' ? '#d946ef' : '#00f0ff'
+          }
           emissiveIntensity={1.4}
         />
       </mesh>

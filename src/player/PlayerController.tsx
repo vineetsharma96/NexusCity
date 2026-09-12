@@ -41,6 +41,23 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
         }
       });
     }
+
+    // Global custom event listener for fast-travel teleportation
+    const handleCustomTeleport = (e: Event) => {
+      const detail = (e as CustomEvent<THREE.Vector3>).detail;
+      if (detail) {
+        controllerRef.current.position.copy(detail);
+        controllerRef.current.velocity.set(0, 0, 0);
+        if (playerPosRef) {
+          playerPosRef.current.copy(detail);
+        }
+      }
+    };
+    window.addEventListener('nexus:teleport', handleCustomTeleport);
+
+    return () => {
+      window.removeEventListener('nexus:teleport', handleCustomTeleport);
+    };
   }, [playerPosRef, registerTeleport]);
 
   useFrame((_, delta) => {

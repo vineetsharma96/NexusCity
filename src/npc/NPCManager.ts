@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { InteractionSystem } from '../interaction/InteractionSystem';
 import { DialogueSystem } from './DialogueSystem';
 import { TimeSystem } from '../world/TimeSystem';
+import { TrafficLightSystem } from '../city/TrafficLightSystem';
 
 export interface NPCDef {
   id: string;
@@ -135,7 +136,7 @@ export class NPCManager {
       const visorColor = visorColors[i % visorColors.length];
 
       // Distribute across city corridors
-      const corridorType = i % 5;
+      const corridorType = i % 6;
       const waypoints: THREE.Vector3[] = [];
       let initialPos = new THREE.Vector3();
 
@@ -175,6 +176,54 @@ export class NPCManager {
           new THREE.Vector3(Math.max(-85, xStart - 40), 0.18, 17),
           new THREE.Vector3(Math.min(85, xStart + 40), 0.18, 17)
         );
+      } else if (corridorType === 4) {
+        // Road Crosswalk Pedestrians (Crossing Avenue via Zebra Footpath)
+        const crossIdx = i % 4;
+        if (crossIdx === 0) {
+          // North crosswalk across Z avenue
+          initialPos = new THREE.Vector3(17, 0.18, -14);
+          waypoints.push(
+            new THREE.Vector3(17, 0.18, -14),
+            new THREE.Vector3(-17, 0.18, -14),
+            new THREE.Vector3(-17, 0.18, -32),
+            new THREE.Vector3(-17, 0.18, -14),
+            new THREE.Vector3(17, 0.18, -14),
+            new THREE.Vector3(17, 0.18, -32)
+          );
+        } else if (crossIdx === 1) {
+          // South crosswalk across Z avenue
+          initialPos = new THREE.Vector3(-17, 0.18, 14);
+          waypoints.push(
+            new THREE.Vector3(-17, 0.18, 14),
+            new THREE.Vector3(17, 0.18, 14),
+            new THREE.Vector3(17, 0.18, 32),
+            new THREE.Vector3(17, 0.18, 14),
+            new THREE.Vector3(-17, 0.18, 14),
+            new THREE.Vector3(-17, 0.18, 32)
+          );
+        } else if (crossIdx === 2) {
+          // East crosswalk across X avenue
+          initialPos = new THREE.Vector3(14, 0.18, -17);
+          waypoints.push(
+            new THREE.Vector3(14, 0.18, -17),
+            new THREE.Vector3(14, 0.18, 17),
+            new THREE.Vector3(32, 0.18, 17),
+            new THREE.Vector3(14, 0.18, 17),
+            new THREE.Vector3(14, 0.18, -17),
+            new THREE.Vector3(32, 0.18, -17)
+          );
+        } else {
+          // West crosswalk across X avenue
+          initialPos = new THREE.Vector3(-14, 0.18, 17);
+          waypoints.push(
+            new THREE.Vector3(-14, 0.18, 17),
+            new THREE.Vector3(-14, 0.18, -17),
+            new THREE.Vector3(-32, 0.18, -17),
+            new THREE.Vector3(-14, 0.18, -17),
+            new THREE.Vector3(-14, 0.18, 17),
+            new THREE.Vector3(-32, 0.18, 17)
+          );
+        }
       } else {
         // Central Plaza Loop Walkers (inside [-12..12, -12..12])
         const angle = (i / 10) * Math.PI * 2;
@@ -268,6 +317,28 @@ export class NPCManager {
         npc.currentWaypointIdx = (npc.currentWaypointIdx + 1) % npc.waypoints.length;
         npc.pauseTimer = isLateNight ? 5.0 : (i % 4 === 0 ? 3.0 : 0.8);
         continue;
+      }
+
+      // Check if entering a crosswalk and pedestrian signal is DONT_WALK
+      const isCrossingZRoad = Math.abs(target.x - npc.position.x) > 20 && Math.abs(npc.position.z) < 20;
+      const isCrossingXRoad = Math.abs(target.z - npc.position.z) > 20 && Math.abs(npc.position.x) < 20;
+
+      if (isCrossingZRoad) {
+        // Checking curb threshold: about to step onto Z avenue
+        if (Math.abs(npc.position.x) >= 14 && Math.abs(npc.position.x) <= 17.5) {
+          if (!TrafficLightSystem.getInstance().canPedestrianCross('z')) {
+            npc.isWalking = false;
+            continue;
+          }
+        }
+      } else if (isCrossingXRoad) {
+        // Checking curb threshold: about to step onto X avenue
+        if (Math.abs(npc.position.z) >= 14 && Math.abs(npc.position.z) <= 17.5) {
+          if (!TrafficLightSystem.getInstance().canPedestrianCross('x')) {
+            npc.isWalking = false;
+            continue;
+          }
+        }
       }
 
       // Move toward target waypoint

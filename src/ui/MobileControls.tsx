@@ -171,16 +171,36 @@ export const MobileControls: React.FC = () => {
           alignItems: 'flex-end',
         }}
       >
-        {/* Top Row: Map and Sprint Toggle */}
-        <div style={{ display: 'flex', gap: 10 }}>
+        {/* Top Row: Menu, Map and Sprint Toggle */}
+        <div style={{ display: 'flex', gap: 8 }}>
           <button
             className="cyber-btn"
             style={{
-              width: 54,
-              height: 54,
+              width: 50,
+              height: 50,
               borderRadius: '50%',
               padding: 0,
-              fontSize: '0.75rem',
+              fontSize: '0.72rem',
+              color: '#00ffaa',
+              borderColor: '#00ffaa',
+              backgroundColor: 'rgba(10, 28, 20, 0.85)',
+              boxShadow: '0 0 10px rgba(0, 255, 170, 0.3)',
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(new CustomEvent('nexus:open-menu'));
+            }}
+          >
+            MENU
+          </button>
+          <button
+            className="cyber-btn"
+            style={{
+              width: 50,
+              height: 50,
+              borderRadius: '50%',
+              padding: 0,
+              fontSize: '0.72rem',
               color: '#38bdf8',
               borderColor: '#38bdf8',
               backgroundColor: 'rgba(10, 20, 35, 0.85)',
@@ -195,11 +215,11 @@ export const MobileControls: React.FC = () => {
           <button
             className="cyber-btn"
             style={{
-              width: 54,
-              height: 54,
+              width: 50,
+              height: 50,
               borderRadius: '50%',
               padding: 0,
-              fontSize: '0.75rem',
+              fontSize: '0.72rem',
               color: isSprintActive ? '#050811' : 'var(--neon-cyan)',
               backgroundColor: isSprintActive ? 'var(--neon-cyan)' : 'rgba(10, 20, 35, 0.85)',
               boxShadow: isSprintActive ? '0 0 16px var(--neon-cyan)' : undefined,

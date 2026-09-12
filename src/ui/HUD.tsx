@@ -8,6 +8,7 @@ import { DialogueBox } from './DialogueBox';
 import { Minimap } from './Minimap';
 import { CityMapModal } from './CityMapModal';
 import { AIAssistantModal } from './AIAssistantModal';
+import { CyberMenuModal } from './CyberMenuModal';
 import { NavigationSystem } from '../map/NavigationSystem';
 import { defaultRNG } from '../core/SeedRandom';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
@@ -49,11 +50,28 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     WeatherSystem.getInstance().getState()
   );
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(() =>
     AudioManager.getInstance().getSettings()
   );
 
   useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(
+        window.innerWidth < 768 ||
+        'ontouchstart' in window ||
+        navigator.maxTouchPoints > 0
+      );
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
+    const onOpenMenuEvent = () => {
+      setIsMobileMenuOpen(true);
+    };
+    window.addEventListener('nexus:open-menu', onOpenMenuEvent);
+
     const unsubPerf = PerformanceMonitor.getInstance().subscribe(setMetrics);
     const unsubQuality = QualityManager.subscribe((q) => setQualityPreset(q.name));
     let prevMapKey = false;
@@ -94,6 +112,8 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     const unsubChunks = ChunkManager.getInstance().subscribe(setChunkState);
 
     return () => {
+      window.removeEventListener('resize', checkMobile);
+      window.removeEventListener('nexus:open-menu', onOpenMenuEvent);
       window.removeEventListener('keydown', handleGlobalKeyDown);
       window.removeEventListener('click', handleUserGesture);
       window.removeEventListener('touchstart', handleUserGesture);
@@ -210,63 +230,69 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         className="hud-top-left"
         style={{
           position: 'absolute',
-          top: 18,
-          left: 20,
+          top: isMobile ? 12 : 18,
+          left: isMobile ? 14 : 20,
           zIndex: 30,
           display: 'flex',
           flexDirection: 'column',
-          gap: 6,
+          gap: isMobile ? 3 : 6,
+          maxWidth: isMobile ? '60vw' : undefined,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <h1
             style={{
               fontFamily: 'var(--font-display)',
-              fontSize: '1.25rem',
+              fontSize: isMobile ? '1.05rem' : '1.25rem',
               fontWeight: 900,
-              letterSpacing: '2.5px',
+              letterSpacing: '2px',
               color: 'var(--neon-cyan)',
               textShadow: '0 0 12px rgba(0, 240, 255, 0.5)',
+              margin: 0,
             }}
           >
             NEXUS CITY
           </h1>
-          <span className="cyber-badge" style={{ color: 'var(--neon-amber)', borderColor: 'rgba(255, 170, 0, 0.4)' }}>
-            SEED: #{defaultRNG.initialSeed}
-          </span>
-          <button
-            onClick={() => setIsAIModalOpen(true)}
-            className="cyber-btn"
-            style={{
-              padding: '2px 8px',
-              fontSize: '0.68rem',
-              borderColor: 'var(--neon-cyan)',
-              boxShadow: '0 0 10px rgba(0, 240, 255, 0.35)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-            title="Open AI City Assistant [Key I or ~]"
-          >
-            <span
+          {!isMobile && (
+            <span className="cyber-badge" style={{ color: 'var(--neon-amber)', borderColor: 'rgba(255, 170, 0, 0.4)' }}>
+              SEED: #{defaultRNG.initialSeed}
+            </span>
+          )}
+          {!isMobile && (
+            <button
+              onClick={() => setIsAIModalOpen(true)}
+              className="cyber-btn"
               style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                backgroundColor: 'var(--neon-cyan)',
-                boxShadow: '0 0 8px #00f0ff',
+                padding: '2px 8px',
+                fontSize: '0.68rem',
+                borderColor: 'var(--neon-cyan)',
+                boxShadow: '0 0 10px rgba(0, 240, 255, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
               }}
-            />
-            AI ASSISTANT [I]
-          </button>
+              title="Open AI City Assistant [Key I or ~]"
+            >
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--neon-cyan)',
+                  boxShadow: '0 0 8px #00f0ff',
+                }}
+              />
+              AI ASSISTANT [I]
+            </button>
+          )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span
             style={{
               display: 'inline-block',
-              width: 8,
-              height: 8,
+              width: 7,
+              height: 7,
               borderRadius: '50%',
               backgroundColor: interiorState.current !== 'NONE' ? '#ffaa00' : chunkState.activeDistrict.accentColor,
               boxShadow: `0 0 8px ${interiorState.current !== 'NONE' ? '#ffaa00' : chunkState.activeDistrict.accentColor}`,
@@ -275,168 +301,175 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
           <span
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: '0.85rem',
+              fontSize: isMobile ? '0.72rem' : '0.85rem',
               color: interiorState.current !== 'NONE' ? 'var(--neon-amber)' : chunkState.activeDistrict.accentColor,
               fontWeight: 700,
-              letterSpacing: '1px',
+              letterSpacing: '0.5px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
             {interiorState.current !== 'NONE'
               ? interiorState.name
-              : `${chunkState.activeDistrict.name} // ${chunkState.activeDistrict.subtitle}`}
+              : `${chunkState.activeDistrict.name}`}
           </span>
         </div>
 
-        {/* Time of Day & Fast-Switch Presets */}
-        <div className="hud-time-weather-row" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-          <span
-            className="cyber-badge"
-            style={{
-              color: timeState.isNight ? '#60a5fa' : timeState.phase === 'SUNSET' ? '#ff8833' : '#00ffaa',
-              borderColor: timeState.isNight ? 'rgba(96, 165, 250, 0.4)' : 'rgba(0, 240, 255, 0.3)',
-              backgroundColor: 'rgba(10, 16, 30, 0.8)',
-            }}
-          >
-            {timeState.formattedTime} // {timeState.phase}
-          </span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button
-              onClick={() => setTime(6.0)}
-              className="cyber-btn"
-              style={{ padding: '2px 6px', fontSize: '0.65rem' }}
-              title="Dawn [06:00]"
+        {/* Time of Day & Fast-Switch Presets (Desktop Only, available in System Menu on Mobile) */}
+        {!isMobile && (
+          <div className="hud-time-weather-row" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <span
+              className="cyber-badge"
+              style={{
+                color: timeState.isNight ? '#60a5fa' : timeState.phase === 'SUNSET' ? '#ff8833' : '#00ffaa',
+                borderColor: timeState.isNight ? 'rgba(96, 165, 250, 0.4)' : 'rgba(0, 240, 255, 0.3)',
+                backgroundColor: 'rgba(10, 16, 30, 0.8)',
+              }}
             >
-              DAWN
-            </button>
-            <button
-              onClick={() => setTime(13.0)}
-              className="cyber-btn"
-              style={{ padding: '2px 6px', fontSize: '0.65rem' }}
-              title="Noon [13:00]"
-            >
-              DAY
-            </button>
-            <button
-              onClick={() => setTime(18.5)}
-              className="cyber-btn"
-              style={{ padding: '2px 6px', fontSize: '0.65rem', color: '#ffaa00', borderColor: '#ffaa00' }}
-              title="Sunset [18:30]"
-            >
-              DUSK
-            </button>
-            <button
-              onClick={() => setTime(23.0)}
-              className="cyber-btn"
-              style={{ padding: '2px 6px', fontSize: '0.65rem', color: '#60a5fa', borderColor: '#60a5fa' }}
-              title="Midnight [23:00]"
-            >
-              NIGHT
-            </button>
+              {timeState.formattedTime} // {timeState.phase}
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                onClick={() => setTime(6.0)}
+                className="cyber-btn"
+                style={{ padding: '2px 6px', fontSize: '0.65rem' }}
+                title="Dawn [06:00]"
+              >
+                DAWN
+              </button>
+              <button
+                onClick={() => setTime(13.0)}
+                className="cyber-btn"
+                style={{ padding: '2px 6px', fontSize: '0.65rem' }}
+                title="Noon [13:00]"
+              >
+                DAY
+              </button>
+              <button
+                onClick={() => setTime(18.5)}
+                className="cyber-btn"
+                style={{ padding: '2px 6px', fontSize: '0.65rem', color: '#ffaa00', borderColor: '#ffaa00' }}
+                title="Sunset [18:30]"
+              >
+                DUSK
+              </button>
+              <button
+                onClick={() => setTime(23.0)}
+                className="cyber-btn"
+                style={{ padding: '2px 6px', fontSize: '0.65rem', color: '#60a5fa', borderColor: '#60a5fa' }}
+                title="Midnight [23:00]"
+              >
+                NIGHT
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Dynamic Weather & Atmospheric Presets */}
-        <div className="hud-time-weather-row" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-          <span
-            className="cyber-badge"
-            style={{
-              color:
-                weatherState.currentWeather === 'HEAVY_RAIN'
-                  ? '#ff3366'
-                  : weatherState.currentWeather === 'RAIN'
-                  ? '#38bdf8'
-                  : weatherState.currentWeather === 'FOG'
-                  ? '#a78bfa'
-                  : '#34d399',
-              borderColor: 'rgba(56, 189, 248, 0.4)',
-              backgroundColor: 'rgba(10, 16, 30, 0.8)',
-            }}
-          >
-            {weatherState.currentWeather}
-            {weatherState.wetnessFactor > 0.05
-              ? ` // WET ${Math.round(weatherState.wetnessFactor * 100)}%`
-              : ''}
-          </span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button
-              onClick={() => setWeather('CLEAR')}
-              className="cyber-btn"
+        {/* Dynamic Weather & Atmospheric Presets (Desktop Only) */}
+        {!isMobile && (
+          <div className="hud-time-weather-row" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <span
+              className="cyber-badge"
               style={{
-                padding: '2px 6px',
-                fontSize: '0.65rem',
-                borderColor: weatherState.currentWeather === 'CLEAR' ? 'var(--neon-cyan)' : undefined,
+                color:
+                  weatherState.currentWeather === 'HEAVY_RAIN'
+                    ? '#ff3366'
+                    : weatherState.currentWeather === 'RAIN'
+                    ? '#38bdf8'
+                    : weatherState.currentWeather === 'FOG'
+                    ? '#a78bfa'
+                    : '#34d399',
+                borderColor: 'rgba(56, 189, 248, 0.4)',
+                backgroundColor: 'rgba(10, 16, 30, 0.8)',
               }}
-              title="Clear skies"
             >
-              CLEAR
-            </button>
-            <button
-              onClick={() => setWeather('CLOUDY')}
-              className="cyber-btn"
-              style={{
-                padding: '2px 6px',
-                fontSize: '0.65rem',
-                borderColor: weatherState.currentWeather === 'CLOUDY' ? 'var(--neon-cyan)' : undefined,
-              }}
-              title="Overcast skies"
-            >
-              CLOUDY
-            </button>
-            <button
-              onClick={() => setWeather('RAIN')}
-              className="cyber-btn"
-              style={{
-                padding: '2px 6px',
-                fontSize: '0.65rem',
-                color: '#38bdf8',
-                borderColor: weatherState.currentWeather === 'RAIN' ? '#38bdf8' : undefined,
-              }}
-              title="Rain shower"
-            >
-              RAIN
-            </button>
-            <button
-              onClick={() => setWeather('HEAVY_RAIN')}
-              className="cyber-btn"
-              style={{
-                padding: '2px 6px',
-                fontSize: '0.65rem',
-                color: '#ff3366',
-                borderColor: weatherState.currentWeather === 'HEAVY_RAIN' ? '#ff3366' : undefined,
-              }}
-              title="Storm with lightning"
-            >
-              STORM
-            </button>
-            <button
-              onClick={() => setWeather('FOG')}
-              className="cyber-btn"
-              style={{
-                padding: '2px 6px',
-                fontSize: '0.65rem',
-                color: '#a78bfa',
-                borderColor: weatherState.currentWeather === 'FOG' ? '#a78bfa' : undefined,
-              }}
-              title="Cyberpunk dense fog"
-            >
-              FOG
-            </button>
+              {weatherState.currentWeather}
+              {weatherState.wetnessFactor > 0.05
+                ? ` // WET ${Math.round(weatherState.wetnessFactor * 100)}%`
+                : ''}
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                onClick={() => setWeather('CLEAR')}
+                className="cyber-btn"
+                style={{
+                  padding: '2px 6px',
+                  fontSize: '0.65rem',
+                  borderColor: weatherState.currentWeather === 'CLEAR' ? 'var(--neon-cyan)' : undefined,
+                }}
+                title="Clear skies"
+              >
+                CLEAR
+              </button>
+              <button
+                onClick={() => setWeather('CLOUDY')}
+                className="cyber-btn"
+                style={{
+                  padding: '2px 6px',
+                  fontSize: '0.65rem',
+                  borderColor: weatherState.currentWeather === 'CLOUDY' ? 'var(--neon-cyan)' : undefined,
+                }}
+                title="Overcast skies"
+              >
+                CLOUDY
+              </button>
+              <button
+                onClick={() => setWeather('RAIN')}
+                className="cyber-btn"
+                style={{
+                  padding: '2px 6px',
+                  fontSize: '0.65rem',
+                  color: '#38bdf8',
+                  borderColor: weatherState.currentWeather === 'RAIN' ? '#38bdf8' : undefined,
+                }}
+                title="Rain shower"
+              >
+                RAIN
+              </button>
+              <button
+                onClick={() => setWeather('HEAVY_RAIN')}
+                className="cyber-btn"
+                style={{
+                  padding: '2px 6px',
+                  fontSize: '0.65rem',
+                  color: '#ff3366',
+                  borderColor: weatherState.currentWeather === 'HEAVY_RAIN' ? '#ff3366' : undefined,
+                }}
+                title="Storm with lightning"
+              >
+                STORM
+              </button>
+              <button
+                onClick={() => setWeather('FOG')}
+                className="cyber-btn"
+                style={{
+                  padding: '2px 6px',
+                  fontSize: '0.65rem',
+                  color: '#a78bfa',
+                  borderColor: weatherState.currentWeather === 'FOG' ? '#a78bfa' : undefined,
+                }}
+                title="Cyberpunk dense fog"
+              >
+                FOG
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Top Right: Performance Telemetry & Graphics Presets */}
+      {/* Top Right: System Menu & Performance Telemetry */}
       <div
         className="glass-panel hud-top-right"
         style={{
           position: 'absolute',
-          top: 18,
-          right: 20,
+          top: isMobile ? 12 : 18,
+          right: isMobile ? 14 : 20,
           zIndex: 30,
-          padding: '8px 14px',
+          padding: isMobile ? '6px 10px' : '8px 14px',
           display: 'flex',
           alignItems: 'center',
-          gap: 16,
+          gap: isMobile ? 8 : 16,
           fontSize: '0.8rem',
           fontFamily: 'var(--font-mono)',
         }}
@@ -451,51 +484,77 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
           >
             {metrics.fps}
           </span>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginLeft: 4 }}>
-            ({metrics.frameTimeMs}ms)
-          </span>
+          {!isMobile && (
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginLeft: 4 }}>
+              ({metrics.frameTimeMs}ms)
+            </span>
+          )}
         </div>
 
-        {metrics.drawCalls > 0 && (
+        {!isMobile && metrics.drawCalls > 0 && (
           <div>
             <span style={{ color: 'var(--text-muted)' }}>CALLS: </span>
             <span style={{ color: 'var(--neon-cyan)' }}>{metrics.drawCalls}</span>
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ color: 'var(--text-muted)' }}>QUALITY:</span>
-          <select
-            value={qualityPreset}
-            onChange={handleQualityChange}
-            className="cyber-select"
-          >
-            <option value="ULTRA">ULTRA</option>
-            <option value="HIGH">HIGH</option>
-            <option value="MEDIUM">MEDIUM</option>
-            <option value="LOW">LOW</option>
-            <option value="LITE">LITE</option>
-          </select>
-        </div>
+        {!isMobile && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: 'var(--text-muted)' }}>QUALITY:</span>
+            <select
+              value={qualityPreset}
+              onChange={handleQualityChange}
+              className="cyber-select"
+            >
+              <option value="ULTRA">ULTRA</option>
+              <option value="HIGH">HIGH</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="LOW">LOW</option>
+              <option value="LITE">LITE</option>
+            </select>
+          </div>
+        )}
 
-        {/* Audio Mute / Unmute Toggle */}
+        {!isMobile && (
+          <button
+            onClick={() => {
+              AudioManager.getInstance().toggleMute();
+              AudioManager.getInstance().playUI('click');
+            }}
+            className="cyber-btn"
+            style={{
+              padding: '3px 8px',
+              fontSize: '0.72rem',
+              color: audioSettings.isMuted ? '#8ba2c4' : '#00ffaa',
+              borderColor: audioSettings.isMuted ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 255, 170, 0.5)',
+              backgroundColor: audioSettings.isMuted ? 'rgba(10, 15, 25, 0.7)' : 'rgba(0, 255, 170, 0.1)',
+              boxShadow: !audioSettings.isMuted ? '0 0 10px rgba(0, 255, 170, 0.3)' : undefined,
+            }}
+            title={audioSettings.isMuted ? 'Click to Enable Procedural Audio' : 'Click to Mute Audio'}
+          >
+            {audioSettings.isMuted ? '🔇 AUDIO OFF' : '🔊 AUDIO ON'}
+          </button>
+        )}
+
+        {/* Unified Cyberpunk System Menu Button */}
         <button
           onClick={() => {
-            AudioManager.getInstance().toggleMute();
+            setIsMobileMenuOpen(true);
             AudioManager.getInstance().playUI('click');
           }}
           className="cyber-btn"
           style={{
-            padding: '3px 8px',
-            fontSize: '0.72rem',
-            color: audioSettings.isMuted ? '#8ba2c4' : '#00ffaa',
-            borderColor: audioSettings.isMuted ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 255, 170, 0.5)',
-            backgroundColor: audioSettings.isMuted ? 'rgba(10, 15, 25, 0.7)' : 'rgba(0, 255, 170, 0.1)',
-            boxShadow: !audioSettings.isMuted ? '0 0 10px rgba(0, 255, 170, 0.3)' : undefined,
+            padding: isMobile ? '4px 10px' : '4px 12px',
+            fontSize: isMobile ? '0.74rem' : '0.78rem',
+            color: 'var(--neon-cyan)',
+            borderColor: 'var(--neon-cyan)',
+            backgroundColor: 'rgba(0, 240, 255, 0.15)',
+            boxShadow: '0 0 12px rgba(0, 240, 255, 0.35)',
+            fontWeight: 700,
           }}
-          title={audioSettings.isMuted ? 'Click to Enable Procedural Audio' : 'Click to Mute Audio'}
+          title="Open System Menu & Teleport Hub"
         >
-          {audioSettings.isMuted ? '🔇 AUDIO OFF' : '🔊 AUDIO ON'}
+          ☰ MENU
         </button>
       </div>
 
@@ -504,22 +563,25 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         <div
           style={{
             position: 'absolute',
-            bottom: 110,
+            bottom: isMobile ? 125 : 105,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 35,
-            pointerEvents: 'none',
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            maxWidth: '90vw',
           }}
+          onClick={() => InteractionSystem.getInstance().triggerInteract()}
         >
           <div
             className="glass-panel"
             style={{
-              padding: '8px 20px',
-              border: '1px solid rgba(0, 240, 255, 0.45)',
-              boxShadow: '0 0 24px rgba(0, 240, 255, 0.35)',
+              padding: isMobile ? '6px 14px' : '8px 20px',
+              border: '1px solid rgba(0, 240, 255, 0.55)',
+              boxShadow: '0 0 22px rgba(0, 240, 255, 0.4)',
               display: 'flex',
               alignItems: 'center',
-              gap: 10,
+              gap: 8,
             }}
           >
             <span
@@ -528,18 +590,18 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
                 color: '#050811',
                 fontWeight: 900,
                 fontFamily: 'var(--font-mono)',
-                padding: '2px 8px',
+                padding: '2px 7px',
                 borderRadius: 3,
-                fontSize: '0.85rem',
+                fontSize: isMobile ? '0.75rem' : '0.85rem',
               }}
             >
-              E
+              {isMobile ? 'TAP' : 'E'}
             </span>
             <span
               style={{
                 fontFamily: 'var(--font-display)',
-                fontSize: '0.85rem',
-                letterSpacing: '1.5px',
+                fontSize: isMobile ? '0.78rem' : '0.85rem',
+                letterSpacing: '1px',
                 color: 'var(--text-primary)',
               }}
             >
@@ -552,42 +614,44 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       {/* Cyberpunk Interactive Dialogue Modal */}
       <DialogueBox />
 
-      {/* Bottom Left: Controls Guide & Mouse Lock Toggle */}
-      <div
-        className="glass-panel"
-        style={{
-          position: 'absolute',
-          bottom: 20,
-          left: 20,
-          zIndex: 30,
-          padding: '10px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-          fontSize: '0.78rem',
-          fontFamily: 'var(--font-mono)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>CONTROLS GUIDE</span>
-          {!inputState.isPointerLocked ? (
-            <button
-              onClick={InputManager.requestPointerLock}
-              className="cyber-btn"
-              style={{ fontSize: '0.7rem', padding: '3px 8px' }}
-            >
-              LOCK MOUSE LOOK
-            </button>
-          ) : (
-            <span style={{ color: '#00ffaa', fontSize: '0.72rem' }}>● MOUSE LOOK ENGAGED (ESC TO EXIT)</span>
-          )}
+      {/* Bottom Left: Controls Guide (Desktop Only — Hidden completely on mobile to eliminate clutter) */}
+      {!isMobile && (
+        <div
+          className="glass-panel"
+          style={{
+            position: 'absolute',
+            bottom: 20,
+            left: 20,
+            zIndex: 30,
+            padding: '10px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            fontSize: '0.78rem',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>CONTROLS GUIDE</span>
+            {!inputState.isPointerLocked ? (
+              <button
+                onClick={InputManager.requestPointerLock}
+                className="cyber-btn"
+                style={{ fontSize: '0.7rem', padding: '3px 8px' }}
+              >
+                LOCK MOUSE LOOK
+              </button>
+            ) : (
+              <span style={{ color: '#00ffaa', fontSize: '0.72rem' }}>● MOUSE LOOK ENGAGED (ESC TO EXIT)</span>
+            )}
+          </div>
+          <div style={{ color: 'var(--text-muted)', lineHeight: '1.5' }}>
+            <div><strong style={{ color: 'var(--text-primary)' }}>WASD</strong>: Directional Movement</div>
+            <div><strong style={{ color: 'var(--text-primary)' }}>SPACE</strong>: Jump &nbsp;|&nbsp; <strong style={{ color: 'var(--text-primary)' }}>SHIFT</strong>: Sprint</div>
+            <div><strong style={{ color: 'var(--text-primary)' }}>SCROLL</strong>: Camera Zoom &nbsp;|&nbsp; <strong style={{ color: 'var(--text-primary)' }}>DRAG / MOUSE</strong>: Orbit Camera</div>
+          </div>
         </div>
-        <div style={{ color: 'var(--text-muted)', lineHeight: '1.5' }}>
-          <div><strong style={{ color: 'var(--text-primary)' }}>WASD</strong>: Directional Movement</div>
-          <div><strong style={{ color: 'var(--text-primary)' }}>SPACE</strong>: Jump &nbsp;|&nbsp; <strong style={{ color: 'var(--text-primary)' }}>SHIFT</strong>: Sprint</div>
-          <div><strong style={{ color: 'var(--text-primary)' }}>SCROLL</strong>: Camera Zoom &nbsp;|&nbsp; <strong style={{ color: 'var(--text-primary)' }}>DRAG / MOUSE</strong>: Orbit Camera</div>
-        </div>
-      </div>
+      )}
 
       {/* Navigation Minimap Widget */}
       <Minimap playerPosRef={playerPosRef} />
@@ -600,6 +664,16 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         isOpen={isAIModalOpen}
         onClose={() => setIsAIModalOpen(false)}
         playerPosRef={playerPosRef}
+      />
+
+      {/* Unified Cyberpunk System Menu Modal (Fast-Travel, Time/Weather, Settings, Audio) */}
+      <CyberMenuModal
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        onTeleport={(pos) => {
+          window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: pos }));
+        }}
+        onOpenAI={() => setIsAIModalOpen(true)}
       />
 
       {/* Mobile Touch Controller Layer */}
