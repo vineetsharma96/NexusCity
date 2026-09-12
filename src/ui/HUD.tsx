@@ -17,6 +17,7 @@ import { InteriorManager, InteriorState } from '../world/InteriorManager';
 import { ChunkManager, ChunkManagerState } from '../world/ChunkManager';
 import { WeatherSystem, WeatherState, WeatherType } from '../world/WeatherSystem';
 import { AudioManager, AudioSettings } from '../audio/AudioManager';
+import { CinematicManager, CinematicPhase } from '../cinematics/CinematicManager';
 
 export interface HUDProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -54,6 +55,9 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(() =>
     AudioManager.getInstance().getSettings()
+  );
+  const [cinematicPhase, setCinematicPhase] = useState<CinematicPhase>(() =>
+    CinematicManager.getInstance().getState().phase
   );
 
   useEffect(() => {
@@ -110,6 +114,7 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     const unsubInteract = InteractionSystem.getInstance().subscribe(setActiveInteractable);
     const unsubInt = InteriorManager.getInstance().subscribe(setInteriorState);
     const unsubChunks = ChunkManager.getInstance().subscribe(setChunkState);
+    const unsubCinematic = CinematicManager.getInstance().subscribe((s) => setCinematicPhase(s.phase));
 
     return () => {
       window.removeEventListener('resize', checkMobile);
@@ -126,6 +131,7 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       unsubInteract();
       unsubInt();
       unsubChunks();
+      unsubCinematic();
     };
   }, []);
 
@@ -140,6 +146,10 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
   const setWeather = (w: WeatherType) => {
     WeatherSystem.getInstance().setWeather(w);
   };
+
+  if (cinematicPhase === 'LOADING' || cinematicPhase === 'CINEMATIC_INTRO') {
+    return null;
+  }
 
   return (
     <>

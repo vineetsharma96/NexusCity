@@ -118,21 +118,28 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       const hemiDim = 1.0 - weather.skyDarkness * 0.45;
       hemiLightRef.current.color.copy(effectiveSky);
       hemiLightRef.current.groundColor.set(lighting.hemiGroundColor);
-      hemiLightRef.current.intensity = (lighting.isNight ? 0.65 : 1.25) * hemiDim + weather.lightningIntensity * 1.2;
+      hemiLightRef.current.intensity = (lighting.isNight ? 0.85 : 1.25) * hemiDim + weather.lightningIntensity * 1.2;
     }
 
     // 6. Ambient fill light
     if (ambientLightRef.current) {
       const ambDim = 1.0 - weather.skyDarkness * 0.5;
-      ambientLightRef.current.intensity = lighting.ambientIntensity * ambDim + weather.lightningIntensity * 1.5;
+      ambientLightRef.current.intensity = (lighting.isNight ? 0.75 : lighting.ambientIntensity) * ambDim + weather.lightningIntensity * 1.5;
     }
   });
+
+  // Calculate local streetlamp illumination points around player
+  const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
+  const snapX = Math.round(pPos.x / 40) * 40;
+  const snapZ = Math.round(pPos.z / 40) * 40;
+  const isNightTime = lighting.isNight || lighting.phase === 'DUSK' || lighting.phase === 'DAWN';
+  const nightIntensity = lighting.isNight ? 2.4 : 1.4;
 
   return (
     <>
       {/* Dynamic sky and distance fog */}
       <color attach="background" args={[lighting.skyColor]} />
-      <fog ref={fogRef} attach="fog" args={[lighting.fogColor, 75, quality.drawDistance]} />
+      <fog ref={fogRef} attach="fog" args={[lighting.fogColor, 120, quality.drawDistance]} />
 
       {/* Hemisphere light */}
       <hemisphereLight
@@ -150,13 +157,68 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         shadow-mapSize-width={quality.shadowMapSize}
         shadow-mapSize-height={quality.shadowMapSize}
         shadow-camera-near={1.0}
-        shadow-camera-far={quality.drawDistance * 0.7}
-        shadow-camera-left={-110}
-        shadow-camera-right={110}
-        shadow-camera-top={110}
-        shadow-camera-bottom={-110}
+        shadow-camera-far={quality.drawDistance * 0.85}
+        shadow-camera-left={-150}
+        shadow-camera-right={150}
+        shadow-camera-top={150}
+        shadow-camera-bottom={-150}
         shadow-bias={-0.0004}
       />
+
+      {/* Night Streetlamp & Neon Ground Bounce Arrays (dynamically activated at night) */}
+      {isNightTime && quality.maxLights >= 6 && (
+        <group>
+          {/* Streetlamp pole lights snapped to player's intersection vicinity */}
+          <pointLight
+            position={[snapX - 16, 7.5, snapZ - 16]}
+            intensity={nightIntensity}
+            distance={45}
+            color="#ffbe6b"
+            decay={2}
+          />
+          <pointLight
+            position={[snapX + 16, 7.5, snapZ + 16]}
+            intensity={nightIntensity}
+            distance={45}
+            color="#ffbe6b"
+            decay={2}
+          />
+          <pointLight
+            position={[snapX - 16, 7.5, snapZ + 16]}
+            intensity={nightIntensity * 0.85}
+            distance={45}
+            color="#00f0ff"
+            decay={2}
+          />
+          <pointLight
+            position={[snapX + 16, 7.5, snapZ - 16]}
+            intensity={nightIntensity * 0.85}
+            distance={45}
+            color="#ff007f"
+            decay={2}
+          />
+
+          {/* Central road wash light */}
+          <pointLight
+            position={[snapX, 8.5, snapZ]}
+            intensity={nightIntensity * 1.2}
+            distance={55}
+            color="#ffe2a8"
+            decay={2}
+          />
+
+          {/* Park sanctuary ambient lantern light if in vicinity */}
+          {Math.hypot(pPos.x - 75, pPos.z - 75) < 90 && (
+            <pointLight
+              position={[75, 4.5, 75]}
+              intensity={3.2}
+              distance={65}
+              color="#00ffcc"
+              decay={2}
+            />
+          )}
+        </group>
+      )}
 
       {/* Realtime Visible Radiant Celestial Orb in Sky (Sun / Moon) */}
       <group ref={celestialOrbRef}>

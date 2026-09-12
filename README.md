@@ -69,13 +69,19 @@ Unlike typical WebGL demonstrations that rely on multi-gigabyte downloaded 3D as
   10. **Hyperloop Metro Transit Hub** — Subterranean train tracks, electrified 3rd rail, electronic schedule timetable.
   11. **Cyber-Strike 2099 Retro Arcade** — CRT pixel art arcade cabinets, dance revolution flashing stage.
 
-### 📱 Simplified Mobile UI & Cyberpunk System Menu
-- **Clutter-Free Mobile Viewport**: Streamlined single-line header on phones, desktop controls guide hidden on touch devices, and interaction prompts positioned for easy thumb taps.
-- **Unified System Menu (`CyberMenuModal.tsx`)**: Sleek slide-out menu with:
-  - **⚡ Fast-Travel Teleport Hub**: Instant warp to 14 key destinations across all districts and interiors.
-  - **☀️ Time of Day Presets**: Dawn, Noon, Dusk, Midnight.
-  - **⛈️ Atmospheric Weather Toggles**: Clear, Cloudy, Rain, Storm, Fog.
-  - **🔊 Audio & Settings**: Sound mute/unmute, graphics quality presets, and touch controls cheatsheet.
+### 🎬 Cinematic Introduction & Dynamic Loading Screen
+- **Cyberpunk Terminal Boot Loader (`LoadingScreen.tsx`)**: Displays system kernel telemetry, procedural seed `#847291` validation, interior generation progress, and shader compilation with an interactive progress bar.
+- **Cinematic Metropolis Aerial Tour (`CinematicManager.ts`, `CinematicOverlay.tsx`)**: High-altitude sweeping cameras showcasing Central Plaza, Sky District transit corridors, and the illuminated Central Park pond with widescreen cinematic letterbox bars, sector coordinates, and a high-contrast **`[SKIP INTRO]`** button.
+- **Seamless Sky-to-Protagonist Dive (`PlayerCamera.tsx`)**: Smooth quintic interpolation camera dive descending from the clouds right into the third-person spring-arm follow camera behind the protagonist.
+
+### 💨 Global Wind Simulation & Wind-Interactive Dirt Particles
+- **Dynamic Wind Engine (`WindSystem.ts`)**: Real-time vector aerodynamics with prevailing angles, micro-turbulence, and periodic gust surges scaled dynamically with the active weather.
+- **Procedural Urban Dirt Particles (`DirtParticles.tsx`)**: 650+ instanced dust specks, cyber grit sparks, and fluttering digital paper flyers that drift, swirl, and updraft in response to active wind gusts and avenue corridors.
+
+### ☁️ Natural Dynamic Clouds & Night Illumination Overhaul
+- **Procedural 3D Cloud Clusters (`NaturalClouds.tsx`)**: Multi-tiered volumetric cloud banks drifting along high-altitude wind currents, dynamically tinted by celestial time (golden sunset rim, bright midday silver, deep nocturnal indigo) with lightning flash backlighting.
+- **Vibrant Night Illumination (`LightingManager.tsx`)**: Localized streetlamp illumination arrays, warm amber road washes, cyan/magenta neon ground bounce, and park sanctuary lantern lights that automatically illuminate during dusk and night.
+- **Expanded Draw Distance (`QualityManager.ts`)**: Draw distances doubled across all presets (up to 2,600m on ULTRA, with camera far plane expanded to 3,500m) ensuring crystal-clear silhouettes across the colossal 3km city.
 
 ---
 

@@ -5,6 +5,7 @@ import { KinematicController, KinematicState } from './KinematicController';
 import { ProceduralProtagonist } from './ProceduralProtagonist';
 import { PlayerCamera } from './PlayerCamera';
 import { KinematicCollisionSolver } from './KinematicCollision';
+import { CinematicManager } from '../cinematics/CinematicManager';
 
 export interface PlayerControllerProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -61,6 +62,10 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
   }, [playerPosRef, registerTeleport]);
 
   useFrame((_, delta) => {
+    const isCinematic = CinematicManager.getInstance().getState().phase !== 'GAMEPLAY';
+    if (isCinematic) {
+      controllerRef.current.velocity.set(0, 0, 0);
+    }
     const updatedState = controllerRef.current.update(delta, cameraYaw.current);
     setKinematicState({ ...updatedState });
     if (playerPosRef) {

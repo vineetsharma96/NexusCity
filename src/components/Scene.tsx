@@ -18,6 +18,8 @@ import { InteriorManager, InteriorState } from '../world/InteriorManager';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 import { PerformanceMonitor } from '../rendering/PerformanceMonitor';
 import { InputManager } from '../player/InputManager';
+import { NaturalClouds } from '../environment/NaturalClouds';
+import { DirtParticles } from '../city/DirtParticles';
 
 // Inner component to hook into R3F render loop for telemetry and dynamic updates
 const SceneFrameLoop: React.FC = () => {
@@ -68,7 +70,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
     <Canvas
       shadows={quality.shadows}
       dpr={quality.dpr}
-      camera={{ position: [0, 8, 16], fov: 60, near: 0.1, far: quality.drawDistance }}
+      camera={{ position: [0, 8, 16], fov: 60, near: 0.1, far: Math.max(3500, quality.drawDistance * 1.5) }}
       gl={{
         antialias: quality.name !== 'LITE',
         powerPreference: 'high-performance',
@@ -92,6 +94,8 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       {interiorState.current === 'NONE' && <CrosswalkMarkings position={[0, 0, 0]} />}
       {interiorState.current === 'NONE' && <ParkSanctuary position={[75, 0, 75]} />}
       {interiorState.current === 'NONE' && <RainParticles playerPosRef={playerPosRef} />}
+      {interiorState.current === 'NONE' && <NaturalClouds />}
+      {interiorState.current === 'NONE' && <DirtParticles playerPosRef={playerPosRef} />}
 
       {/* 11 Enterable Building Entrances Across City Districts */}
       {interiorState.current === 'NONE' && (

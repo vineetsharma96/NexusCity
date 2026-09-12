@@ -1,8 +1,9 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { InputManager } from './InputManager';
-import { KinematicCollisionSolver, CollisionBox } from './KinematicCollision';
+import { KinematicCollisionSolver } from './KinematicCollision';
+import { CinematicManager } from '../cinematics/CinematicManager';
 
 interface PlayerCameraProps {
   targetPos: THREE.Vector3;
@@ -23,6 +24,10 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
 
   const mouseSensitivity = 0.0022;
 
+  // Reusable vectors for cinematic calculations
+  const cinematicCamPos = useMemo(() => new THREE.Vector3(), []);
+  const cinematicLookAt = useMemo(() => new THREE.Vector3(), []);
+
   // Zoom control via scroll wheel
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -41,6 +46,21 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
   }, [gl]);
 
   useFrame((_, delta) => {
+    // 0. Check if Cinematic Intro or Transition is active
+    const isCinematicActive = CinematicManager.getInstance().update(
+      delta,
+      targetPos,
+      cinematicCamPos,
+      cinematicLookAt
+    );
+
+    if (isCinematicActive) {
+      camera.position.copy(cinematicCamPos);
+      camera.lookAt(cinematicLookAt);
+      currentFocus.current.copy(cinematicLookAt);
+      return;
+    }
+
     // 1. Consume mouse / touch look deltas & zoom delta
     const { dx, dy } = InputManager.consumeLookDelta();
     const dz = InputManager.consumeZoomDelta();
@@ -76,7 +96,6 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
     // Desired camera position in free space
     spherical.current.radius = desiredRadius.current;
     const freeOffset = new THREE.Vector3().setFromSpherical(spherical.current);
-    const desiredPos = currentFocus.current.clone().add(freeOffset);
 
     // Raycast from focus to desiredPos
     const rayDir = freeOffset.clone().normalize();

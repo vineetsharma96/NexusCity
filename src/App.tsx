@@ -2,12 +2,16 @@ import React, { Suspense, useRef } from 'react';
 import * as THREE from 'three';
 import { Scene } from './components/Scene';
 import { HUD } from './ui/HUD';
+import { LoadingScreen } from './ui/LoadingScreen';
+import { CinematicOverlay } from './ui/CinematicOverlay';
 
 export const App: React.FC = () => {
   const playerPosRef = useRef(new THREE.Vector3(0, 0.2, 10));
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      <LoadingScreen />
+      <CinematicOverlay />
       <Suspense
         fallback={
           <div
