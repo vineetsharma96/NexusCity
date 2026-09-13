@@ -86,9 +86,16 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
       }
     }
 
-    // Look slightly towards player if nearby
+    // Look naturally towards player if nearby
     if (headRef.current && isNearby) {
-      headRef.current.rotation.y = THREE.MathUtils.lerp(headRef.current.rotation.y, 0.15, delta * 4);
+      const dx = state.camera.position.x - npc.position.x;
+      const dz = state.camera.position.z - npc.position.z;
+      const worldAngle = Math.atan2(dx, dz);
+      let localAngle = worldAngle - (rootRef.current ? rootRef.current.rotation.y : 0);
+      while (localAngle > Math.PI) localAngle -= Math.PI * 2;
+      while (localAngle < -Math.PI) localAngle += Math.PI * 2;
+      const clampedAngle = THREE.MathUtils.clamp(localAngle, -0.65, 0.65);
+      headRef.current.rotation.y = THREE.MathUtils.lerp(headRef.current.rotation.y, clampedAngle, delta * 5);
     } else if (headRef.current && isClose) {
       headRef.current.rotation.y = THREE.MathUtils.lerp(headRef.current.rotation.y, 0, delta * 4);
     }

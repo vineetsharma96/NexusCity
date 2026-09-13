@@ -362,8 +362,51 @@ export class NPCManager {
         }
       }
 
-      // Move smoothly toward target waypoint
-      const dir = target.clone().sub(npc.position).normalize();
+      // Move smoothly toward target waypoint with collision & mutual avoidance steering
+      const dir = target.clone().sub(npc.position);
+      dir.y = 0;
+      dir.normalize();
+
+      // 1. Dynamic Player Collision & Personal Space Avoidance
+      const playerDist = npc.position.distanceTo(playerPos);
+      if (playerDist < 2.4) {
+        if (playerDist < 1.05) {
+          // Too close directly to player: politely halt until player steps aside
+          npc.isWalking = false;
+          continue;
+        }
+        // Repulsive steering around player
+        const avoidPlayer = npc.position.clone().sub(playerPos);
+        avoidPlayer.y = 0;
+        const avoidWeight = (2.4 - playerDist) * 1.8;
+        dir.addScaledVector(avoidPlayer.normalize(), avoidWeight).normalize();
+      }
+
+      // 2. Dynamic NPC-to-NPC Mutual Steering Avoidance
+      let yielded = false;
+      for (let j = 0; j < this.npcs.length; j++) {
+        if (i === j) continue;
+        const other = this.npcs[j];
+        const npcDistSq = npc.position.distanceToSquared(other.position);
+        if (npcDistSq < 2.8 * 2.8) {
+          const npcDist = Math.sqrt(npcDistSq);
+          if (npcDist < 0.85) {
+            // Close proximity: junior NPC halts to give way
+            if (i > j) {
+              npc.isWalking = false;
+              yielded = true;
+              break;
+            }
+          }
+          const avoidNpc = npc.position.clone().sub(other.position);
+          avoidNpc.y = 0;
+          dir.addScaledVector(avoidNpc.normalize(), (2.8 - npcDist) * 0.9).normalize();
+        }
+      }
+
+      if (yielded) continue;
+
+      // Integrate position along steered trajectory
       npc.position.addScaledVector(dir, npc.walkSpeed * delta);
       npc.facingYaw = Math.atan2(dir.x, dir.z);
 

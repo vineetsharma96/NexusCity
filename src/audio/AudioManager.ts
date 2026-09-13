@@ -444,6 +444,31 @@ export class AudioManager {
     osc.stop(now + 0.06);
   }
 
+  public playVehicleHorn(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc1.type = 'triangle';
+    osc2.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(310, now);
+    osc2.frequency.setValueAtTime(370, now);
+
+    gain.gain.setValueAtTime(0.09, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.31);
+    osc2.stop(now + 0.31);
+  }
+
   public subscribe(listener: AudioListener): () => void {
     this.listeners.add(listener);
     listener(this.getSettings());

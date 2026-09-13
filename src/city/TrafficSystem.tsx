@@ -4,6 +4,8 @@ import { useFrame } from '@react-three/fiber';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 
 import { TrafficLightSystem } from './TrafficLightSystem';
+import { AudioManager } from '../audio/AudioManager';
+import { NPCManager } from '../npc/NPCManager';
 
 interface TrafficSystemProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
@@ -151,31 +153,34 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
   const aerialBodyGeo = useMemo(() => new THREE.ConeGeometry(1.2, 5.0, 4), []);
   const aerialTrailGeo = useMemo(() => new THREE.CylinderGeometry(0.15, 0.6, 3.5, 6), []);
 
+  const lastHornTimeRef = useRef(0);
+
   // Update loop
   useFrame((_, delta) => {
     let groundIdx = 0;
     let aerialIdx = 0;
+    const pPos = playerPosRef.current;
+    const npcs = NPCManager.getInstance().npcs;
+    const now = performance.now();
 
     for (let i = 0; i < vehicles.length; i++) {
       const v = vehicles[i];
 
-      // Handle ground vehicle intersection deceleration & traffic light rules
+      // Handle ground vehicle intersection deceleration, headway & obstacle avoidance
       if (v.type === 'GROUND') {
         const signal = TrafficLightSystem.getInstance().getVehicleSignal(v.axis);
         let targetSpeed = v.cruisingSpeed;
         v.isBraking = false;
 
-        // Check central intersection approach (-18m stop line)
+        // 1. Check central intersection traffic light approach (-16m stop line)
         if (v.axis === 'z') {
           // NS Avenue
           if (v.direction > 0 && v.position.z > -45 && v.position.z <= -16) {
-            // Approaching from North heading South
             if (signal === 'RED' || signal === 'AMBER') {
               targetSpeed = 0;
               v.isBraking = true;
             }
           } else if (v.direction < 0 && v.position.z < 45 && v.position.z >= 16) {
-            // Approaching from South heading North
             if (signal === 'RED' || signal === 'AMBER') {
               targetSpeed = 0;
               v.isBraking = true;
@@ -184,13 +189,11 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
         } else {
           // EW Avenue
           if (v.direction > 0 && v.position.x > -45 && v.position.x <= -16) {
-            // Approaching from West heading East
             if (signal === 'RED' || signal === 'AMBER') {
               targetSpeed = 0;
               v.isBraking = true;
             }
           } else if (v.direction < 0 && v.position.x < 45 && v.position.x >= 16) {
-            // Approaching from East heading West
             if (signal === 'RED' || signal === 'AMBER') {
               targetSpeed = 0;
               v.isBraking = true;
@@ -198,8 +201,59 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           }
         }
 
+        // 2. Vehicle-to-Vehicle Car-Following Headway (Anti-Clipping & Queuing)
+        for (let j = 0; j < vehicles.length; j++) {
+          if (i === j) continue;
+          const lead = vehicles[j];
+          if (lead.type !== 'GROUND' || lead.axis !== v.axis || lead.direction !== v.direction) continue;
+
+          // Check if in the same lane (lateral corridor difference < 1.8m)
+          const latDiff = lead.axis === 'z' ? Math.abs(lead.position.x - v.position.x) : Math.abs(lead.position.z - v.position.z);
+          if (latDiff > 1.8) continue;
+
+          // Long distance ahead
+          const longDist = (lead.axis === 'z' ? lead.position.z - v.position.z : lead.position.x - v.position.x) * v.direction;
+          if (longDist > 0 && longDist < 26.0) {
+            if (longDist < 7.5) {
+              targetSpeed = 0;
+              v.isBraking = true;
+            } else if (longDist < 15.0) {
+              targetSpeed = Math.min(targetSpeed, lead.speed * 0.6);
+              v.isBraking = true;
+            } else {
+              targetSpeed = Math.min(targetSpeed, lead.speed);
+            }
+          }
+        }
+
+        // 3. Pedestrian Player Obstacle Avoidance & Horn
+        if (pPos) {
+          const pLatDiff = v.axis === 'z' ? Math.abs(pPos.x - v.position.x) : Math.abs(pPos.z - v.position.z);
+          const pLongDist = (v.axis === 'z' ? pPos.z - v.position.z : pPos.x - v.position.x) * v.direction;
+          if (pLatDiff < 2.6 && Math.abs(pPos.y - v.position.y) < 2.5 && pLongDist > 0 && pLongDist < 18.0) {
+            targetSpeed = 0;
+            v.isBraking = true;
+            if (now - lastHornTimeRef.current > 3500 && pLongDist < 12.0) {
+              lastHornTimeRef.current = now;
+              AudioManager.getInstance().playVehicleHorn();
+            }
+          }
+        }
+
+        // 4. NPC Pedestrian Crosswalk Avoidance
+        for (let n = 0; n < npcs.length; n++) {
+          const npc = npcs[n];
+          const nLatDiff = v.axis === 'z' ? Math.abs(npc.position.x - v.position.x) : Math.abs(npc.position.z - v.position.z);
+          const nLongDist = (v.axis === 'z' ? npc.position.z - v.position.z : npc.position.x - v.position.x) * v.direction;
+          if (nLatDiff < 2.4 && nLongDist > 0 && nLongDist < 14.0) {
+            targetSpeed = 0;
+            v.isBraking = true;
+            break;
+          }
+        }
+
         // Smooth acceleration/braking transition
-        const accelRate = targetSpeed === 0 ? 4.5 : 2.0;
+        const accelRate = targetSpeed === 0 ? 5.5 : 2.2;
         v.speed = THREE.MathUtils.lerp(v.speed, targetSpeed, delta * accelRate);
         if (v.axis === 'z') {
           v.velocity.z = v.direction * v.speed;
