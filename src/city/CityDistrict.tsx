@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { CityGenerator, CityData } from './CityGenerator';
 import { RoadGenerator } from './RoadGenerator';
 import { VegetationGenerator, TreeDef } from './VegetationGenerator';
+import { ProceduralTree } from './ProceduralTree';
 import { FallingLeaves } from './FallingLeaves';
 import { CyberVideoBillboard } from './CyberVideoBillboard';
 import { ProceduralTextures } from '../core/ProceduralTextures';
@@ -262,72 +263,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         </group>
       ))}
 
-      {/* 7. Procedural Trees & Street Planters */}
+      {/* 7. Procedural Trees & Street Planters with Dynamic Wind Sway */}
       {trees.map((tree) => (
-        <group key={tree.id} position={tree.position}>
-          {/* Sidewalk Planter Curb */}
-          <mesh position={[0, 0.2, 0]} castShadow receiveShadow>
-            <boxGeometry args={[tree.planterSize.x, tree.planterSize.y, tree.planterSize.z]} />
-            <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
-          </mesh>
-          {/* Mulch / Soil Bed */}
-          <mesh position={[0, 0.38, 0]}>
-            <boxGeometry args={[tree.planterSize.x - 0.3, 0.05, tree.planterSize.z - 0.3]} />
-            <meshStandardMaterial color="#1a1410" roughness={0.9} />
-          </mesh>
-          {/* Decorative Corner Planter Neon Trim */}
-          <mesh position={[0, 0.41, tree.planterSize.z / 2]}>
-            <boxGeometry args={[tree.planterSize.x, 0.04, 0.04]} />
-            <meshBasicMaterial color="#00ffaa" />
-          </mesh>
-
-          {/* Tree Trunk */}
-          <mesh position={[0, tree.trunkHeight / 2, 0]} castShadow receiveShadow>
-            <cylinderGeometry
-              args={[tree.trunkRadius * 0.7, tree.trunkRadius, tree.trunkHeight, 8]}
-            />
-            <meshStandardMaterial color="#2d2218" roughness={0.8} metalness={0.1} />
-          </mesh>
-
-          {/* Organic Branches */}
-          {tree.branches.map((b, bIdx) => {
-            const mid = b.start.clone().add(b.end).multiplyScalar(0.5);
-            const len = b.start.distanceTo(b.end);
-            const dir = b.end.clone().sub(b.start).normalize();
-            const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-
-            return (
-              <mesh
-                key={`b-${bIdx}`}
-                position={mid}
-                quaternion={quat}
-                castShadow
-              >
-                <cylinderGeometry args={[b.radius * 0.7, b.radius, len, 6]} />
-                <meshStandardMaterial color="#2d2218" roughness={0.8} />
-              </mesh>
-            );
-          })}
-
-          {/* Faceted Volumetric Leaf Canopy Clusters */}
-          {tree.leafClusters.map((lc, lcIdx) => (
-            <mesh
-              key={`lc-${lcIdx}`}
-              position={lc.offset}
-              scale={lc.scale}
-              castShadow
-              receiveShadow
-            >
-              <dodecahedronGeometry args={[1, 1]} />
-              <meshStandardMaterial
-                color={lc.color}
-                roughness={0.5}
-                metalness={0.05}
-                flatShading
-              />
-            </mesh>
-          ))}
-        </group>
+        <ProceduralTree key={tree.id} tree={tree} />
       ))}
 
       {/* 8. Dynamic Wind-Driven Falling Leaves Particle System */}

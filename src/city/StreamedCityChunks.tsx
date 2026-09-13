@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { ChunkManager, ChunkInfo, ChunkLOD } from '../world/ChunkManager';
 import { ProceduralChunkGenerator, StreamedChunkData, StreamedBuildingDef } from './ProceduralChunkGenerator';
+import { ProceduralTree } from './ProceduralTree';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
 import { ProceduralTextures } from '../core/ProceduralTextures';
 import { WeatherSystem } from '../world/WeatherSystem';
@@ -185,6 +186,103 @@ const StreamedChunkView: React.FC<{
           claddingNormal={claddingNormal}
         />
       ))}
+
+      {/* 4. High-LOD Pocket Parks */}
+      {chunkInfo.lod === 'HIGH' &&
+        data.parks.map((park) => (
+          <group key={park.id} position={park.position}>
+            {/* Lawn Base */}
+            <mesh receiveShadow position={[0, 0.06, 0]}>
+              <boxGeometry args={[park.size.x, 0.12, park.size.z]} />
+              <meshStandardMaterial color="#062e1a" roughness={0.8} />
+            </mesh>
+            {/* Perimeter Retaining Walls */}
+            <mesh position={[0, 0.5, -park.size.z / 2]} castShadow receiveShadow>
+              <boxGeometry args={[park.size.x, 1.0, 0.8]} />
+              <meshStandardMaterial color="#1e293b" metalness={0.7} roughness={0.3} />
+            </mesh>
+            <mesh position={[0, 0.5, park.size.z / 2]} castShadow receiveShadow>
+              <boxGeometry args={[park.size.x, 1.0, 0.8]} />
+              <meshStandardMaterial color="#1e293b" metalness={0.7} roughness={0.3} />
+            </mesh>
+            {/* Water Basin / Fountain */}
+            {park.hasPond && (
+              <group position={[0, 0.1, 0]}>
+                <mesh position={[0, 0.18, 0]} receiveShadow>
+                  <cylinderGeometry args={[park.pondRadius + 0.3, park.pondRadius + 0.5, 0.36, 20]} />
+                  <meshStandardMaterial color="#0f172a" metalness={0.8} roughness={0.3} />
+                </mesh>
+                <mesh position={[0, 0.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <circleGeometry args={[park.pondRadius, 20]} />
+                  <meshStandardMaterial color="#022c22" roughness={0.06} metalness={0.9} />
+                </mesh>
+                <mesh position={[0, 0.45, 0]}>
+                  <sphereGeometry args={[0.4, 8, 8]} />
+                  <meshBasicMaterial color={park.fountainColor} />
+                </mesh>
+              </group>
+            )}
+            {/* Park Benches */}
+            {park.benches.map((bench, bIdx) => (
+              <group
+                key={`p-bench-${bIdx}`}
+                position={[bench.position.x - park.position.x, 0.2, bench.position.z - park.position.z]}
+                rotation={[0, bench.rotationY, 0]}
+              >
+                <mesh castShadow position={[0, 0.38, 0]}>
+                  <boxGeometry args={[2.0, 0.08, 0.6]} />
+                  <meshStandardMaterial color="#78350f" roughness={0.6} />
+                </mesh>
+                <mesh position={[0, 0.32, 0]}>
+                  <boxGeometry args={[1.9, 0.04, 0.04]} />
+                  <meshBasicMaterial color={park.fountainColor} />
+                </mesh>
+              </group>
+            ))}
+            {/* Park Trees */}
+            {park.trees.map((t) => (
+              <ProceduralTree key={t.id} tree={t} />
+            ))}
+            {/* Park Bushes */}
+            {park.bushes.map((b) => (
+              <group key={b.id} position={[b.position.x - park.position.x, b.position.y, b.position.z - park.position.z]}>
+                <mesh castShadow receiveShadow>
+                  <boxGeometry args={[b.size.x, b.size.y, b.size.z]} />
+                  <meshStandardMaterial color={b.color} roughness={0.7} />
+                </mesh>
+                {b.hasFlowers && b.flowerColor && (
+                  <mesh position={[0, b.size.y / 2 + 0.05, 0]}>
+                    <sphereGeometry args={[0.2, 6, 6]} />
+                    <meshBasicMaterial color={b.flowerColor} />
+                  </mesh>
+                )}
+              </group>
+            ))}
+          </group>
+        ))}
+
+      {/* 5. Sidewalk Trees & Avenue Planters (HIGH LOD only) */}
+      {chunkInfo.lod === 'HIGH' &&
+        data.trees.map((tree) => (
+          <ProceduralTree key={tree.id} tree={tree} />
+        ))}
+
+      {/* 6. Sidewalk Bushes & Hedges (HIGH LOD only) */}
+      {chunkInfo.lod === 'HIGH' &&
+        data.bushes.map((bush) => (
+          <group key={bush.id} position={bush.position}>
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[bush.size.x, bush.size.y, bush.size.z]} />
+              <meshStandardMaterial color={bush.color} roughness={0.7} />
+            </mesh>
+            {bush.hasFlowers && bush.flowerColor && (
+              <mesh position={[0, bush.size.y / 2 + 0.05, 0]}>
+                <sphereGeometry args={[0.18, 6, 6]} />
+                <meshBasicMaterial color={bush.flowerColor} />
+              </mesh>
+            )}
+          </group>
+        ))}
     </group>
   );
 });

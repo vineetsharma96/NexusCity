@@ -2,10 +2,12 @@ import React, { useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { TreeDef } from './VegetationGenerator';
+import { WindSystem } from '../world/WindSystem';
 
 interface FallingLeavesProps {
   trees: TreeDef[];
   count?: number;
+  playerPosRef?: React.MutableRefObject<THREE.Vector3>;
 }
 
 interface LeafParticle {
@@ -20,78 +22,88 @@ interface LeafParticle {
   groundRestTime: number;
 }
 
-export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 750 }) => {
+export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 850, playerPosRef }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const windSystem = WindSystem.getInstance();
+
+  const colors = useMemo(
+    () => [
+      new THREE.Color('#f59e0b'), // Golden amber ginkgo
+      new THREE.Color('#10b981'), // Emerald jade
+      new THREE.Color('#fb7185'), // Sakura blossom pink
+      new THREE.Color('#fbbf24'), // Warm neon yellow
+      new THREE.Color('#2dd4bf'), // Cyber teal
+      new THREE.Color('#d97706'), // Rust copper
+      new THREE.Color('#34d399'), // Spring cyber green
+    ],
+    []
+  );
 
   // Initialize individual leaf simulation states
   const particles = useMemo(() => {
     const list: LeafParticle[] = [];
-    if (trees.length === 0) return list;
-
-    const colors = [
-      new THREE.Color('#f59e0b'), // Golden amber
-      new THREE.Color('#10b981'), // Emerald jade
-      new THREE.Color('#fbbf24'), // Warm yellow
-      new THREE.Color('#d97706'), // Rust autumn
-      new THREE.Color('#34d399'), // Cyber spring green
-    ];
+    const hasTrees = trees.length > 0;
 
     for (let i = 0; i < count; i++) {
-      const tree = trees[i % trees.length];
+      const tree = hasTrees ? trees[i % trees.length] : null;
+      const basePos = tree
+        ? tree.position
+        : playerPosRef?.current
+        ? playerPosRef.current
+        : new THREE.Vector3(0, 0, 0);
+
       // Random canopy spawn position
       const angle = Math.random() * Math.PI * 2;
-      const radius = Math.random() * 2.8;
-      const startX = tree.position.x + Math.cos(angle) * radius;
-      const startZ = tree.position.z + Math.sin(angle) * radius;
-      const startY = tree.position.y + Math.random() * tree.trunkHeight + 2.0;
+      const radius = Math.random() * 3.5;
+      const startX = basePos.x + Math.cos(angle) * radius;
+      const startZ = basePos.z + Math.sin(angle) * radius;
+      const startY = basePos.y + (tree ? tree.trunkHeight : 6.0) + Math.random() * 2.5;
 
       list.push({
         pos: new THREE.Vector3(startX, startY, startZ),
-        rot: new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI),
-        rotSpeed: new THREE.Vector3(
-          (Math.random() - 0.5) * 3.5,
-          (Math.random() - 0.5) * 4.0,
-          (Math.random() - 0.5) * 3.0
+        rot: new THREE.Euler(
+          Math.random() * Math.PI,
+          Math.random() * Math.PI,
+          Math.random() * Math.PI
         ),
-        fallSpeed: 0.9 + Math.random() * 1.5,
-        wobbleSpeed: 2.5 + Math.random() * 3.5,
+        rotSpeed: new THREE.Vector3(
+          (Math.random() - 0.5) * 4.0,
+          (Math.random() - 0.5) * 4.5,
+          (Math.random() - 0.5) * 3.5
+        ),
+        fallSpeed: 0.8 + Math.random() * 1.6,
+        wobbleSpeed: 2.2 + Math.random() * 3.8,
         wobbleAmp: 0.25 + Math.random() * 0.45,
         scale: 0.7 + Math.random() * 0.6,
-        treePos: tree.position,
+        treePos: basePos.clone(),
         groundRestTime: 0,
       });
     }
 
     return list;
-  }, [trees, count]);
+  }, [trees, count, playerPosRef]);
 
   // Set initial colors once
   useMemo(() => {
     if (!meshRef.current) return;
-    const colors = [
-      new THREE.Color('#f59e0b'),
-      new THREE.Color('#10b981'),
-      new THREE.Color('#fbbf24'),
-      new THREE.Color('#d97706'),
-      new THREE.Color('#34d399'),
-    ];
     for (let i = 0; i < count; i++) {
       const c = colors[i % colors.length];
       meshRef.current.setColorAt(i, c);
     }
-    meshRef.current.instanceColor!.needsUpdate = true;
-  }, [count]);
+    if (meshRef.current.instanceColor) {
+      meshRef.current.instanceColor.needsUpdate = true;
+    }
+  }, [count, colors]);
 
-  // Leaf Geometry: double-sided faceted diamond leaf
+  // Leaf Geometry: double-sided faceted aerodynamic diamond leaf
   const leafGeometry = useMemo(() => {
     const geom = new THREE.BufferGeometry();
-    // 4 vertices forming a curved diamond leaf
     const vertices = new Float32Array([
-      0, 0, 0.22,      // Top tip
-      -0.12, 0.02, 0,  // Left edge
-      0.12, 0.02, 0,   // Right edge
-      0, 0, -0.15,     // Stem bottom
+      0, 0, 0.24,     // Top tip
+      -0.13, 0.025, 0, // Left edge
+      0.13, 0.025, 0,  // Right edge
+      0, 0, -0.16,    // Stem bottom
     ]);
     const indices = [
       0, 1, 2, // Upper face
@@ -107,39 +119,65 @@ export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 750
     if (!meshRef.current) return;
 
     const t = clock.getElapsedTime();
-    // Continuous dynamic wind force vector with gusts
-    const gust = Math.sin(t * 0.4) * 0.8;
-    const windX = (Math.sin(t * 0.7) * 1.4 + 1.8 + gust) * delta;
-    const windZ = (Math.cos(t * 0.5) * 0.9) * delta;
+    const windVec = windSystem.getVector();
+    const gustFactor = windSystem.getGustFactor();
+    const pPos = playerPosRef?.current;
+
+    // Wind vector components scaled with gusts
+    const windForceX = (windVec.x * 0.35 * gustFactor) * delta;
+    const windForceZ = (windVec.z * 0.35 * gustFactor) * delta;
 
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i];
 
-      // If resting on ground
-      if (p.pos.y <= 0.2) {
+      // Ground settling behavior
+      if (p.pos.y <= 0.22) {
         p.groundRestTime += delta;
-        // Rest on ground for 1.5 - 3.5 seconds before respawning in tree
-        if (p.groundRestTime > 2.5) {
+
+        // If gust is strong, blown off the ground early!
+        const maxRestTime = gustFactor > 1.4 ? 0.8 : 2.6;
+
+        if (p.groundRestTime > maxRestTime) {
+          // Respawn in canopy
+          let targetTree = trees.length > 0 ? trees[i % trees.length] : null;
+
+          // If playerPosRef exists, check if player is near other trees
+          if (pPos && trees.length > 4) {
+            // Find trees within 65m of player
+            const nearTree = trees.find((tr) => tr.position.distanceTo(pPos) < 65);
+            if (nearTree && Math.random() > 0.4) {
+              targetTree = nearTree;
+            }
+          }
+
+          const baseOrigin = targetTree
+            ? targetTree.position
+            : pPos
+            ? pPos
+            : p.treePos;
+
           const angle = Math.random() * Math.PI * 2;
-          const r = Math.random() * 2.8;
+          const r = Math.random() * 3.2;
           p.pos.set(
-            p.treePos.x + Math.cos(angle) * r,
-            p.treePos.y + 5.5 + Math.random() * 2.5,
-            p.treePos.z + Math.sin(angle) * r
+            baseOrigin.x + Math.cos(angle) * r,
+            baseOrigin.y + (targetTree ? targetTree.trunkHeight : 6.0) + Math.random() * 2.5,
+            baseOrigin.z + Math.sin(angle) * r
           );
           p.groundRestTime = 0;
         }
       } else {
-        // Falling with sinusoidal horizontal flutter
-        const flutter = Math.sin(t * p.wobbleSpeed + i) * p.wobbleAmp * delta;
-        p.pos.y -= p.fallSpeed * delta;
-        p.pos.x += windX + flutter;
-        p.pos.z += windZ + flutter * 0.6;
+        // Natural airborne flutter with wind turbulence
+        const flutter = Math.sin(t * p.wobbleSpeed + i) * p.wobbleAmp * delta * gustFactor;
+        const updraft = Math.sin(t * 2.0 + p.pos.x * 0.2) * 0.15 * delta * (gustFactor - 1.0);
 
-        // Tumbling rotations
-        p.rot.x += p.rotSpeed.x * delta;
-        p.rot.y += p.rotSpeed.y * delta;
-        p.rot.z += p.rotSpeed.z * delta;
+        p.pos.y -= (p.fallSpeed * delta) - updraft;
+        p.pos.x += windForceX + flutter;
+        p.pos.z += windForceZ + flutter * 0.7;
+
+        // Tumbling rotational dynamics
+        p.rot.x += p.rotSpeed.x * delta * gustFactor;
+        p.rot.y += p.rotSpeed.y * delta * gustFactor;
+        p.rot.z += p.rotSpeed.z * delta * gustFactor;
       }
 
       // Update instanced transform

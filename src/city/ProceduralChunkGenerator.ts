@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SeedRandom } from '../core/SeedRandom';
 import { DistrictGenerator, DistrictInfo } from './DistrictGenerator';
 import { CollisionBox } from '../player/KinematicCollision';
+import { VegetationGenerator, TreeDef, PlanterBushDef, TreeSpecies } from './VegetationGenerator';
 
 export interface StreamedBuildingDef {
   id: string;
@@ -15,6 +16,18 @@ export interface StreamedBuildingDef {
   collisionBox: CollisionBox;
 }
 
+export interface PocketParkDef {
+  id: string;
+  position: THREE.Vector3;
+  size: THREE.Vector3;
+  hasPond: boolean;
+  pondRadius: number;
+  fountainColor: string;
+  benches: { position: THREE.Vector3; rotationY: number }[];
+  trees: TreeDef[];
+  bushes: PlanterBushDef[];
+}
+
 export interface StreamedChunkData {
   key: string;
   cx: number;
@@ -24,6 +37,9 @@ export interface StreamedChunkData {
   roads: { position: THREE.Vector3; size: THREE.Vector3; rotationY: number }[];
   sidewalks: { position: THREE.Vector3; size: THREE.Vector3 }[];
   buildings: StreamedBuildingDef[];
+  trees: TreeDef[];
+  bushes: PlanterBushDef[];
+  parks: PocketParkDef[];
   collisionBoxes: CollisionBox[];
 }
 
@@ -52,6 +68,7 @@ export class ProceduralChunkGenerator {
     const roads: { position: THREE.Vector3; size: THREE.Vector3; rotationY: number }[] = [];
     const sidewalks: { position: THREE.Vector3; size: THREE.Vector3 }[] = [];
     const buildings: StreamedBuildingDef[] = [];
+    const parks: PocketParkDef[] = [];
     const collisionBoxes: CollisionBox[] = [];
 
     // Skip the central core (cx, cz in [-1..1]) as it is handcrafted in CityDistrict.tsx & InteriorDestinations
@@ -65,6 +82,9 @@ export class ProceduralChunkGenerator {
         roads,
         sidewalks,
         buildings,
+        trees: [],
+        bushes: [],
+        parks,
         collisionBoxes,
       };
       this.cache.set(key, emptyChunk);
@@ -72,7 +92,6 @@ export class ProceduralChunkGenerator {
     }
 
     // 1. Generate Connecting Road Infrastructure
-    // North-South local avenue if aligned with avenues
     const roadWidth = 14;
     roads.push({
       position: new THREE.Vector3(centerX, 0.02, centerZ),
@@ -89,7 +108,7 @@ export class ProceduralChunkGenerator {
 
     // 2. Generate 4 Quadrant Macro-Lots within Chunk
     const half = size / 2;
-    const subSize = (half - roadWidth / 2) - 4; // Width of building plot
+    const subSize = half - roadWidth / 2 - 4; // Width of building plot
 
     const quadrantOffsets = [
       { qx: -half / 2 - roadWidth / 4, qz: -half / 2 - roadWidth / 4 }, // NW
@@ -101,6 +120,130 @@ export class ProceduralChunkGenerator {
     quadrantOffsets.forEach((q, qIdx) => {
       const lotCenterX = centerX + q.qx;
       const lotCenterZ = centerZ + q.qz;
+
+      // Determine if this quadrant is a Pocket Park / Botanical Reserve:
+      // High probability in GREEN_DISTRICT (50%), modest chance in OLD_CITY/CENTRAL (20%)
+      const isGreenDistrict = district.type === 'GREEN_DISTRICT';
+      const isParkQuadrant =
+        (isGreenDistrict && (rng.next() < 0.65 || qIdx === 0)) ||
+        (!isGreenDistrict && district.foliageDensity >= 0.4 && rng.next() < 0.22);
+
+      if (isParkQuadrant) {
+        // Generate Pocket Park
+        const parkId = `stream-park-${key}-${qIdx}`;
+        const parkSize = new THREE.Vector3(subSize + 2, 0.22, subSize + 2);
+        const parkPos = new THREE.Vector3(lotCenterX, 0.1, lotCenterZ);
+
+        // Retaining perimeter wall colliders
+        const wallH = 1.0;
+        const halfS = (subSize + 2) / 2;
+        collisionBoxes.push({
+          min: new THREE.Vector3(lotCenterX - halfS, 0, lotCenterZ - halfS),
+          max: new THREE.Vector3(lotCenterX + halfS, wallH, lotCenterZ - halfS + 0.8),
+        });
+        collisionBoxes.push({
+          min: new THREE.Vector3(lotCenterX - halfS, 0, lotCenterZ + halfS - 0.8),
+          max: new THREE.Vector3(lotCenterX + halfS, wallH, lotCenterZ + halfS),
+        });
+
+        // Park trees
+        const parkTrees: TreeDef[] = [];
+        const numParkTrees = rng.int(3, 5);
+        const treeSpeciesList: TreeSpecies[] = isGreenDistrict
+          ? ['SAKURA', 'WILLOW', 'GINKGO', 'CYBER_NEON']
+          : ['GINKGO', 'EMERALD', 'WILLOW'];
+
+        for (let pt = 0; pt < numParkTrees; pt++) {
+          const ptAngle = (pt / numParkTrees) * Math.PI * 2 + rng.range(-0.2, 0.2);
+          const ptDist = rng.range(8, subSize * 0.38);
+          const ptx = lotCenterX + Math.cos(ptAngle) * ptDist;
+          const ptz = lotCenterZ + Math.sin(ptAngle) * ptDist;
+          const species: TreeSpecies = rng.pick(treeSpeciesList);
+
+          parkTrees.push({
+            id: `${parkId}-tree-${pt}`,
+            position: new THREE.Vector3(ptx, 0.18, ptz),
+            scale: rng.range(0.9, 1.3),
+            trunkHeight: rng.range(4.8, 6.5),
+            trunkRadius: rng.range(0.25, 0.35),
+            branches: [
+              {
+                start: new THREE.Vector3(0, 3.2, 0),
+                end: new THREE.Vector3(1.8, 4.6, 0.8),
+                radius: 0.16,
+              },
+              {
+                start: new THREE.Vector3(0, 3.5, 0),
+                end: new THREE.Vector3(-1.6, 4.8, -0.9),
+                radius: 0.16,
+              },
+              {
+                start: new THREE.Vector3(0, 3.8, 0),
+                end: new THREE.Vector3(0.5, 5.2, -1.6),
+                radius: 0.16,
+              },
+            ],
+            leafClusters: [
+              {
+                offset: new THREE.Vector3(1.8, 5.0, 0.8),
+                scale: new THREE.Vector3(2.2, 1.8, 2.2),
+                color: species === 'SAKURA' ? '#fb7185' : species === 'GINKGO' ? '#f59e0b' : '#10b981',
+              },
+              {
+                offset: new THREE.Vector3(-1.6, 5.2, -0.9),
+                scale: new THREE.Vector3(2.0, 1.6, 2.0),
+                color: species === 'SAKURA' ? '#f43f5e' : species === 'GINKGO' ? '#fbbf24' : '#059669',
+              },
+              {
+                offset: new THREE.Vector3(0, 6.0, 0),
+                scale: new THREE.Vector3(2.6, 2.2, 2.6),
+                color: species === 'SAKURA' ? '#fda4af' : species === 'GINKGO' ? '#d97706' : '#34d399',
+              },
+            ],
+            planterSize: new THREE.Vector3(2.8, 0.4, 2.8),
+            hasPlanter: false,
+            species,
+            emissiveColor: species === 'SAKURA' ? '#f43f5e' : species === 'CYBER_NEON' ? '#00f0ff' : '#059669',
+            emissiveIntensity: 0.2,
+          });
+        }
+
+        // Park bushes
+        const parkBushes: PlanterBushDef[] = [];
+        for (let pb = 0; pb < 4; pb++) {
+          const pbAngle = (pb / 4) * Math.PI * 2 + Math.PI / 4;
+          const pbx = lotCenterX + Math.cos(pbAngle) * (subSize * 0.32);
+          const pbz = lotCenterZ + Math.sin(pbAngle) * (subSize * 0.32);
+          parkBushes.push({
+            id: `${parkId}-bush-${pb}`,
+            position: new THREE.Vector3(pbx, 0.2, pbz),
+            size: new THREE.Vector3(2.2, 0.9, 2.2),
+            color: '#059669',
+            hasFlowers: true,
+            flowerColor: district.accentColor,
+          });
+        }
+
+        // Benches
+        const benches = [
+          { position: new THREE.Vector3(lotCenterX - 6, 0.2, lotCenterZ), rotationY: Math.PI / 2 },
+          { position: new THREE.Vector3(lotCenterX + 6, 0.2, lotCenterZ), rotationY: -Math.PI / 2 },
+        ];
+
+        parks.push({
+          id: parkId,
+          position: parkPos,
+          size: parkSize,
+          hasPond: true,
+          pondRadius: rng.range(5.5, 8.5),
+          fountainColor: district.primaryLightColor,
+          benches,
+          trees: parkTrees,
+          bushes: parkBushes,
+        });
+
+        return;
+      }
 
       // Sidewalk pad for this quadrant
       sidewalks.push({
@@ -169,6 +312,9 @@ export class ProceduralChunkGenerator {
       });
     });
 
+    // 3. Generate Sidewalk Trees & Vegetation
+    const { trees, bushes } = VegetationGenerator.generateChunkTrees(cx, cz, district, globalSeed);
+
     const chunkData: StreamedChunkData = {
       key,
       cx,
@@ -178,6 +324,9 @@ export class ProceduralChunkGenerator {
       roads,
       sidewalks,
       buildings,
+      trees,
+      bushes,
+      parks,
       collisionBoxes,
     };
 

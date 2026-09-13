@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { QualitySettings } from '../rendering/QualityManager';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
+import { WindSystem } from '../world/WindSystem';
 import { CelestialVolumetricRays } from './CelestialVolumetricRays';
 
 interface LightingManagerProps {
@@ -39,9 +40,10 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   }, [scene]);
 
   useFrame((_, delta) => {
-    // Advance continuous time system & weather simulation
+    // Advance continuous time system, weather simulation, and wind dynamics
     TimeSystem.getInstance().update(delta);
     WeatherSystem.getInstance().update(delta);
+    WindSystem.getInstance().update(delta);
 
     const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
 

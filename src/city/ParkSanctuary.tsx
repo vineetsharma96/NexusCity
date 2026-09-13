@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
 import { WeatherSystem } from '../world/WeatherSystem';
+import { WindSystem } from '../world/WindSystem';
 
 interface ParkSanctuaryProps {
   position?: [number, number, number];
@@ -12,21 +13,22 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
   const parkOrigin = useMemo(() => new THREE.Vector3(...position), [position]);
   const waterMeshRef = useRef<THREE.Mesh>(null);
   const waterMatRef = useRef<THREE.ShaderMaterial>(null);
+  const foliageGroupRef = useRef<THREE.Group>(null);
+  const firefliesRef = useRef<THREE.Points>(null);
+
+  const windSystem = WindSystem.getInstance();
 
   // Register physical collisions for park amenities and bridge
   useEffect(() => {
     // 1. Arching Bridge Collider across pond (center at relative [0, 1.2, 0])
-    // Steps on West side
     KinematicCollisionSolver.addBox(
       parkOrigin.clone().add(new THREE.Vector3(-10, 0.4, 0)),
       new THREE.Vector3(4, 0.8, 5)
     );
-    // Bridge center span
     KinematicCollisionSolver.addBox(
       parkOrigin.clone().add(new THREE.Vector3(0, 1.1, 0)),
       new THREE.Vector3(16, 0.5, 4.5)
     );
-    // Steps on East side
     KinematicCollisionSolver.addBox(
       parkOrigin.clone().add(new THREE.Vector3(10, 0.4, 0)),
       new THREE.Vector3(4, 0.8, 5)
@@ -52,10 +54,12 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
     );
   }, [parkOrigin]);
 
-  // Water Shader Uniforms
+  // Water Shader Uniforms with wind coupling
   const waterUniforms = useMemo(
     () => ({
       uTime: { value: 0 },
+      uWindDir: { value: new THREE.Vector2(0.8, 0.5) },
+      uWindSpeed: { value: 1.0 },
       uDeepColor: { value: new THREE.Color('#022c22') },
       uShallowColor: { value: new THREE.Color('#065f46') },
       uHighlightColor: { value: new THREE.Color('#00f0ff') },
@@ -68,13 +72,17 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
     varying vec2 vUv;
     varying vec3 vWorldPosition;
     uniform float uTime;
+    uniform vec2 uWindDir;
+    uniform float uWindSpeed;
 
     void main() {
       vUv = uv;
       vec3 pos = position;
-      // Gentle surface wave displacement
-      float wave1 = sin(pos.x * 0.4 + uTime * 1.8) * 0.12;
-      float wave2 = cos(pos.y * 0.5 + uTime * 1.4) * 0.08;
+
+      // Wind-aligned directional wave displacement
+      float wavePhase = dot(pos.xy, uWindDir) * 0.35 + uTime * (1.8 * uWindSpeed);
+      float wave1 = sin(wavePhase) * 0.12;
+      float wave2 = cos(pos.y * 0.6 - uTime * 1.2) * 0.08;
       pos.z += wave1 + wave2;
 
       vec4 worldPos = modelMatrix * vec4(pos, 1.0);
@@ -85,6 +93,8 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
 
   const waterFragmentShader = `
     uniform float uTime;
+    uniform vec2 uWindDir;
+    uniform float uWindSpeed;
     uniform vec3 uDeepColor;
     uniform vec3 uShallowColor;
     uniform vec3 uHighlightColor;
@@ -93,9 +103,10 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
     varying vec3 vWorldPosition;
 
     void main() {
-      // Procedural rippling caustics & specular glint
-      vec2 p = vUv * 16.0;
-      float ripple1 = sin(p.x * 2.0 + uTime * 2.2 + cos(p.y * 1.5));
+      // Procedural rippling caustics & specular glint aligned with wind
+      vec2 p = vUv * 18.0;
+      float windFlow = dot(p, uWindDir) * 0.5;
+      float ripple1 = sin(windFlow + uTime * 2.4 * uWindSpeed + cos(p.y * 1.5));
       float ripple2 = cos(p.y * 2.5 - uTime * 1.8 + sin(p.x * 1.8));
       float caustic = pow(max(0.0, (ripple1 + ripple2) * 0.5), 3.0);
 
@@ -109,7 +120,7 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
       vec3 waterColor = mix(uDeepColor, uShallowColor, clamp(dist, 0.0, 1.0));
       waterColor += uHighlightColor * caustic * 0.45;
 
-      // Subtle cyan neon rim reflection
+      // Cyan neon rim reflection
       float edgeRim = smoothstep(0.75, 1.0, dist);
       waterColor = mix(waterColor, uHighlightColor, edgeRim * 0.4);
 
@@ -117,11 +128,74 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
     }
   `;
 
+  // Bioluminescent fireflies particle setup
+  const fireflyCount = 60;
+  const fireflyData = useMemo(() => {
+    const pos = new Float32Array(fireflyCount * 3);
+    const col = new Float32Array(fireflyCount * 3);
+    const c1 = new THREE.Color('#34d399');
+    const c2 = new THREE.Color('#38bdf8');
+    const c3 = new THREE.Color('#f43f5e');
+
+    for (let i = 0; i < fireflyCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = Math.random() * 22;
+      pos[i * 3] = Math.cos(angle) * r;
+      pos[i * 3 + 1] = 0.8 + Math.random() * 3.5;
+      pos[i * 3 + 2] = Math.sin(angle) * (r * 0.85);
+
+      const chosenColor = i % 3 === 0 ? c1 : i % 3 === 1 ? c2 : c3;
+      col[i * 3] = chosenColor.r;
+      col[i * 3 + 1] = chosenColor.g;
+      col[i * 3 + 2] = chosenColor.b;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return geo;
+  }, []);
+
   useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    const wState = WeatherSystem.getInstance().getState();
+    const wind = windSystem.getVector();
+    const gust = windSystem.getGustFactor();
+
+    // Update water shader uniforms
     if (waterMatRef.current) {
-      waterMatRef.current.uniforms.uTime.value = clock.getElapsedTime();
-      const wState = WeatherSystem.getInstance().getState();
+      waterMatRef.current.uniforms.uTime.value = t;
       waterMatRef.current.uniforms.uRainIntensity.value = wState.rainIntensity;
+      const dir2D = new THREE.Vector2(wind.x, wind.z).normalize();
+      waterMatRef.current.uniforms.uWindDir.value.copy(dir2D);
+      waterMatRef.current.uniforms.uWindSpeed.value = Math.max(0.5, windSystem.getSpeed() / 6.5) * gust;
+    }
+
+    // Dynamic wind sway on weeping willow & sakura branches
+    if (foliageGroupRef.current) {
+      const swayX = Math.sin(t * 1.5) * 0.04 * gust;
+      const swayZ = Math.cos(t * 1.2) * 0.04 * gust;
+      foliageGroupRef.current.children.forEach((child, idx) => {
+        child.rotation.x = swayX * (1 + (idx % 3) * 0.2);
+        child.rotation.z = swayZ * (1 + (idx % 2) * 0.3);
+      });
+    }
+
+    // Animate bioluminescent fireflies bobbing
+    if (firefliesRef.current) {
+      const posAttr = firefliesRef.current.geometry.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < fireflyCount; i++) {
+        const py = posAttr.getY(i);
+        const newY = py + Math.sin(t * 2.2 + i) * 0.012;
+        posAttr.setY(i, Math.max(0.4, Math.min(4.8, newY)));
+
+        // Slight drift with wind
+        const px = posAttr.getX(i) + wind.x * 0.002 * (0.8 + Math.sin(t + i));
+        const pz = posAttr.getZ(i) + wind.z * 0.002 * (0.8 + Math.cos(t + i));
+        posAttr.setX(i, px > 28 ? -28 : px < -28 ? 28 : px);
+        posAttr.setZ(i, pz > 28 ? -28 : pz < -28 ? 28 : pz);
+      }
+      posAttr.needsUpdate = true;
     }
   });
 
@@ -258,12 +332,10 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
         [3, -7],
       ].map(([lx, lz], lIdx) => (
         <group key={`lotus-${lIdx}`} position={[lx, 0.14, lz]}>
-          {/* Lily Pad Leaf */}
           <mesh rotation={[-Math.PI / 2, 0, 0]}>
             <circleGeometry args={[0.85, 12]} />
             <meshStandardMaterial color="#059669" roughness={0.4} />
           </mesh>
-          {/* Glowing Pink/Cyan Lotus Blossom */}
           <mesh position={[0, 0.2, 0]}>
             <coneGeometry args={[0.32, 0.45, 6]} />
             <meshStandardMaterial
@@ -272,7 +344,6 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
               emissiveIntensity={1.8}
             />
           </mesh>
-          {/* Bioluminescent Point Light */}
           <pointLight
             color={lIdx % 2 === 0 ? '#f43f5e' : '#38bdf8'}
             intensity={0.6}
@@ -281,72 +352,84 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
         </group>
       ))}
 
-      {/* 5. Pink Sakura Cherry Blossom Trees */}
-      {[
-        [-22, -18],
-        [22, -18],
-        [-22, 18],
-        [22, 18],
-      ].map(([tx, tz], tIdx) => (
-        <group key={`sakura-${tIdx}`} position={[tx, 0.2, tz]}>
-          {/* Dark Bark Trunk */}
-          <mesh position={[0, 3.0, 0]} castShadow>
-            <cylinderGeometry args={[0.25, 0.45, 6.0, 8]} />
-            <meshStandardMaterial color="#2d1b14" roughness={0.8} />
-          </mesh>
-          {/* Glowing Sakura Pink Foliage Cloud */}
-          <mesh position={[0, 6.5, 0]} castShadow>
-            <dodecahedronGeometry args={[3.2, 1]} />
-            <meshStandardMaterial
-              color="#fb7185"
-              emissive="#f43f5e"
-              emissiveIntensity={0.25}
-              roughness={0.5}
-            />
-          </mesh>
-          <mesh position={[1.4, 7.2, 0.8]} castShadow>
-            <dodecahedronGeometry args={[2.2, 1]} />
-            <meshStandardMaterial
-              color="#fda4af"
-              emissive="#fb7185"
-              emissiveIntensity={0.2}
-              roughness={0.5}
-            />
-          </mesh>
-        </group>
-      ))}
+      {/* 5. Swaying Park Foliage: Pink Sakura Trees & Cyber Weeping Willows */}
+      <group ref={foliageGroupRef}>
+        {/* Pink Sakura Cherry Blossom Trees */}
+        {[
+          [-22, -18],
+          [22, -18],
+          [-22, 18],
+          [22, 18],
+        ].map(([tx, tz], tIdx) => (
+          <group key={`sakura-${tIdx}`} position={[tx, 0.2, tz]}>
+            <mesh position={[0, 3.0, 0]} castShadow>
+              <cylinderGeometry args={[0.25, 0.45, 6.0, 8]} />
+              <meshStandardMaterial color="#2d1b14" roughness={0.8} />
+            </mesh>
+            <mesh position={[0, 6.5, 0]} castShadow>
+              <dodecahedronGeometry args={[3.2, 1]} />
+              <meshStandardMaterial
+                color="#fb7185"
+                emissive="#f43f5e"
+                emissiveIntensity={0.25}
+                roughness={0.5}
+              />
+            </mesh>
+            <mesh position={[1.4, 7.2, 0.8]} castShadow>
+              <dodecahedronGeometry args={[2.2, 1]} />
+              <meshStandardMaterial
+                color="#fda4af"
+                emissive="#fb7185"
+                emissiveIntensity={0.2}
+                roughness={0.5}
+              />
+            </mesh>
+          </group>
+        ))}
 
-      {/* 6. Weeping Willow Cyber-Trees with Drooping Tendrils */}
-      {[
-        [-14, -2],
-        [14, 2],
-      ].map(([wx, wz], wIdx) => (
-        <group key={`willow-${wIdx}`} position={[wx, 0.2, wz]}>
-          <mesh position={[0, 3.5, 0]} castShadow>
-            <cylinderGeometry args={[0.3, 0.5, 7.0, 8]} />
-            <meshStandardMaterial color="#1a2e22" roughness={0.8} />
-          </mesh>
-          {/* Main Canopy Dome */}
-          <mesh position={[0, 6.8, 0]} castShadow>
-            <sphereGeometry args={[3.8, 8, 8]} />
-            <meshStandardMaterial color="#10b981" roughness={0.4} />
-          </mesh>
-          {/* Drooping Tendrils */}
-          {Array.from({ length: 8 }).map((_, dIdx) => {
-            const da = (dIdx / 8) * Math.PI * 2;
-            return (
-              <mesh
-                key={`tendril-${dIdx}`}
-                position={[Math.cos(da) * 3.2, 4.2, Math.sin(da) * 3.2]}
-                castShadow
-              >
-                <cylinderGeometry args={[0.08, 0.15, 4.2, 6]} />
-                <meshStandardMaterial color="#059669" roughness={0.4} />
-              </mesh>
-            );
-          })}
-        </group>
-      ))}
+        {/* Weeping Willow Cyber-Trees */}
+        {[
+          [-14, -2],
+          [14, 2],
+        ].map(([wx, wz], wIdx) => (
+          <group key={`willow-${wIdx}`} position={[wx, 0.2, wz]}>
+            <mesh position={[0, 3.5, 0]} castShadow>
+              <cylinderGeometry args={[0.3, 0.5, 7.0, 8]} />
+              <meshStandardMaterial color="#1a2e22" roughness={0.8} />
+            </mesh>
+            <mesh position={[0, 6.8, 0]} castShadow>
+              <sphereGeometry args={[3.8, 8, 8]} />
+              <meshStandardMaterial color="#10b981" roughness={0.4} />
+            </mesh>
+            {Array.from({ length: 8 }).map((_, dIdx) => {
+              const da = (dIdx / 8) * Math.PI * 2;
+              return (
+                <mesh
+                  key={`tendril-${dIdx}`}
+                  position={[Math.cos(da) * 3.2, 4.2, Math.sin(da) * 3.2]}
+                  castShadow
+                >
+                  <cylinderGeometry args={[0.08, 0.15, 4.2, 6]} />
+                  <meshStandardMaterial color="#059669" roughness={0.4} />
+                </mesh>
+              );
+            })}
+          </group>
+        ))}
+      </group>
+
+      {/* 6. Bioluminescent Floating Fireflies / Spores Points */}
+      <points ref={firefliesRef}>
+        <bufferGeometry {...fireflyData} />
+        <pointsMaterial
+          size={0.35}
+          vertexColors
+          transparent
+          opacity={0.85}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </points>
 
       {/* 7. Park Benches with Glowing Cyber-Wood Slats */}
       {[
@@ -356,7 +439,6 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
         { pos: [12, 0.2, 10], rot: (-3 * Math.PI) / 4 },
       ].map((bench, bIdx) => (
         <group key={`bench-${bIdx}`} position={bench.pos as [number, number, number]} rotation={[0, bench.rot, 0]}>
-          {/* Metal Legs */}
           <mesh position={[-0.9, 0.3, 0]} castShadow>
             <boxGeometry args={[0.1, 0.6, 0.7]} />
             <meshStandardMaterial color="#0f172a" metalness={0.9} />
@@ -365,17 +447,14 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
             <boxGeometry args={[0.1, 0.6, 0.7]} />
             <meshStandardMaterial color="#0f172a" metalness={0.9} />
           </mesh>
-          {/* Seat Slats */}
           <mesh position={[0, 0.55, 0.05]} castShadow>
             <boxGeometry args={[2.0, 0.08, 0.6]} />
             <meshStandardMaterial color="#78350f" roughness={0.5} />
           </mesh>
-          {/* Backrest */}
           <mesh position={[0, 0.95, -0.22]} rotation={[-0.2, 0, 0]} castShadow>
             <boxGeometry args={[2.0, 0.5, 0.08]} />
             <meshStandardMaterial color="#78350f" roughness={0.5} />
           </mesh>
-          {/* Glowing Neon Strip Under Seat */}
           <mesh position={[0, 0.48, 0]}>
             <boxGeometry args={[1.9, 0.04, 0.04]} />
             <meshBasicMaterial color="#00ffaa" />

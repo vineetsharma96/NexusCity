@@ -20,6 +20,7 @@ import { PerformanceMonitor } from '../rendering/PerformanceMonitor';
 import { InputManager } from '../player/InputManager';
 import { NaturalClouds } from '../environment/NaturalClouds';
 import { DirtParticles } from '../city/DirtParticles';
+import { AtmosphericDetails } from '../city/AtmosphericDetails';
 import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
 import { AudioManager } from '../audio/AudioManager';
 
@@ -102,6 +103,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       {interiorState.current === 'NONE' && <RainParticles playerPosRef={playerPosRef} />}
       {interiorState.current === 'NONE' && quality.cloudsEnabled && <NaturalClouds />}
       {interiorState.current === 'NONE' && quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
+      {interiorState.current === 'NONE' && <AtmosphericDetails playerPosRef={playerPosRef} />}
 
       {/* 11 Enterable Building Entrances Across City Districts */}
       {interiorState.current === 'NONE' && (
