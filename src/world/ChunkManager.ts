@@ -17,6 +17,8 @@ export interface ChunkManagerState {
   chunks: ChunkInfo[];
   activeDistrict: DistrictInfo;
   discoveredDistricts: Set<string>;
+  discoveredChunks: Set<string>;
+  exploredPercent: number;
   recentDiscovery: DistrictInfo | null;
 }
 
@@ -31,11 +33,50 @@ export class ChunkManager {
   private chunks: Map<string, ChunkInfo> = new Map();
   private activeDistrict: DistrictInfo = DistrictGenerator.getDistrictAt(0, 0);
   private discoveredDistricts: Set<string> = new Set(['CENTRAL_CITY']);
+  private discoveredChunks: Set<string> = new Set();
   private recentDiscovery: DistrictInfo | null = null;
   private listeners: Set<ChunkChangeListener> = new Set();
 
   constructor() {
+    this.loadExploredChunks();
     this.initGrid();
+  }
+
+  private loadExploredChunks(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const saved = localStorage.getItem('nexus_city_explored_chunks_v1');
+        if (saved) {
+          const arr = JSON.parse(saved);
+          if (Array.isArray(arr)) {
+            arr.forEach((k: string) => this.discoveredChunks.add(k));
+          }
+        }
+      }
+    } catch (e) {}
+
+    // Ensure core 3x3 plaza chunks are always explored
+    for (let cx = -1; cx <= 1; cx++) {
+      for (let cz = -1; cz <= 1; cz++) {
+        this.discoveredChunks.add(`${cx}_${cz}`);
+      }
+    }
+  }
+
+  private saveTimer: any = null;
+  private saveExploredChunks(): void {
+    if (this.saveTimer) return;
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(
+            'nexus_city_explored_chunks_v1',
+            JSON.stringify(Array.from(this.discoveredChunks))
+          );
+        }
+      } catch (e) {}
+    }, 1200);
   }
 
   public static getInstance(): ChunkManager {
@@ -98,10 +139,17 @@ export class ChunkManager {
     }
     this.lastCheckedPos.copy(playerPos);
 
-    // 2. Evaluate Distance & LOD for Each Chunk
+    // 2. Evaluate Distance, Discovery & LOD for Each Chunk
     this.chunks.forEach((chunk) => {
       const dist = playerPos.distanceTo(chunk.center);
       chunk.distanceToPlayer = dist;
+
+      // Mark chunk as explored when player approaches within 260m
+      if (dist < 260 && !this.discoveredChunks.has(chunk.key)) {
+        this.discoveredChunks.add(chunk.key);
+        stateChanged = true;
+        this.saveExploredChunks();
+      }
 
       let newLod: ChunkLOD = 'UNLOADED';
       if (dist < 180) {
@@ -129,11 +177,22 @@ export class ChunkManager {
     return Array.from(this.chunks.values()).filter((c) => c.lod !== 'UNLOADED');
   }
 
+  public isChunkExplored(cx: number, cz: number): boolean {
+    return this.discoveredChunks.has(`${cx}_${cz}`);
+  }
+
+  public getExploredPercent(): number {
+    const totalChunks = (ChunkManager.GRID_RADIUS * 2) * (ChunkManager.GRID_RADIUS * 2);
+    return parseFloat(((this.discoveredChunks.size / totalChunks) * 100).toFixed(1));
+  }
+
   public getState(): ChunkManagerState {
     return {
       chunks: Array.from(this.chunks.values()),
       activeDistrict: this.activeDistrict,
       discoveredDistricts: this.discoveredDistricts,
+      discoveredChunks: this.discoveredChunks,
+      exploredPercent: this.getExploredPercent(),
       recentDiscovery: this.recentDiscovery,
     };
   }
