@@ -63,13 +63,13 @@ export const SkylineSilhouettes: React.FC = () => {
             const rng = new SeedRandom(847291 + 777);
             for (let i = 0; i < count; i++) {
               const angle = (i / count) * Math.PI * 2 + rng.range(-0.05, 0.05);
-              const dist = rng.range(190, 520);
+              const dist = rng.range(850, 2200);
               const x = Math.cos(angle) * dist;
               const z = Math.sin(angle) * dist;
               const district = DistrictGenerator.getDistrictAt(x, z);
-              const h = rng.range(district.buildingHeightRange[0], district.buildingHeightRange[1]);
-              const w = rng.range(18, 38);
-              const d = rng.range(18, 38);
+              const h = rng.range(district.buildingHeightRange[0] * 1.5, district.buildingHeightRange[1] * 2.2);
+              const w = rng.range(35, 75);
+              const d = rng.range(35, 75);
 
               dummy.position.set(x, h / 2, z);
               dummy.scale.set(w, h, d);
@@ -97,14 +97,14 @@ export const SkylineSilhouettes: React.FC = () => {
             const rng = new SeedRandom(847291 + 777);
             for (let i = 0; i < count; i++) {
               const angle = (i / count) * Math.PI * 2 + rng.range(-0.05, 0.05);
-              const dist = rng.range(190, 520);
+              const dist = rng.range(850, 2200);
               const x = Math.cos(angle) * dist;
               const z = Math.sin(angle) * dist;
               const district = DistrictGenerator.getDistrictAt(x, z);
-              const h = rng.range(district.buildingHeightRange[0], district.buildingHeightRange[1]);
+              const h = rng.range(district.buildingHeightRange[0] * 1.5, district.buildingHeightRange[1] * 2.2);
 
               dummy.position.set(x, h + 2, z);
-              dummy.scale.set(2.5, 2.5, 2.5);
+              dummy.scale.set(4.0, 4.0, 4.0);
               dummy.updateMatrix();
               bm.setMatrixAt(i, dummy.matrix);
 

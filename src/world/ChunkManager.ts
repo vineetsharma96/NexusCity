@@ -70,11 +70,15 @@ export class ChunkManager {
     }
   }
 
+  private lastCheckedPos: THREE.Vector3 = new THREE.Vector3(999999, 0, 999999);
+
   public updatePlayerPosition(playerPos: THREE.Vector3): void {
     // 1. Resolve Active District at player position
+    let stateChanged = false;
     const currentDistrict = DistrictGenerator.getDistrictAt(playerPos.x, playerPos.z);
     if (currentDistrict.type !== this.activeDistrict.type) {
       this.activeDistrict = currentDistrict;
+      stateChanged = true;
       if (!this.discoveredDistricts.has(currentDistrict.type)) {
         this.discoveredDistricts.add(currentDistrict.type);
         this.recentDiscovery = currentDistrict;
@@ -88,23 +92,41 @@ export class ChunkManager {
       }
     }
 
+    // Throttle distance & LOD recalculation to when player moves at least 4m
+    if (playerPos.distanceToSquared(this.lastCheckedPos) < 16 && !stateChanged) {
+      return;
+    }
+    this.lastCheckedPos.copy(playerPos);
+
     // 2. Evaluate Distance & LOD for Each Chunk
     this.chunks.forEach((chunk) => {
       const dist = playerPos.distanceTo(chunk.center);
       chunk.distanceToPlayer = dist;
 
-      if (dist < 150) {
-        chunk.lod = 'HIGH';
-      } else if (dist < 320) {
-        chunk.lod = 'MEDIUM';
+      let newLod: ChunkLOD = 'UNLOADED';
+      if (dist < 180) {
+        newLod = 'HIGH';
+      } else if (dist < 380) {
+        newLod = 'MEDIUM';
       } else if (dist < 850) {
-        chunk.lod = 'LOW';
+        newLod = 'LOW';
       } else {
-        chunk.lod = 'UNLOADED';
+        newLod = 'UNLOADED';
+      }
+
+      if (chunk.lod !== newLod) {
+        chunk.lod = newLod;
+        stateChanged = true;
       }
     });
 
-    this.notify();
+    if (stateChanged) {
+      this.notify();
+    }
+  }
+
+  public getActiveChunks(): ChunkInfo[] {
+    return Array.from(this.chunks.values()).filter((c) => c.lod !== 'UNLOADED');
   }
 
   public getState(): ChunkManagerState {

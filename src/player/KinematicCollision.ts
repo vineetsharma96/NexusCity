@@ -18,11 +18,21 @@ export interface CollisionRamp {
 
 export class KinematicCollisionSolver {
   private static boxes: CollisionBox[] = [];
+  private static chunkBoxes: Map<string, CollisionBox[]> = new Map();
   private static ramps: CollisionRamp[] = [];
 
   public static clear(): void {
     this.boxes = [];
+    this.chunkBoxes.clear();
     this.ramps = [];
+  }
+
+  public static setChunkBoxes(chunkKey: string, boxes: CollisionBox[]): void {
+    this.chunkBoxes.set(chunkKey, boxes);
+  }
+
+  public static removeChunkBoxes(chunkKey: string): void {
+    this.chunkBoxes.delete(chunkKey);
   }
 
   public static addBox(center: THREE.Vector3, size: THREE.Vector3): void {
@@ -84,10 +94,10 @@ export class KinematicCollisionSolver {
       resolved.z = THREE.MathUtils.clamp(resolved.z, -worldLimit, worldLimit);
     }
 
-    for (const box of this.boxes) {
+    const checkHorizontalBox = (box: CollisionBox) => {
       // Check vertical overlap
       if (playerMaxY <= box.min.y || playerMinY >= box.max.y) {
-        continue;
+        return;
       }
 
       // Check expanded horizontal AABB overlap with player radius
@@ -115,6 +125,15 @@ export class KinematicCollisionSolver {
         } else {
           resolved.z = box.max.z + radius;
         }
+      }
+    };
+
+    for (const box of this.boxes) {
+      checkHorizontalBox(box);
+    }
+    for (const cBoxes of this.chunkBoxes.values()) {
+      for (const box of cBoxes) {
+        checkHorizontalBox(box);
       }
     }
 
@@ -147,8 +166,7 @@ export class KinematicCollisionSolver {
       }
     }
 
-    // Check elevated platforms
-    for (const box of this.boxes) {
+    const checkPlatformBox = (box: CollisionBox) => {
       if (x >= box.min.x && x <= box.max.x && z >= box.min.z && z <= box.max.z) {
         // Only step onto platform if player's feet are within step/jump reach
         if (currentY >= box.max.y - 0.6) {
@@ -157,6 +175,17 @@ export class KinematicCollisionSolver {
             onRamp = false;
           }
         }
+      }
+    };
+
+    // Check elevated platforms in static boxes
+    for (const box of this.boxes) {
+      checkPlatformBox(box);
+    }
+    // Check platforms in streamed chunk boxes
+    for (const cBoxes of this.chunkBoxes.values()) {
+      for (const box of cBoxes) {
+        checkPlatformBox(box);
       }
     }
 
