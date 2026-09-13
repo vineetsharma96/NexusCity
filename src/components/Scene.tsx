@@ -20,6 +20,7 @@ import { PerformanceMonitor } from '../rendering/PerformanceMonitor';
 import { InputManager } from '../player/InputManager';
 import { NaturalClouds } from '../environment/NaturalClouds';
 import { DirtParticles } from '../city/DirtParticles';
+import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
 
 // Inner component to hook into R3F render loop for telemetry and dynamic updates
 const SceneFrameLoop: React.FC = () => {
@@ -100,126 +101,29 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       {/* 11 Enterable Building Entrances Across City Districts */}
       {interiorState.current === 'NONE' && (
         <>
-          {/* 1. Nexus Advanced Labs */}
-          <BuildingEntrance
-            id="nexus_labs"
-            name="Nexus Advanced Labs"
-            type="LAB"
-            position={new THREE.Vector3(15.2, 0.18, 32)}
-            rotationY={-Math.PI / 2}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
+          {Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => {
+            const rotY =
+              id === 'nexus_labs' || id === 'netrunner_den' || id === 'biosphere_greenhouse'
+                ? -Math.PI / 2
+                : id === 'cyber_lounge' || id === 'ripperdoc_clinic'
+                ? Math.PI / 2
+                : id === 'ramen_diner' || id === 'drone_hangar' || id === 'cyber_arcade'
+                ? Math.PI
+                : 0;
 
-          {/* 2. Neon Velocity Lounge */}
-          <BuildingEntrance
-            id="cyber_lounge"
-            name="Neon Velocity Lounge"
-            type="LOUNGE"
-            position={new THREE.Vector3(-15.2, 0.18, 32)}
-            rotationY={Math.PI / 2}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
-
-          {/* 3. Krom-Doc Augmentation Clinic */}
-          <BuildingEntrance
-            id="ripperdoc_clinic"
-            name="Krom-Doc Clinic"
-            type="CLINIC"
-            position={new THREE.Vector3(-15.2, 0.18, -32)}
-            rotationY={Math.PI / 2}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
-
-          {/* 4. Black-Ice Netrunner Safehouse */}
-          <BuildingEntrance
-            id="netrunner_den"
-            name="Black-Ice Safehouse"
-            type="NETRUNNER_DEN"
-            position={new THREE.Vector3(15.2, 0.18, -32)}
-            rotationY={-Math.PI / 2}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
-
-          {/* 5. Tokyo-Neo Synth-Ramen Diner */}
-          <BuildingEntrance
-            id="ramen_diner"
-            name="Tokyo-Neo Ramen"
-            type="RAMEN_DINER"
-            position={new THREE.Vector3(32, 0.18, 15.2)}
-            rotationY={Math.PI}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
-
-          {/* 6. Aero-Cargo Drone Repair Bay */}
-          <BuildingEntrance
-            id="drone_hangar"
-            name="Aero-Cargo Drone Bay"
-            type="DRONE_HANGAR"
-            position={new THREE.Vector3(32, 0.18, -15.2)}
-            rotationY={Math.PI}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
-
-          {/* 7. Apex Tower Sky Observation Penthouse */}
-          <BuildingEntrance
-            id="sky_penthouse"
-            name="Apex Sky Penthouse"
-            type="PENTHOUSE"
-            position={new THREE.Vector3(-32, 0.18, 15.2)}
-            rotationY={0}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
-
-          {/* 8. Megacorp Secure Data Vault */}
-          <BuildingEntrance
-            id="server_vault"
-            name="Megacorp Data Vault"
-            type="SERVER_VAULT"
-            position={new THREE.Vector3(-32, 0.18, -15.2)}
-            rotationY={0}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
-
-          {/* 9. Biosphere Hydroponic Flora Lab */}
-          <BuildingEntrance
-            id="biosphere_greenhouse"
-            name="Biosphere Flora Lab"
-            type="GREENHOUSE"
-            position={new THREE.Vector3(42, 0.18, 75)}
-            rotationY={-Math.PI / 2}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
-
-          {/* 10. Hyperloop Metro Transit Hub */}
-          <BuildingEntrance
-            id="metro_station"
-            name="Hyperloop Metro Hub"
-            type="METRO_STATION"
-            position={new THREE.Vector3(0, 0.18, 52)}
-            rotationY={0}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
-
-          {/* 11. Cyber-Strike 2099 Retro Arcade */}
-          <BuildingEntrance
-            id="cyber_arcade"
-            name="Cyber-Strike Arcade"
-            type="ARCADE"
-            position={new THREE.Vector3(0, 0.18, -52)}
-            rotationY={Math.PI}
-            playerPosRef={playerPosRef}
-            onTeleport={handleTeleport}
-          />
+            return (
+              <BuildingEntrance
+                key={id}
+                id={id}
+                name={dest.name}
+                type={dest.interiorId}
+                position={dest.entrancePosition}
+                rotationY={rotY}
+                playerPosRef={playerPosRef}
+                onTeleport={handleTeleport}
+              />
+            );
+          })}
         </>
       )}
 

@@ -7,6 +7,9 @@ import { QualityManager, QualityPreset } from '../rendering/QualityManager';
 import { PerformanceMonitor, PerformanceMetrics } from '../rendering/PerformanceMonitor';
 import { NavigationSystem } from '../map/NavigationSystem';
 
+import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
+import { InteriorManager } from '../world/InteriorManager';
+
 interface TeleportLocation {
   id: string;
   name: string;
@@ -17,7 +20,7 @@ interface TeleportLocation {
   color: string;
 }
 
-const TELEPORT_LOCATIONS: TeleportLocation[] = [
+const EXTERIOR_TELEPORT_LOCATIONS: TeleportLocation[] = [
   {
     id: 'plaza',
     name: 'Central Plaza Core',
@@ -45,105 +48,20 @@ const TELEPORT_LOCATIONS: TeleportLocation[] = [
     icon: '🌉',
     color: '#38bdf8',
   },
-  {
-    id: 'labs',
-    name: 'Nexus Advanced Labs',
+];
+
+// Combine exterior landmarks and all 11 registered interior destinations
+const TELEPORT_LOCATIONS: TeleportLocation[] = [
+  ...EXTERIOR_TELEPORT_LOCATIONS,
+  ...Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => ({
+    id,
+    name: dest.name,
     category: 'INTERIOR',
-    district: 'Central East Avenue',
-    position: new THREE.Vector3(12, 0.2, 32),
-    icon: '🧪',
-    color: '#00f0ff',
-  },
-  {
-    id: 'lounge',
-    name: 'Neon Velocity Lounge',
-    category: 'INTERIOR',
-    district: 'West Night District',
-    position: new THREE.Vector3(-12, 0.2, 32),
-    icon: '🍸',
-    color: '#ec4899',
-  },
-  {
-    id: 'clinic',
-    name: 'Krom-Doc Ripperdoc Clinic',
-    category: 'INTERIOR',
-    district: 'Medical Alley',
-    position: new THREE.Vector3(-12, 0.2, -32),
-    icon: '💉',
-    color: '#06b6d4',
-  },
-  {
-    id: 'netrunner',
-    name: 'Black-Ice Hacker Safehouse',
-    category: 'INTERIOR',
-    district: 'Neural Undergrid',
-    position: new THREE.Vector3(12, 0.2, -32),
-    icon: '💻',
-    color: '#10b981',
-  },
-  {
-    id: 'ramen',
-    name: 'Tokyo-Neo Synth-Ramen',
-    category: 'INTERIOR',
-    district: 'East Food Bazaar',
-    position: new THREE.Vector3(32, 0.2, 12),
-    icon: '🍜',
-    color: '#f59e0b',
-  },
-  {
-    id: 'hangar',
-    name: 'Aero-Cargo Drone Bay',
-    category: 'INTERIOR',
-    district: 'Industrial Harbor',
-    position: new THREE.Vector3(32, 0.2, -12),
-    icon: '🛸',
-    color: '#f97316',
-  },
-  {
-    id: 'penthouse',
-    name: 'Apex Sky Suite Penthouse',
-    category: 'INTERIOR',
-    district: 'Sky Spire Towers',
-    position: new THREE.Vector3(-32, 0.2, 12),
-    icon: '🏙️',
-    color: '#38bdf8',
-  },
-  {
-    id: 'vault',
-    name: 'Megacorp Secure Data Vault',
-    category: 'INTERIOR',
-    district: 'Corporate Core',
-    position: new THREE.Vector3(-32, 0.2, -12),
-    icon: '🔒',
-    color: '#3b82f6',
-  },
-  {
-    id: 'greenhouse',
-    name: 'Biosphere Hydroponic Flora Lab',
-    category: 'INTERIOR',
-    district: 'Biosphere District',
-    position: new THREE.Vector3(42, 0.2, 75),
-    icon: '🌿',
-    color: '#22c55e',
-  },
-  {
-    id: 'metro',
-    name: 'Hyperloop Metro Transit Hub',
-    category: 'INTERIOR',
-    district: 'Subterranean Rail',
-    position: new THREE.Vector3(0, 0.2, 48),
-    icon: '🚇',
-    color: '#fbbf24',
-  },
-  {
-    id: 'arcade',
-    name: 'Cyber-Strike 2099 Retro Arcade',
-    category: 'INTERIOR',
-    district: 'South Entertainment Grid',
-    position: new THREE.Vector3(0, 0.2, -48),
-    icon: '🕹️',
-    color: '#d946ef',
-  },
+    district: dest.district,
+    position: dest.entrancePosition.clone(),
+    icon: dest.icon,
+    color: dest.accentColor,
+  })),
 ];
 
 interface CyberMenuModalProps {
@@ -184,9 +102,25 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleWarp = (pos: THREE.Vector3) => {
+  const handleWarp = (loc: TeleportLocation) => {
     AudioManager.getInstance().playUI('click');
-    onTeleport(pos.clone());
+
+    if (loc.category === 'INTERIOR') {
+      const success = InteriorManager.getInstance().enterDestination(loc.id, loc.position, onTeleport);
+      if (success) {
+        onClose();
+        return;
+      }
+    }
+
+    // If player is inside an interior and warps to an exterior landmark, cleanly exit first
+    if (InteriorManager.getInstance().currentInterior !== 'NONE') {
+      InteriorManager.getInstance().exit(() => {
+        onTeleport(loc.position.clone());
+      });
+    } else {
+      onTeleport(loc.position.clone());
+    }
     onClose();
   };
 
@@ -346,7 +280,7 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
               {TELEPORT_LOCATIONS.map((loc) => (
                 <div
                   key={loc.id}
-                  onClick={() => handleWarp(loc.position)}
+                  onClick={() => handleWarp(loc)}
                   className="glass-panel"
                   style={{
                     padding: '12px 16px',
@@ -577,6 +511,7 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
                   className="cyber-select"
                   style={{ flex: 1, padding: 8 }}
                 >
+                  <option value="AUTO">AUTO (Adaptive Performance & Dynamic Scaling)</option>
                   <option value="ULTRA">ULTRA (2600m Far, 2K Shadows, Full FX)</option>
                   <option value="HIGH">HIGH (1800m Far, 1K Shadows)</option>
                   <option value="MEDIUM">MEDIUM (1200m Far, Balanced Mobile)</option>

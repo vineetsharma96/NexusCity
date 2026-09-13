@@ -44,33 +44,49 @@ export const BuildingEntrance: React.FC<BuildingEntranceProps> = ({
     type === 'METRO_STATION' ? '#fbbf24' :
     type === 'ARCADE' ? '#d946ef' : '#00f0ff';
 
+  const floatingBeaconRef = useRef<THREE.Group>(null);
+
   useEffect(() => {
+    // Calculate world interaction position based on gate's rotation
+    const forwardOffset = new THREE.Vector3(0, 0, 1.8).applyAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      rotationY
+    );
+    const interactionPos = position.clone().add(forwardOffset);
+
     InteractionSystem.getInstance().register({
       id: `entrance_${id}`,
       name,
-      actionText: `ENTER ${name.toUpperCase()}`,
-      position: position.clone().add(new THREE.Vector3(0, 0, 1.6)),
-      radius: 3.4,
+      actionText: `ENTER ${name.toUpperCase()} [E]`,
+      position: interactionPos,
+      radius: 3.6,
       onInteract: () => {
-        InteriorManager.getInstance().enter(type, playerPosRef.current, onTeleport);
+        InteriorManager.getInstance().enterDestination(id, playerPosRef.current, onTeleport);
       },
     });
 
     return () => {
       InteractionSystem.getInstance().unregister(`entrance_${id}`);
     };
-  }, [id, name, type, position, playerPosRef, onTeleport]);
+  }, [id, name, type, position, rotationY, playerPosRef, onTeleport]);
 
-  useFrame((_, delta) => {
+  useFrame(({ clock }, delta) => {
     const dist = playerPosRef.current.distanceTo(position);
     const wasNearby = isNearby.current;
-    isNearby.current = dist < 5.2;
+    isNearby.current = dist < 5.4;
 
     if (!wasNearby && isNearby.current) {
       setIsOpen(true);
       AudioManager.getInstance().playDoor();
     } else if (wasNearby && !isNearby.current) {
       setIsOpen(false);
+    }
+
+    // Animate floating 3D portal beacon
+    if (floatingBeaconRef.current) {
+      const t = clock.getElapsedTime();
+      floatingBeaconRef.current.position.y = 5.6 + Math.sin(t * 3.0) * 0.18;
+      floatingBeaconRef.current.rotation.y = t * 1.5;
     }
 
     // Update status beacon emissive color
@@ -272,6 +288,42 @@ export const BuildingEntrance: React.FC<BuildingEntranceProps> = ({
           opacity={isOpen ? 0.6 : 0.2}
         />
       </mesh>
+
+      {/* 6. Floating 3D Holographic Portal Beacon & Visual Indicator */}
+      <group ref={floatingBeaconRef} position={[0, 5.6, 0.4]}>
+        {/* Floating Diamond Core */}
+        <mesh>
+          <octahedronGeometry args={[0.32, 0]} />
+          <meshStandardMaterial
+            color={themeColor}
+            emissive={themeColor}
+            emissiveIntensity={2.5}
+            metalness={0.8}
+            roughness={0.1}
+          />
+        </mesh>
+        {/* Orbiting Holographic Reticle Ring */}
+        <mesh rotation={[Math.PI / 4, 0, 0]}>
+          <ringGeometry args={[0.48, 0.54, 16]} />
+          <meshBasicMaterial color={themeColor} side={THREE.DoubleSide} wireframe />
+        </mesh>
+      </group>
+
+      {/* 7. Holographic [ ENTER ] Floating Signage Plate */}
+      <group position={[0, 5.15, 0.4]}>
+        <mesh position={[0, 0, 0]}>
+          <boxGeometry args={[1.5, 0.32, 0.04]} />
+          <meshStandardMaterial color="#020617" metalness={0.9} roughness={0.3} />
+        </mesh>
+        <mesh position={[0, 0, 0.03]}>
+          <boxGeometry args={[1.42, 0.24, 0.02]} />
+          <meshStandardMaterial
+            color={themeColor}
+            emissive={themeColor}
+            emissiveIntensity={2.2}
+          />
+        </mesh>
+      </group>
     </group>
   );
 };

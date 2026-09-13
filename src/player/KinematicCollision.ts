@@ -73,12 +73,13 @@ export class KinematicCollisionSolver {
     const playerMinY = resolved.y;
     const playerMaxY = resolved.y + playerHeight;
 
-    // Check bounds: interior space (-80m) vs exterior city (-98 .. +98)
+    // Check bounds: interior room space (-80m) vs full open-world metropolis (2.8km scale)
     if (playerMinY < -50) {
       resolved.x = THREE.MathUtils.clamp(resolved.x, -10.2, 10.2);
       resolved.z = THREE.MathUtils.clamp(resolved.z, -8.2, 8.2);
     } else {
-      const worldLimit = 95;
+      // 24x24 chunks at 120m = 2880m expanse (-1440m to +1440m). Bound player safely within active world substrate.
+      const worldLimit = 1380;
       resolved.x = THREE.MathUtils.clamp(resolved.x, -worldLimit, worldLimit);
       resolved.z = THREE.MathUtils.clamp(resolved.z, -worldLimit, worldLimit);
     }
