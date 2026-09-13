@@ -61,6 +61,11 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
   const [cinematicPhase, setCinematicPhase] = useState<CinematicPhase>(() =>
     CinematicManager.getInstance().getState().phase
   );
+  const [interiorArrivalBanner, setInteriorArrivalBanner] = useState<{
+    name: string;
+    floor: number;
+  } | null>(null);
+  const [activeToast, setActiveToast] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -143,6 +148,43 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       AudioManager.getInstance().playDiscoveryChime();
     }
   }, [chunkState.recentDiscovery?.name]);
+
+  // Trigger interior arrival banner and sound chime when entering interior or switching floors
+  useEffect(() => {
+    if (interiorState.current !== 'NONE') {
+      setInteriorArrivalBanner({
+        name: interiorState.name,
+        floor: interiorState.currentFloor || 1,
+      });
+      AudioManager.getInstance().playDiscoveryChime();
+      const timer = setTimeout(() => {
+        setInteriorArrivalBanner(null);
+      }, 4200);
+      return () => clearTimeout(timer);
+    } else {
+      setInteriorArrivalBanner(null);
+    }
+  }, [interiorState.current, interiorState.currentFloor]);
+
+  // Listen to interactive object / terminal notifications
+  useEffect(() => {
+    const handleNotification = (e: any) => {
+      if (e.detail) {
+        setActiveToast({
+          title: e.detail.title || 'SYSTEM TELEMETRY',
+          message: e.detail.message || '',
+        });
+        const timer = setTimeout(() => {
+          setActiveToast(null);
+        }, 3800);
+        return () => clearTimeout(timer);
+      }
+    };
+    window.addEventListener('nexus:notification', handleNotification as EventListener);
+    return () => {
+      window.removeEventListener('nexus:notification', handleNotification as EventListener);
+    };
+  }, []);
 
   const handleQualityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     QualityManager.setPreset(e.target.value as QualityPreset);
@@ -237,6 +279,69 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
               }}
             >
               {chunkState.recentDiscovery.subtitle}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interior Sector Arrival & Floor Transition Banner */}
+      {interiorArrivalBanner && !interiorState.isTransitioning && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 68,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 92,
+            pointerEvents: 'none',
+            animation: 'fadeIn 0.4s ease',
+            width: 'min(92vw, 540px)',
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              padding: '12px 24px',
+              border: '2px solid var(--neon-cyan)',
+              boxShadow: '0 0 32px rgba(0, 240, 255, 0.4), inset 0 0 16px rgba(0, 240, 255, 0.08)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 3,
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.72rem',
+                color: 'var(--neon-amber)',
+                letterSpacing: '2px',
+                fontWeight: 900,
+              }}
+            >
+              ★ INTERIOR ARCHITECTURE ACCESSED ★
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '1.2rem',
+                color: 'var(--neon-cyan)',
+                letterSpacing: '1.5px',
+                fontWeight: 900,
+              }}
+            >
+              {interiorArrivalBanner.name}
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.72rem',
+                color: 'var(--text-secondary)',
+                letterSpacing: '0.5px',
+              }}
+            >
+              LEVEL {interiorArrivalBanner.floor} // ATMOSPHERIC AIR-LOCK NOMINAL // ACCESS GRANTED
             </div>
           </div>
         </div>
@@ -579,6 +684,59 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
           ☰ MENU
         </button>
       </div>
+
+      {/* Dynamic Contextual Terminal / Object Notification Toast */}
+      {activeToast && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: isMobile ? 185 : 160,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 42,
+            pointerEvents: 'none',
+            animation: 'fadeIn 0.3s ease',
+            width: 'min(90vw, 480px)',
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              padding: '10px 18px',
+              border: '1.5px solid var(--neon-cyan)',
+              boxShadow: '0 0 24px rgba(0, 240, 255, 0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 3,
+              backgroundColor: 'rgba(3, 8, 20, 0.94)',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.7rem',
+                color: 'var(--neon-amber)',
+                letterSpacing: '1.5px',
+                fontWeight: 800,
+              }}
+            >
+              ◆ {activeToast.title} ◆
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.74rem',
+                color: '#e2e8f0',
+                lineHeight: 1.4,
+              }}
+            >
+              {activeToast.message}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dynamic Contextual Interaction Prompt */}
       {activeInteractable && (

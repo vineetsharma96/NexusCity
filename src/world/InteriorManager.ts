@@ -5,6 +5,7 @@ import {
   validateInteriorDestination,
   getDestinationByInteriorType,
 } from './InteriorDestinations';
+import { AudioManager } from '../audio/AudioManager';
 
 export type InteriorType =
   | 'NONE'
@@ -25,6 +26,7 @@ export interface InteriorState {
   destinationId: string | null;
   destination: InteriorDestination | null;
   name: string;
+  currentFloor: number;
   isTransitioning: boolean;
   errorMessage?: string | null;
 }
@@ -37,6 +39,7 @@ export class InteriorManager {
   public currentInterior: InteriorType = 'NONE';
   public currentDestinationId: string | null = null;
   public activeDestination: InteriorDestination | null = null;
+  public currentFloor: number = 1; // 1 = Main Floor, 2 = Upper Mezzanine / Sky Deck
   public savedExteriorPos: THREE.Vector3 = new THREE.Vector3(0, 0.2, 10);
   public isTransitioning: boolean = false;
   private listeners: Set<InteriorChangeListener> = new Set();
@@ -113,6 +116,7 @@ export class InteriorManager {
       this.currentInterior = dest.interiorId;
       this.currentDestinationId = destinationId;
       this.activeDestination = dest;
+      this.currentFloor = 1;
 
       const spawnPoint = dest.interiorSpawnPoint.clone();
       onTeleport(spawnPoint);
@@ -184,6 +188,7 @@ export class InteriorManager {
     setTimeout(() => {
       this.currentInterior = 'NONE';
       this.currentDestinationId = null;
+      this.currentFloor = 1;
       const exitPos = this.activeDestination?.exitPosition?.clone() || this.savedExteriorPos.clone();
       this.activeDestination = null;
 
@@ -200,15 +205,59 @@ export class InteriorManager {
     }, 350);
   }
 
+  /**
+   * Switches elevator floors (Level 1 <-> Level 2 Mezzanine) inside an interior.
+   */
+  public changeFloor(
+    targetFloor: number,
+    onTeleport?: (newPos: THREE.Vector3) => void
+  ): boolean {
+    if (this.isTransitioning || this.currentInterior === 'NONE' || this.currentFloor === targetFloor) {
+      return false;
+    }
+
+    this.isTransitioning = true;
+    AudioManager.getInstance().playElevatorMove();
+    this.notify();
+
+    setTimeout(() => {
+      this.currentFloor = targetFloor;
+
+      // Elevator arrival position
+      const elevatorSpawn =
+        targetFloor === 2
+          ? InteriorManager.INTERIOR_ORIGIN.clone().add(new THREE.Vector3(7.5, 0.15, 5.5))
+          : InteriorManager.INTERIOR_ORIGIN.clone().add(new THREE.Vector3(7.5, 0.15, 5.5));
+
+      if (onTeleport) {
+        onTeleport(elevatorSpawn);
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: elevatorSpawn }));
+      }
+
+      setTimeout(() => {
+        this.isTransitioning = false;
+        this.notify();
+      }, 250);
+    }, 450);
+
+    return true;
+  }
+
   public getState(): InteriorState {
     const dest = this.activeDestination;
-    const name = dest ? `${dest.name.toUpperCase()} // ${dest.category}` : 'DISTRICT 1: CENTRAL METROPOLIS';
+    const floorLabel = this.currentFloor === 2 ? 'MEZZANINE / SKY-DECK' : 'MAIN FLOOR';
+    const name = dest
+      ? `${dest.name.toUpperCase()} [LVL ${this.currentFloor}: ${floorLabel}]`
+      : 'DISTRICT 1: CENTRAL METROPOLIS';
 
     return {
       current: this.currentInterior,
       destinationId: this.currentDestinationId,
       destination: this.activeDestination,
       name,
+      currentFloor: this.currentFloor,
       isTransitioning: this.isTransitioning,
       errorMessage: this.lastError,
     };

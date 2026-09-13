@@ -641,6 +641,77 @@ export class AudioManager {
     });
   }
 
+  public playElevatorMove(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+
+    // 1. Hydraulic low whoosh
+    const osc = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(65, now);
+    osc.frequency.linearRampToValueAtTime(85, now + 0.4);
+    osc.frequency.linearRampToValueAtTime(50, now + 0.9);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(160, now);
+    filter.Q.setValueAtTime(2.0, now);
+
+    gain.gain.setValueAtTime(0.0, now);
+    gain.gain.linearRampToValueAtTime(0.12, now + 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(now);
+    osc.stop(now + 0.92);
+
+    // 2. Harmonic arrival chime (E5 -> B5)
+    [659.25, 987.77].forEach((freq, idx) => {
+      const chimeStart = now + 0.55 + idx * 0.14;
+      const chimeOsc = this.ctx!.createOscillator();
+      const chimeGain = this.ctx!.createGain();
+
+      chimeOsc.type = 'sine';
+      chimeOsc.frequency.setValueAtTime(freq, chimeStart);
+
+      chimeGain.gain.setValueAtTime(0.08, chimeStart);
+      chimeGain.gain.exponentialRampToValueAtTime(0.001, chimeStart + 0.4);
+
+      chimeOsc.connect(chimeGain);
+      chimeGain.connect(this.sfxGain!);
+
+      chimeOsc.start(chimeStart);
+      chimeOsc.stop(chimeStart + 0.42);
+    });
+  }
+
+  public playTerminalBeep(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1480, now);
+    osc.frequency.setValueAtTime(2220, now + 0.04);
+
+    gain.gain.setValueAtTime(0.07, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(now);
+    osc.stop(now + 0.13);
+  }
+
   public subscribe(listener: AudioListener): () => void {
     this.listeners.add(listener);
     listener(this.getSettings());
