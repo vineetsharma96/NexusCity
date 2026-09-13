@@ -3,12 +3,15 @@ import * as THREE from 'three';
 import { ChunkManager, ChunkInfo, ChunkLOD } from '../world/ChunkManager';
 import { ProceduralChunkGenerator, StreamedChunkData, StreamedBuildingDef } from './ProceduralChunkGenerator';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
+import { ProceduralTextures } from '../core/ProceduralTextures';
+import { WeatherSystem } from '../world/WeatherSystem';
 
 // Sub-component for individual building rendering by LOD
 const StreamedBuilding: React.FC<{
   building: StreamedBuildingDef;
   lod: ChunkLOD;
-}> = React.memo(({ building, lod }) => {
+  claddingNormal: THREE.CanvasTexture;
+}> = React.memo(({ building, lod, claddingNormal }) => {
   const { position, size, color, accentColor, emissiveColor, tiers, antenna } = building;
 
   if (lod === 'LOW') {
@@ -35,6 +38,8 @@ const StreamedBuilding: React.FC<{
             <boxGeometry args={[tier.size.x, tier.size.y, tier.size.z]} />
             <meshStandardMaterial
               color={color}
+              normalMap={lod === 'HIGH' ? claddingNormal : undefined}
+              normalScale={new THREE.Vector2(0.5, 0.5)}
               roughness={0.4}
               metalness={0.7}
             />
@@ -102,7 +107,10 @@ const StreamedBuilding: React.FC<{
 // Sub-component for individual chunk
 const StreamedChunkView: React.FC<{
   chunkInfo: ChunkInfo;
-}> = React.memo(({ chunkInfo }) => {
+  wetnessFactor: number;
+  asphaltNormal: THREE.CanvasTexture;
+  claddingNormal: THREE.CanvasTexture;
+}> = React.memo(({ chunkInfo, wetnessFactor, asphaltNormal, claddingNormal }) => {
   const data: StreamedChunkData = useMemo(() => {
     return ProceduralChunkGenerator.getChunkData(chunkInfo.cx, chunkInfo.cz);
   }, [chunkInfo.cx, chunkInfo.cz]);
@@ -125,9 +133,14 @@ const StreamedChunkView: React.FC<{
     return null;
   }
 
+  const roadRoughness = THREE.MathUtils.lerp(0.65, 0.12, wetnessFactor);
+  const roadMetalness = THREE.MathUtils.lerp(0.4, 0.85, wetnessFactor);
+  const sidewalkRoughness = THREE.MathUtils.lerp(0.7, 0.22, wetnessFactor);
+  const sidewalkMetalness = THREE.MathUtils.lerp(0.2, 0.55, wetnessFactor);
+
   return (
     <group name={`Chunk_${data.key}_LOD_${chunkInfo.lod}`}>
-      {/* 1. Roads (HIGH and MEDIUM LOD) */}
+      {/* 1. Roads (HIGH and MEDIUM LOD) with PBR normal and wetness response */}
       {chunkInfo.lod !== 'LOW' &&
         data.roads.map((road, rIdx) => (
           <mesh
@@ -139,8 +152,11 @@ const StreamedChunkView: React.FC<{
             <boxGeometry args={[road.size.x, road.size.y, road.size.z]} />
             <meshStandardMaterial
               color="#0a0f1d"
-              roughness={0.65}
-              metalness={0.4}
+              normalMap={chunkInfo.lod === 'HIGH' ? asphaltNormal : undefined}
+              normalScale={new THREE.Vector2(0.6, 0.6)}
+              roughness={roadRoughness}
+              metalness={roadMetalness}
+              envMapIntensity={wetnessFactor > 0.1 ? 1.4 : 0.8}
             />
           </mesh>
         ))}
@@ -152,8 +168,10 @@ const StreamedChunkView: React.FC<{
             <boxGeometry args={[sw.size.x, sw.size.y, sw.size.z]} />
             <meshStandardMaterial
               color="#131b2e"
-              roughness={0.7}
-              metalness={0.2}
+              normalMap={asphaltNormal}
+              normalScale={new THREE.Vector2(0.3, 0.3)}
+              roughness={sidewalkRoughness}
+              metalness={sidewalkMetalness}
             />
           </mesh>
         ))}
@@ -164,6 +182,7 @@ const StreamedChunkView: React.FC<{
           key={bldg.id}
           building={bldg}
           lod={chunkInfo.lod}
+          claddingNormal={claddingNormal}
         />
       ))}
     </group>
@@ -177,10 +196,18 @@ export const StreamedCityChunks: React.FC = () => {
       .filter((c) => Math.abs(c.cx) > 1 || Math.abs(c.cz) > 1);
   });
 
+  const [weatherState, setWeatherState] = useState(() =>
+    WeatherSystem.getInstance().getState()
+  );
+
+  const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
+  const claddingNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
+
   const prevKeysRef = useRef<string>('');
 
   useEffect(() => {
-    const unsub = ChunkManager.getInstance().subscribe((state) => {
+    const unsubWeather = WeatherSystem.getInstance().subscribe(setWeatherState);
+    const unsubChunks = ChunkManager.getInstance().subscribe((state) => {
       // Filter out central 3x3 core (handled by CityDistrict) and unloaded chunks
       const active = state.chunks.filter(
         (c) => c.lod !== 'UNLOADED' && (Math.abs(c.cx) > 1 || Math.abs(c.cz) > 1)
@@ -195,7 +222,8 @@ export const StreamedCityChunks: React.FC = () => {
     });
 
     return () => {
-      unsub();
+      unsubWeather();
+      unsubChunks();
       // Clean up all chunk collision boxes when unmounted
       const allActive = ChunkManager.getInstance().getActiveChunks();
       for (const c of allActive) {
@@ -207,7 +235,13 @@ export const StreamedCityChunks: React.FC = () => {
   return (
     <group name="StreamedCityChunksLayer">
       {activeChunks.map((chunk) => (
-        <StreamedChunkView key={chunk.key} chunkInfo={chunk} />
+        <StreamedChunkView
+          key={chunk.key}
+          chunkInfo={chunk}
+          wetnessFactor={weatherState.wetnessFactor}
+          asphaltNormal={asphaltNormal}
+          claddingNormal={claddingNormal}
+        />
       ))}
     </group>
   );

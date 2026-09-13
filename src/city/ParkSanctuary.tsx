@@ -2,6 +2,7 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
+import { WeatherSystem } from '../world/WeatherSystem';
 
 interface ParkSanctuaryProps {
   position?: [number, number, number];
@@ -58,6 +59,7 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
       uDeepColor: { value: new THREE.Color('#022c22') },
       uShallowColor: { value: new THREE.Color('#065f46') },
       uHighlightColor: { value: new THREE.Color('#00f0ff') },
+      uRainIntensity: { value: 0 },
     }),
     []
   );
@@ -86,6 +88,7 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
     uniform vec3 uDeepColor;
     uniform vec3 uShallowColor;
     uniform vec3 uHighlightColor;
+    uniform float uRainIntensity;
     varying vec2 vUv;
     varying vec3 vWorldPosition;
 
@@ -95,6 +98,11 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
       float ripple1 = sin(p.x * 2.0 + uTime * 2.2 + cos(p.y * 1.5));
       float ripple2 = cos(p.y * 2.5 - uTime * 1.8 + sin(p.x * 1.8));
       float caustic = pow(max(0.0, (ripple1 + ripple2) * 0.5), 3.0);
+
+      // Raindrop surface perturbation
+      vec2 rainP = vUv * 48.0;
+      float rainDisturb = sin(rainP.x * 3.2 + uTime * 8.0) * cos(rainP.y * 3.2 + uTime * 9.5);
+      caustic += pow(max(0.0, rainDisturb), 2.0) * uRainIntensity * 0.55;
 
       // Distance from center of pond for shoreline gradient
       float dist = length(vUv - 0.5) * 2.0;
@@ -112,6 +120,8 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
   useFrame(({ clock }) => {
     if (waterMatRef.current) {
       waterMatRef.current.uniforms.uTime.value = clock.getElapsedTime();
+      const wState = WeatherSystem.getInstance().getState();
+      waterMatRef.current.uniforms.uRainIntensity.value = wState.rainIntensity;
     }
   });
 

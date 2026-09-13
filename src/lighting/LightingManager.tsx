@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { QualitySettings } from '../rendering/QualityManager';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
+import { CelestialVolumetricRays } from './CelestialVolumetricRays';
 
 interface LightingManagerProps {
   quality: QualitySettings;
@@ -258,6 +259,9 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
 
       {/* Ambient fill light */}
       <ambientLight ref={ambientLightRef} intensity={lighting.ambientIntensity} color="#182a4d" />
+
+      {/* Celestial Volumetric Light Rays (God Rays / Moonbeams) */}
+      <CelestialVolumetricRays quality={quality} playerPosRef={playerPosRef} />
     </>
   );
 };

@@ -46,6 +46,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const sidewalkTex = useMemo(() => RoadGenerator.getSidewalkTexture(), []);
   const facadeTex = useMemo(() => ProceduralTextures.getBuildingFacadeTexture(0.65), []);
   const plazaTex = useMemo(() => ProceduralTextures.getPlazaGridTexture(), []);
+  const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
+  const puddleRoughness = useMemo(() => ProceduralTextures.getWetPuddleRoughnessMap(), []);
+  const claddingNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
 
   return (
     <group name="CityDistrictCentral">
@@ -60,12 +63,14 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         <planeGeometry args={[28, 28]} />
         <meshStandardMaterial
           map={plazaTex}
+          normalMap={asphaltNormal}
+          normalScale={new THREE.Vector2(0.4, 0.4)}
           roughness={sidewalkRoughness * 0.8}
           metalness={sidewalkMetalness}
         />
       </mesh>
 
-      {/* 3. Road Avenues */}
+      {/* 3. Road Avenues with Dynamic Wetness & Normal Mapping */}
       {cityData.avenues.map((ave, idx) => (
         <mesh
           key={`ave-${idx}`}
@@ -76,8 +81,12 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
           <boxGeometry args={[ave.size.x, ave.size.y, ave.size.z]} />
           <meshStandardMaterial
             map={asphaltTex}
+            normalMap={asphaltNormal}
+            normalScale={new THREE.Vector2(0.7, 0.7)}
+            roughnessMap={weatherState.wetnessFactor > 0.05 ? puddleRoughness : undefined}
             roughness={roadRoughness}
             metalness={roadMetalness}
+            envMapIntensity={weatherState.wetnessFactor > 0.05 ? 1.4 : 0.8}
           />
         </mesh>
       ))}
@@ -88,13 +97,15 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
           <boxGeometry args={[sw.size.x, sw.size.y, sw.size.z]} />
           <meshStandardMaterial
             map={sidewalkTex}
+            normalMap={asphaltNormal}
+            normalScale={new THREE.Vector2(0.3, 0.3)}
             roughness={sidewalkRoughness}
             metalness={sidewalkMetalness}
           />
         </mesh>
       ))}
 
-      {/* 5. Procedural Buildings */}
+      {/* 5. Procedural Buildings with Cladding Normals */}
       {cityData.buildings.map((bldg) => (
         <group key={bldg.id} position={bldg.position}>
           {/* Tiers / Main Building Volumes */}
@@ -108,6 +119,8 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
               <boxGeometry args={[tier.size.x, tier.size.y, tier.size.z]} />
               <meshStandardMaterial
                 map={facadeTex}
+                normalMap={claddingNormal}
+                normalScale={new THREE.Vector2(0.6, 0.6)}
                 roughness={0.35}
                 metalness={0.8}
               />

@@ -1,7 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { KinematicState } from './KinematicController';
+import { WeatherSystem } from '../world/WeatherSystem';
+import { ProceduralTextures } from '../core/ProceduralTextures';
 
 interface ProceduralProtagonistProps {
   state: KinematicState;
@@ -29,6 +31,18 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
 
   // Continuous animation cycle timer
   const animTime = useRef(0);
+
+  // Weather wetness subscription
+  const [weatherState, setWeatherState] = useState(() =>
+    WeatherSystem.getInstance().getState()
+  );
+  useEffect(() => {
+    return WeatherSystem.getInstance().subscribe(setWeatherState);
+  }, []);
+
+  const armorNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
+  const wetRoughness = THREE.MathUtils.lerp(0.28, 0.06, weatherState.wetnessFactor);
+  const wetMetalness = THREE.MathUtils.lerp(0.8, 0.95, weatherState.wetnessFactor);
 
   useFrame((_, delta) => {
     if (!rootGroupRef.current) return;
@@ -168,7 +182,7 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
         {/* ================= HIPS / PELVIS & TACTICAL BELT ================= */}
         <mesh position={[0, 0, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.36, 0.16, 0.24]} />
-          <meshStandardMaterial color="#0c1424" metalness={0.85} roughness={0.3} />
+          <meshStandardMaterial color="#0c1424" metalness={wetMetalness} roughness={wetRoughness} />
         </mesh>
         {/* Tactical Utility Belt */}
         <mesh position={[0, 0.08, 0]}>
@@ -198,7 +212,13 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
           {/* Main armored chestplate */}
           <mesh castShadow receiveShadow>
             <boxGeometry args={[0.44, 0.42, 0.26]} />
-            <meshStandardMaterial color="#0d182e" metalness={0.8} roughness={0.25} />
+            <meshStandardMaterial
+              color="#0d182e"
+              normalMap={armorNormal}
+              normalScale={new THREE.Vector2(0.35, 0.35)}
+              metalness={wetMetalness}
+              roughness={wetRoughness}
+            />
           </mesh>
           {/* Core Arc Reactor (Chest) */}
           <mesh position={[0, 0.05, 0.14]}>
@@ -228,7 +248,13 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
           {/* Heavy Armored Shoulder Pauldrons */}
           <mesh position={[-0.26, 0.18, 0]} castShadow>
             <boxGeometry args={[0.14, 0.1, 0.24]} />
-            <meshStandardMaterial color="#111f38" metalness={0.9} roughness={0.2} />
+            <meshStandardMaterial
+              color="#111f38"
+              normalMap={armorNormal}
+              normalScale={new THREE.Vector2(0.25, 0.25)}
+              metalness={wetMetalness}
+              roughness={wetRoughness}
+            />
           </mesh>
           <mesh position={[-0.26, 0.24, 0]}>
             <boxGeometry args={[0.08, 0.02, 0.18]} />
@@ -236,7 +262,13 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
           </mesh>
           <mesh position={[0.26, 0.18, 0]} castShadow>
             <boxGeometry args={[0.14, 0.1, 0.24]} />
-            <meshStandardMaterial color="#111f38" metalness={0.9} roughness={0.2} />
+            <meshStandardMaterial
+              color="#111f38"
+              normalMap={armorNormal}
+              normalScale={new THREE.Vector2(0.25, 0.25)}
+              metalness={wetMetalness}
+              roughness={wetRoughness}
+            />
           </mesh>
           <mesh position={[0.26, 0.24, 0]}>
             <boxGeometry args={[0.08, 0.02, 0.18]} />
