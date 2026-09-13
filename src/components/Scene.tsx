@@ -21,6 +21,7 @@ import { InputManager } from '../player/InputManager';
 import { NaturalClouds } from '../environment/NaturalClouds';
 import { DirtParticles } from '../city/DirtParticles';
 import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
+import { AudioManager } from '../audio/AudioManager';
 
 // Inner component to hook into R3F render loop for telemetry and dynamic updates
 const SceneFrameLoop: React.FC = () => {
@@ -50,7 +51,10 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
 
   useEffect(() => {
     const unsubQ = QualityManager.subscribe(setQuality);
-    const unsubInt = InteriorManager.getInstance().subscribe(setInteriorState);
+    const unsubInt = InteriorManager.getInstance().subscribe((state) => {
+      setInteriorState(state);
+      AudioManager.getInstance().setInteriorMode(state.current !== 'NONE');
+    });
     return () => {
       unsubQ();
       unsubInt();

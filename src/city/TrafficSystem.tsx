@@ -154,6 +154,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
   const aerialTrailGeo = useMemo(() => new THREE.CylinderGeometry(0.15, 0.6, 3.5, 6), []);
 
   const lastHornTimeRef = useRef(0);
+  const lastFlybyTimeRef = useRef(0);
+  const lastBrakeSoundTimeRef = useRef(0);
 
   // Update loop
   useFrame((_, delta) => {
@@ -264,6 +266,23 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
       // Integrate motion
       v.position.addScaledVector(v.velocity, delta);
+
+      // Spatial hover flyby and dynamic brake squeal audio triggers
+      if (pPos) {
+        const distToPlayer = v.position.distanceTo(pPos);
+        // Spatial Hover Flyby whoosh when vehicle rushes past player within 15m
+        if (distToPlayer < 15.0 && v.speed > 8.0 && now - lastFlybyTimeRef.current > 1600) {
+          lastFlybyTimeRef.current = now;
+          const pan = THREE.MathUtils.clamp((v.position.x - pPos.x) / 8, -1, 1);
+          AudioManager.getInstance().playHoverFlyby(pan, v.speed / 15);
+        }
+
+        // Brake squeal sound when a vehicle brakes hard within hearing distance (24m)
+        if (v.isBraking && v.speed > 7.0 && distToPlayer < 24.0 && now - lastBrakeSoundTimeRef.current > 2200) {
+          lastBrakeSoundTimeRef.current = now;
+          AudioManager.getInstance().playBrakeSqueal();
+        }
+      }
 
       // Wrap boundaries along active axis
       if (v.axis === 'z') {

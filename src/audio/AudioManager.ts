@@ -20,6 +20,8 @@ export class AudioManager {
   private weatherGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
 
+  private interiorFilter: BiquadFilterNode | null = null;
+
   // Ambient synth nodes
   private currentDistrictName: string = '';
   private ambientOsc1: OscillatorNode | null = null;
@@ -78,15 +80,21 @@ export class AudioManager {
       this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVolume, this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
 
+      // Interior Acoustic Muffle Filter (lowpass that cuts high frequencies when indoors)
+      this.interiorFilter = this.ctx.createBiquadFilter();
+      this.interiorFilter.type = 'lowpass';
+      this.interiorFilter.frequency.setValueAtTime(20000, this.ctx.currentTime);
+      this.interiorFilter.connect(this.masterGain);
+
       // Ambient Sub-bus
       this.ambientGain = this.ctx.createGain();
       this.ambientGain.gain.setValueAtTime(this.ambientVolume, this.ctx.currentTime);
-      this.ambientGain.connect(this.masterGain);
+      this.ambientGain.connect(this.interiorFilter);
 
       // Weather Sub-bus
       this.weatherGain = this.ctx.createGain();
       this.weatherGain.gain.setValueAtTime(0.7, this.ctx.currentTime);
-      this.weatherGain.connect(this.masterGain);
+      this.weatherGain.connect(this.interiorFilter);
 
       // SFX Sub-bus
       this.sfxGain = this.ctx.createGain();
@@ -107,6 +115,12 @@ export class AudioManager {
     } catch (err) {
       console.warn('AudioContext initialization failed:', err);
     }
+  }
+
+  public setInteriorMode(isInside: boolean): void {
+    if (!this.ctx || !this.interiorFilter) return;
+    const targetFreq = isInside ? 360 : 20000;
+    this.interiorFilter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.15);
   }
 
   public ensureContext(): void {
@@ -193,7 +207,7 @@ export class AudioManager {
   }
 
   // ==========================================
-  // AMBIENT DISTRICT SYNTHESIZERS
+  // AMBIENT DISTRICT SYNTHESIZERS (6 DISTINCT DISTRICTS)
   // ==========================================
 
   private startDistrictAmbient(districtName: string): void {
@@ -214,11 +228,13 @@ export class AudioManager {
     this.ambientFilter = this.ctx.createBiquadFilter();
     this.ambientFilter.connect(this.ambientGain);
 
-    if (districtName.includes('Sky')) {
-      // Sky District: High-altitude wind whistle
+    const dUpper = districtName.toUpperCase();
+
+    if (dUpper.includes('SKY')) {
+      // 1. Sky District: High-altitude wind whistle + crystalline harmonics
       this.ambientFilter.type = 'bandpass';
-      this.ambientFilter.frequency.setValueAtTime(450, now);
-      this.ambientFilter.Q.setValueAtTime(1.5, now);
+      this.ambientFilter.frequency.setValueAtTime(460, now);
+      this.ambientFilter.Q.setValueAtTime(1.8, now);
 
       const noiseBuf = this.createPinkNoiseBuffer(4);
       this.ambientNoiseNode = this.ctx.createBufferSource();
@@ -227,19 +243,18 @@ export class AudioManager {
       this.ambientNoiseNode.connect(this.ambientFilter);
       this.ambientNoiseNode.start();
 
-      // Sine shimmer
       this.ambientOsc1 = this.ctx.createOscillator();
       this.ambientOsc1.type = 'sine';
-      this.ambientOsc1.frequency.setValueAtTime(220, now);
+      this.ambientOsc1.frequency.setValueAtTime(330, now);
       const oscGain = this.ctx.createGain();
-      oscGain.gain.setValueAtTime(0.04, now);
+      oscGain.gain.setValueAtTime(0.045, now);
       this.ambientOsc1.connect(oscGain);
       oscGain.connect(this.ambientGain);
       this.ambientOsc1.start();
-    } else if (districtName.includes('Neural')) {
-      // Neural District: Resonant data-center server hum
+    } else if (dUpper.includes('NEURAL')) {
+      // 2. Neural District: Resonant data-center compute hum & server cooling
       this.ambientFilter.type = 'lowpass';
-      this.ambientFilter.frequency.setValueAtTime(320, now);
+      this.ambientFilter.frequency.setValueAtTime(340, now);
 
       this.ambientOsc1 = this.ctx.createOscillator();
       this.ambientOsc1.type = 'sawtooth';
@@ -250,7 +265,7 @@ export class AudioManager {
       this.ambientOsc2.frequency.setValueAtTime(176, now);
 
       const subGain = this.ctx.createGain();
-      subGain.gain.setValueAtTime(0.06, now);
+      subGain.gain.setValueAtTime(0.065, now);
 
       this.ambientOsc1.connect(this.ambientFilter);
       this.ambientOsc2.connect(this.ambientFilter);
@@ -259,8 +274,69 @@ export class AudioManager {
 
       this.ambientOsc1.start();
       this.ambientOsc2.start();
+    } else if (dUpper.includes('INDUSTRIAL') || dUpper.includes('REACTOR')) {
+      // 3. Industrial Reactor Zone: Heavy transformer hum & low machinery throb
+      this.ambientFilter.type = 'lowpass';
+      this.ambientFilter.frequency.setValueAtTime(140, now);
+
+      this.ambientOsc1 = this.ctx.createOscillator();
+      this.ambientOsc1.type = 'sawtooth';
+      this.ambientOsc1.frequency.setValueAtTime(46, now); // 46Hz heavy sub generator
+
+      this.ambientOsc2 = this.ctx.createOscillator();
+      this.ambientOsc2.type = 'square';
+      this.ambientOsc2.frequency.setValueAtTime(92, now); // 92Hz electrical hum
+
+      const indGain = this.ctx.createGain();
+      indGain.gain.setValueAtTime(0.09, now);
+
+      this.ambientOsc1.connect(this.ambientFilter);
+      this.ambientOsc2.connect(this.ambientFilter);
+      this.ambientFilter.connect(indGain);
+      indGain.connect(this.ambientGain);
+
+      this.ambientOsc1.start();
+      this.ambientOsc2.start();
+    } else if (dUpper.includes('OLD') || dUpper.includes('TOWN')) {
+      // 4. Old Cyber Town: Retro neon tube buzz & rain gutter reverberation
+      this.ambientFilter.type = 'bandpass';
+      this.ambientFilter.frequency.setValueAtTime(120, now);
+      this.ambientFilter.Q.setValueAtTime(4.0, now);
+
+      this.ambientOsc1 = this.ctx.createOscillator();
+      this.ambientOsc1.type = 'sawtooth';
+      this.ambientOsc1.frequency.setValueAtTime(60, now); // 60Hz mains transformer hum
+
+      const neonGain = this.ctx.createGain();
+      neonGain.gain.setValueAtTime(0.07, now);
+
+      this.ambientOsc1.connect(this.ambientFilter);
+      this.ambientFilter.connect(neonGain);
+      neonGain.connect(this.ambientGain);
+      this.ambientOsc1.start();
+    } else if (dUpper.includes('GREEN') || dUpper.includes('BIOSPHERE')) {
+      // 5. Biosphere Preserve: Tranquil organic canopy breeze & soft chimes
+      this.ambientFilter.type = 'bandpass';
+      this.ambientFilter.frequency.setValueAtTime(750, now);
+      this.ambientFilter.Q.setValueAtTime(0.9, now);
+
+      const noiseBuf = this.createPinkNoiseBuffer(4);
+      this.ambientNoiseNode = this.ctx.createBufferSource();
+      this.ambientNoiseNode.buffer = noiseBuf;
+      this.ambientNoiseNode.loop = true;
+      this.ambientNoiseNode.connect(this.ambientFilter);
+      this.ambientNoiseNode.start();
+
+      this.ambientOsc1 = this.ctx.createOscillator();
+      this.ambientOsc1.type = 'sine';
+      this.ambientOsc1.frequency.setValueAtTime(392, now); // G4 peaceful tone
+      const padGain = this.ctx.createGain();
+      padGain.gain.setValueAtTime(0.035, now);
+      this.ambientOsc1.connect(padGain);
+      padGain.connect(this.ambientGain);
+      this.ambientOsc1.start();
     } else {
-      // Central City & others: Low urban street traffic rumble
+      // 6. Central Metropolis (Default): Low urban street traffic rumble
       this.ambientFilter.type = 'lowpass';
       this.ambientFilter.frequency.setValueAtTime(160, now);
 
@@ -467,6 +543,77 @@ export class AudioManager {
     osc2.start(now);
     osc1.stop(now + 0.31);
     osc2.stop(now + 0.31);
+  }
+
+  public playHoverFlyby(pan: number = 0, speedFactor: number = 1.0): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const noise = this.ctx.createBufferSource();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+
+    noise.buffer = this.createNoiseBuffer(1);
+
+    filter.type = 'bandpass';
+    filter.Q.setValueAtTime(2.2, now);
+    filter.frequency.setValueAtTime(420 * speedFactor, now);
+    filter.frequency.exponentialRampToValueAtTime(180 * speedFactor, now + 0.55);
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(260 * speedFactor, now);
+    osc.frequency.exponentialRampToValueAtTime(130 * speedFactor, now + 0.55);
+
+    gain.gain.setValueAtTime(0.0, now);
+    gain.gain.linearRampToValueAtTime(0.12, now + 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    osc.connect(gain);
+
+    if (typeof this.ctx.createStereoPanner === 'function') {
+      const panner = this.ctx.createStereoPanner();
+      panner.pan.setValueAtTime(THREE.MathUtils.clamp(pan, -1, 1), now);
+      gain.connect(panner);
+      panner.connect(this.sfxGain);
+    } else {
+      gain.connect(this.sfxGain);
+    }
+
+    noise.start(now);
+    noise.stop(now + 0.56);
+    osc.start(now);
+    osc.stop(now + 0.56);
+  }
+
+  public playBrakeSqueal(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(820, now);
+    osc.frequency.exponentialRampToValueAtTime(340, now + 0.35);
+
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1200, now);
+    filter.Q.setValueAtTime(3.5, now);
+
+    gain.gain.setValueAtTime(0.0, now);
+    gain.gain.linearRampToValueAtTime(0.06, now + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(now);
+    osc.stop(now + 0.36);
   }
 
   public subscribe(listener: AudioListener): () => void {
