@@ -6,6 +6,8 @@ import { InputManager, InputState } from '../player/InputManager';
 import { MobileControls } from './MobileControls';
 import { DialogueBox } from './DialogueBox';
 import { Minimap } from './Minimap';
+import { CompassTape } from './CompassTape';
+import { WorldHUDMarkers } from './WorldHUDMarkers';
 import { CityMapModal } from './CityMapModal';
 import { AIAssistantModal } from './AIAssistantModal';
 import { CyberMenuModal } from './CyberMenuModal';
@@ -135,6 +137,13 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     };
   }, []);
 
+  // Trigger cyber discovery chime on new district detection
+  useEffect(() => {
+    if (chunkState.recentDiscovery) {
+      AudioManager.getInstance().playDiscoveryChime();
+    }
+  }, [chunkState.recentDiscovery?.name]);
+
   const handleQualityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     QualityManager.setPreset(e.target.value as QualityPreset);
   };
@@ -170,12 +179,15 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         />
       )}
 
+      {/* 360° Horizontal Compass Tape */}
+      <CompassTape playerPosRef={playerPosRef} />
+
       {/* District Discovery Notification Banner */}
       {chunkState.recentDiscovery && (
         <div
           style={{
             position: 'absolute',
-            top: 24,
+            top: 62,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 90,
@@ -662,6 +674,9 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
           </div>
         </div>
       )}
+
+      {/* Floating 3D World Landmark / Objective HUD Markers */}
+      <WorldHUDMarkers playerPosRef={playerPosRef} />
 
       {/* Navigation Minimap Widget */}
       <Minimap playerPosRef={playerPosRef} />

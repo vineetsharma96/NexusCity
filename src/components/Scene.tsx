@@ -25,11 +25,12 @@ import { AudioManager } from '../audio/AudioManager';
 
 // Inner component to hook into R3F render loop for telemetry and dynamic updates
 const SceneFrameLoop: React.FC = () => {
-  const { gl } = useThree();
+  const { gl, camera } = useThree();
   const perf = PerformanceMonitor.getInstance();
 
   useFrame(() => {
     perf.update(gl);
+    (window as any).__NEXUS_CAMERA__ = camera;
   });
 
   return null;

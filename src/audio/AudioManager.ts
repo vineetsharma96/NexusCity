@@ -616,6 +616,31 @@ export class AudioManager {
     osc.stop(now + 0.36);
   }
 
+  public playDiscoveryChime(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    const now = this.ctx.currentTime;
+
+    notes.forEach((freq, idx) => {
+      const startTime = now + idx * 0.08;
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, startTime);
+
+      gain.gain.setValueAtTime(0.09, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.45);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain!);
+
+      osc.start(startTime);
+      osc.stop(startTime + 0.46);
+    });
+  }
+
   public subscribe(listener: AudioListener): () => void {
     this.listeners.add(listener);
     listener(this.getSettings());
