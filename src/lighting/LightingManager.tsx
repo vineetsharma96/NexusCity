@@ -20,6 +20,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const fogRef = useRef<THREE.Fog>(null);
   const celestialOrbRef = useRef<THREE.Group>(null);
   const lightTargetRef = useRef<THREE.Object3D>(new THREE.Object3D());
+  const nightLightsGroupRef = useRef<THREE.Group>(null);
 
   const [lighting, setLighting] = useState<TimeLightingState>(() =>
     TimeSystem.getInstance().getState()
@@ -27,6 +28,8 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const [weather, setWeather] = useState<WeatherState>(() =>
     WeatherSystem.getInstance().getState()
   );
+
+  const sDist = quality.shadowDistance;
 
   useEffect(() => {
     scene.add(lightTargetRef.current);
@@ -38,6 +41,20 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       unsubWeather();
     };
   }, [scene]);
+
+  // Update shadow camera frustum and projection matrix on quality changes
+  useEffect(() => {
+    if (dirLightRef.current && dirLightRef.current.shadow) {
+      const cam = dirLightRef.current.shadow.camera;
+      cam.left = -sDist;
+      cam.right = sDist;
+      cam.top = sDist;
+      cam.bottom = -sDist;
+      cam.near = 1.0;
+      cam.far = Math.min(900, sDist * 3.5);
+      cam.updateProjectionMatrix();
+    }
+  }, [sDist, quality.shadowMapSize]);
 
   useFrame((_, delta) => {
     // Advance continuous time system, weather simulation, and wind dynamics
@@ -157,17 +174,21 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       ambientLightRef.current.intensity =
         ((lighting.isNight ? 0.75 : lighting.ambientIntensity) * ambDim + weather.lightningIntensity * 1.5) * giScale;
     }
+
+    // 7. Smoothly glide night lights group across chunk boundaries
+    if (nightLightsGroupRef.current) {
+      const snapX = Math.round(pPos.x / 40) * 40;
+      const snapZ = Math.round(pPos.z / 40) * 40;
+      nightLightsGroupRef.current.position.x = THREE.MathUtils.lerp(nightLightsGroupRef.current.position.x, snapX, 0.15);
+      nightLightsGroupRef.current.position.z = THREE.MathUtils.lerp(nightLightsGroupRef.current.position.z, snapZ, 0.15);
+    }
   });
 
   // Calculate local streetlamp illumination points around player
   const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
   const isInteriorActive = pPos.y < -50;
-  const snapX = Math.round(pPos.x / 40) * 40;
-  const snapZ = Math.round(pPos.z / 40) * 40;
   const isNightTime = lighting.isNight || lighting.phase === 'DUSK' || lighting.phase === 'DAWN';
   const nightIntensity = lighting.isNight ? 2.4 : 1.4;
-
-  const sDist = quality.shadowDistance;
 
   return (
     <>
@@ -184,7 +205,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       {/* Primary directional celestial light (Sun or Moon) with Realtime Dynamic Shadows */}
       <directionalLight
         ref={dirLightRef}
-        position={[lighting.celestialPosition.x, lighting.celestialPosition.y, lighting.celestialPosition.z]}
+        position={[pPos.x + lighting.celestialPosition.x, lighting.celestialPosition.y, pPos.z + lighting.celestialPosition.z]}
         intensity={lighting.celestialIntensity}
         color={lighting.celestialColor}
         castShadow={!isInteriorActive && quality.shadows}
@@ -199,12 +220,12 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         shadow-bias={-0.0004}
       />
 
-      {/* Night Streetlamp & Neon Ground Bounce Arrays (dynamically gated by maxLights) */}
+      {/* Night Streetlamp & Neon Ground Bounce Arrays (smoothly lerped group) */}
       {!isInteriorActive && isNightTime && quality.nightLightsEnabled && quality.maxLights >= 4 && (
-        <group>
+        <group ref={nightLightsGroupRef}>
           {/* Central road wash light */}
           <pointLight
-            position={[snapX, 8.5, snapZ]}
+            position={[0, 8.5, 0]}
             intensity={nightIntensity * 1.2}
             distance={55}
             color="#ffe2a8"
@@ -215,14 +236,14 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
           {quality.maxLights >= 6 && (
             <>
               <pointLight
-                position={[snapX - 16, 7.5, snapZ - 16]}
+                position={[-16, 7.5, -16]}
                 intensity={nightIntensity}
                 distance={45}
                 color="#ffbe6b"
                 decay={2}
               />
               <pointLight
-                position={[snapX + 16, 7.5, snapZ + 16]}
+                position={[16, 7.5, 16]}
                 intensity={nightIntensity}
                 distance={45}
                 color="#ffbe6b"
@@ -235,14 +256,14 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
           {quality.maxLights >= 10 && (
             <>
               <pointLight
-                position={[snapX - 16, 7.5, snapZ + 16]}
+                position={[-16, 7.5, 16]}
                 intensity={nightIntensity * 0.85}
                 distance={45}
                 color="#00f0ff"
                 decay={2}
               />
               <pointLight
-                position={[snapX + 16, 7.5, snapZ - 16]}
+                position={[16, 7.5, -16]}
                 intensity={nightIntensity * 0.85}
                 distance={45}
                 color="#ff007f"
