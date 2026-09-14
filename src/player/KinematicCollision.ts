@@ -43,6 +43,13 @@ export class KinematicCollisionSolver {
     });
   }
 
+  public static removeBox(center: THREE.Vector3, tolerance: number = 0.5): void {
+    this.boxes = this.boxes.filter((b) => {
+      const boxCenter = b.min.clone().add(b.max).multiplyScalar(0.5);
+      return boxCenter.distanceTo(center) > tolerance;
+    });
+  }
+
   public static addRamp(
     center: THREE.Vector3,
     size: THREE.Vector3,

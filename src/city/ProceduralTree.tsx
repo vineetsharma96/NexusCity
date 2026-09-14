@@ -7,20 +7,30 @@ import { KinematicCollisionSolver } from '../player/KinematicCollision';
 
 interface ProceduralTreeProps {
   tree: TreeDef;
+  registerGlobalCollider?: boolean;
 }
 
-export const ProceduralTree: React.FC<ProceduralTreeProps> = ({ tree }) => {
+export const ProceduralTree: React.FC<ProceduralTreeProps> = ({
+  tree,
+  registerGlobalCollider = false,
+}) => {
   const canopyGroupRef = useRef<THREE.Group>(null);
   const windSystem = WindSystem.getInstance();
 
-  // Register physical collision for tree trunk
+  // Register physical collision for tree trunk if not handled by chunk collider system
   useEffect(() => {
+    if (!registerGlobalCollider) return;
+
     const halfRadius = Math.max(0.35, tree.trunkRadius * 1.2);
-    KinematicCollisionSolver.addBox(
-      tree.position.clone().add(new THREE.Vector3(0, tree.trunkHeight / 2, 0)),
-      new THREE.Vector3(halfRadius * 2, tree.trunkHeight, halfRadius * 2)
-    );
-  }, [tree.position, tree.trunkHeight, tree.trunkRadius]);
+    const center = tree.position.clone().add(new THREE.Vector3(0, tree.trunkHeight / 2, 0));
+    const size = new THREE.Vector3(halfRadius * 2, tree.trunkHeight, halfRadius * 2);
+
+    KinematicCollisionSolver.addBox(center, size);
+
+    return () => {
+      KinematicCollisionSolver.removeBox(center);
+    };
+  }, [tree.position, tree.trunkHeight, tree.trunkRadius, registerGlobalCollider]);
 
   // Procedural wind sway animation on the tree foliage and upper canopy
   useFrame(({ clock }) => {

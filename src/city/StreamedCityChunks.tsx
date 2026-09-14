@@ -1,7 +1,13 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { ChunkManager, ChunkInfo, ChunkLOD } from '../world/ChunkManager';
-import { ProceduralChunkGenerator, StreamedChunkData, StreamedBuildingDef } from './ProceduralChunkGenerator';
+import {
+  ProceduralChunkGenerator,
+  StreamedChunkData,
+  StreamedBuildingDef,
+  StreetFurnitureDef,
+  BiomePropDef,
+} from './ProceduralChunkGenerator';
 import { ProceduralTree } from './ProceduralTree';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
 import { ProceduralTextures } from '../core/ProceduralTextures';
@@ -127,6 +133,268 @@ const StreamedBuilding: React.FC<{
       )}
     </group>
   );
+});
+
+// Sub-component for individual street furniture
+const StreamedFurniture: React.FC<{ furniture: StreetFurnitureDef }> = React.memo(({ furniture }) => {
+  const { type, position, rotationY, accentColor = '#00f0ff', emissiveColor = '#00f0ff' } = furniture;
+
+  switch (type) {
+    case 'STREETLIGHT':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          {/* Base */}
+          <mesh position={[0, 0.3, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[0.4, 0.6, 0.4]}>
+            <meshStandardMaterial color="#0b1322" metalness={0.9} />
+          </mesh>
+          {/* Pole */}
+          <mesh position={[0, 3.2, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[0.15, 5.8, 0.15]}>
+            <meshStandardMaterial color="#1e293b" metalness={0.85} />
+          </mesh>
+          {/* Arm */}
+          <mesh
+            position={[0.7, 6.0, 0]}
+            rotation={[0, 0, -Math.PI / 4]}
+            geometry={SHARED_UNIT_CYLINDER}
+            scale={[0.12, 1.6, 0.12]}
+          >
+            <meshStandardMaterial color="#1e293b" metalness={0.85} />
+          </mesh>
+          {/* Luminaire Head */}
+          <mesh position={[1.3, 6.4, 0]} geometry={SHARED_UNIT_BOX} scale={[0.8, 0.15, 0.3]}>
+            <meshStandardMaterial color="#0f172a" metalness={0.9} />
+          </mesh>
+          {/* Glowing Diffuser */}
+          <mesh position={[1.3, 6.32, 0]} geometry={SHARED_UNIT_BOX} scale={[0.65, 0.05, 0.22]}>
+            <meshBasicMaterial color={emissiveColor} />
+          </mesh>
+        </group>
+      );
+
+    case 'BENCH':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          {/* Bench seat */}
+          <mesh position={[0, 0.42, 0]} geometry={SHARED_UNIT_BOX} scale={[2.0, 0.08, 0.6]} castShadow receiveShadow>
+            <meshStandardMaterial color="#78350f" roughness={0.6} />
+          </mesh>
+          {/* Backrest */}
+          <mesh position={[0, 0.72, -0.26]} geometry={SHARED_UNIT_BOX} scale={[2.0, 0.45, 0.06]} castShadow>
+            <meshStandardMaterial color="#78350f" roughness={0.6} />
+          </mesh>
+          {/* Legs */}
+          {[-0.85, 0.85].map((lx, idx) => (
+            <mesh key={idx} position={[lx, 0.2, 0]} geometry={SHARED_UNIT_BOX} scale={[0.08, 0.4, 0.5]}>
+              <meshStandardMaterial color="#0f172a" metalness={0.9} />
+            </mesh>
+          ))}
+          {/* Emissive cyber neon trim */}
+          <mesh position={[0, 0.38, 0.31]} geometry={SHARED_UNIT_BOX} scale={[1.9, 0.03, 0.03]}>
+            <meshBasicMaterial color={emissiveColor} />
+          </mesh>
+        </group>
+      );
+
+    case 'BUS_STOP':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          {/* Canopy Roof */}
+          <mesh position={[0, 2.7, 0]} geometry={SHARED_UNIT_BOX} scale={[4.4, 0.12, 2.2]} castShadow>
+            <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
+          </mesh>
+          {/* Rear Glass Panel */}
+          <mesh position={[0, 1.35, -1.0]} geometry={SHARED_UNIT_BOX} scale={[4.0, 2.5, 0.06]}>
+            <meshStandardMaterial color="#082f49" transparent opacity={0.65} metalness={0.9} roughness={0.1} />
+          </mesh>
+          {/* Side Glass Wing */}
+          <mesh position={[-2.0, 1.35, 0]} geometry={SHARED_UNIT_BOX} scale={[0.06, 2.5, 2.0]}>
+            <meshStandardMaterial color="#082f49" transparent opacity={0.65} metalness={0.9} roughness={0.1} />
+          </mesh>
+          {/* Steel Corner Pillars */}
+          {[-1.95, 1.95].map((px, idx) => (
+            <mesh key={idx} position={[px, 1.35, -0.95]} geometry={SHARED_UNIT_CYLINDER} scale={[0.1, 2.7, 0.1]}>
+              <meshStandardMaterial color="#334155" metalness={0.95} />
+            </mesh>
+          ))}
+          {/* Transit Map / Ad Display */}
+          <mesh position={[1.0, 1.4, -0.96]} geometry={SHARED_UNIT_BOX} scale={[1.4, 1.6, 0.02]}>
+            <meshBasicMaterial color={emissiveColor} />
+          </mesh>
+          {/* Waiting Bench */}
+          <mesh position={[-0.6, 0.42, -0.6]} geometry={SHARED_UNIT_BOX} scale={[2.2, 0.08, 0.45]}>
+            <meshStandardMaterial color="#1e293b" metalness={0.8} />
+          </mesh>
+        </group>
+      );
+
+    case 'TRASH_RECEPTACLE':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh position={[0, 0.45, 0]} geometry={SHARED_UNIT_BOX} scale={[0.8, 0.9, 0.45]} castShadow>
+            <meshStandardMaterial color="#1e293b" metalness={0.8} roughness={0.3} />
+          </mesh>
+          {/* Sorting Indicators */}
+          <mesh position={[-0.2, 0.7, 0.23]} geometry={SHARED_UNIT_BOX} scale={[0.25, 0.08, 0.02]}>
+            <meshBasicMaterial color="#38bdf8" />
+          </mesh>
+          <mesh position={[0.2, 0.7, 0.23]} geometry={SHARED_UNIT_BOX} scale={[0.25, 0.08, 0.02]}>
+            <meshBasicMaterial color="#10b981" />
+          </mesh>
+        </group>
+      );
+
+    case 'BOLLARD':
+      return (
+        <group position={position}>
+          <mesh position={[0, 0.45, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[0.22, 0.9, 0.22]} castShadow>
+            <meshStandardMaterial color="#0f172a" metalness={0.9} />
+          </mesh>
+          <mesh position={[0, 0.78, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[0.24, 0.08, 0.24]}>
+            <meshBasicMaterial color={emissiveColor} />
+          </mesh>
+        </group>
+      );
+
+    case 'CYBER_KIOSK':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          {/* Pillar Chassis */}
+          <mesh position={[0, 1.1, 0]} geometry={SHARED_UNIT_BOX} scale={[0.8, 2.2, 0.4]} castShadow>
+            <meshStandardMaterial color="#020617" metalness={0.95} roughness={0.15} />
+          </mesh>
+          {/* Glowing Top Cap */}
+          <mesh position={[0, 2.22, 0]} geometry={SHARED_UNIT_BOX} scale={[0.85, 0.06, 0.45]}>
+            <meshBasicMaterial color={accentColor} />
+          </mesh>
+          {/* Holographic Touch Screen Visor */}
+          <mesh
+            position={[0, 1.45, 0.22]}
+            rotation={[-0.15, 0, 0]}
+            geometry={SHARED_UNIT_BOX}
+            scale={[0.65, 0.85, 0.04]}
+          >
+            <meshBasicMaterial color={emissiveColor} />
+          </mesh>
+        </group>
+      );
+
+    default:
+      return null;
+  }
+});
+
+// Sub-component for individual district biome prop
+const StreamedBiomeProp: React.FC<{ prop: BiomePropDef; lod: ChunkLOD }> = React.memo(({ prop, lod }) => {
+  const { type, position, rotationY, size, color, emissiveColor } = prop;
+
+  switch (type) {
+    case 'STORAGE_TANK':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh
+            position={[0, size.y / 2, 0]}
+            geometry={SHARED_UNIT_CYLINDER}
+            scale={[size.x, size.y, size.z]}
+            castShadow={lod === 'HIGH'}
+          >
+            <meshStandardMaterial color={color} metalness={0.8} roughness={0.3} />
+          </mesh>
+          {lod === 'HIGH' && emissiveColor && (
+            <mesh position={[0, size.y * 0.75, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[size.x + 0.1, 0.4, size.z + 0.1]}>
+              <meshBasicMaterial color={emissiveColor} />
+            </mesh>
+          )}
+        </group>
+      );
+
+    case 'INDUSTRIAL_PIPE':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh
+            rotation={[0, 0, Math.PI / 2]}
+            geometry={SHARED_UNIT_CYLINDER}
+            scale={[size.y, size.x, size.z]}
+            castShadow={lod === 'HIGH'}
+          >
+            <meshStandardMaterial color={color} metalness={0.9} roughness={0.25} />
+          </mesh>
+        </group>
+      );
+
+    case 'STEAM_VENT':
+      return (
+        <group position={position}>
+          <mesh geometry={SHARED_UNIT_BOX} scale={[size.x, size.y, size.z]}>
+            <meshStandardMaterial color={color} metalness={0.9} roughness={0.2} />
+          </mesh>
+          {emissiveColor && (
+            <mesh position={[0, 0.05, 0]} geometry={SHARED_UNIT_BOX} scale={[size.x * 0.8, 0.02, size.z * 0.8]}>
+              <meshBasicMaterial color={emissiveColor} />
+            </mesh>
+          )}
+        </group>
+      );
+
+    case 'CONDUIT_LINE':
+      return (
+        <mesh position={position} rotation={[0, rotationY, 0]} geometry={SHARED_UNIT_BOX} scale={[size.x, size.y, size.z]}>
+          <meshBasicMaterial color={emissiveColor || color} />
+        </mesh>
+      );
+
+    case 'SERVER_NODE':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh position={[0, size.y / 2, 0]} geometry={SHARED_UNIT_BOX} scale={[size.x, size.y, size.z]} castShadow={lod === 'HIGH'}>
+            <meshStandardMaterial color={color} metalness={0.9} roughness={0.2} />
+          </mesh>
+          {lod === 'HIGH' && emissiveColor && (
+            <>
+              <mesh position={[0, size.y * 0.7, size.z / 2 + 0.02]} geometry={SHARED_UNIT_BOX} scale={[size.x * 0.7, 0.15, 0.02]}>
+                <meshBasicMaterial color={emissiveColor} />
+              </mesh>
+              <mesh position={[0, size.y * 0.5, size.z / 2 + 0.02]} geometry={SHARED_UNIT_BOX} scale={[size.x * 0.7, 0.15, 0.02]}>
+                <meshBasicMaterial color={emissiveColor} />
+              </mesh>
+              <mesh position={[0, size.y * 0.3, size.z / 2 + 0.02]} geometry={SHARED_UNIT_BOX} scale={[size.x * 0.7, 0.15, 0.02]}>
+                <meshBasicMaterial color={emissiveColor} />
+              </mesh>
+            </>
+          )}
+        </group>
+      );
+
+    case 'PLANTER_VASE':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh position={[0, size.y / 2, 0]} geometry={SHARED_UNIT_BOX} scale={[size.x, size.y, size.z]} castShadow={lod === 'HIGH'}>
+            <meshStandardMaterial color={color} roughness={0.8} />
+          </mesh>
+          <mesh position={[0, size.y + 0.35, 0]} geometry={SHARED_SMALL_SPHERE} scale={[size.x * 2.2, 1.8, size.z * 2.2]}>
+            <meshStandardMaterial color="#059669" roughness={0.7} />
+          </mesh>
+        </group>
+      );
+
+    case 'HISTORIC_PILLAR':
+    case 'AERO_MAST':
+    case 'CITY_TOTEM':
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh position={[0, size.y / 2, 0]} geometry={SHARED_UNIT_BOX} scale={[size.x, size.y, size.z]} castShadow={lod === 'HIGH'}>
+            <meshStandardMaterial color={color} metalness={0.85} roughness={0.2} />
+          </mesh>
+          {emissiveColor && (
+            <mesh position={[0, size.y - 0.2, 0]} geometry={SHARED_UNIT_BOX} scale={[size.x + 0.06, 0.25, size.z + 0.06]}>
+              <meshBasicMaterial color={emissiveColor} />
+            </mesh>
+          )}
+        </group>
+      );
+
+    default:
+      return null;
+  }
 });
 
 // Sub-component for individual chunk
@@ -338,6 +606,18 @@ const StreamedChunkView: React.FC<{
               </mesh>
             )}
           </group>
+        ))}
+
+      {/* 7. Street Furniture (HIGH LOD only) */}
+      {chunkInfo.lod === 'HIGH' &&
+        data.furniture?.map((fur) => (
+          <StreamedFurniture key={fur.id} furniture={fur} />
+        ))}
+
+      {/* 8. District Biome Props (HIGH and MEDIUM LOD) */}
+      {chunkInfo.lod !== 'LOW' &&
+        data.biomeProps?.map((bp) => (
+          <StreamedBiomeProp key={bp.id} prop={bp} lod={chunkInfo.lod} />
         ))}
     </group>
   );

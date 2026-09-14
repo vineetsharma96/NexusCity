@@ -16,6 +16,45 @@ export interface StreamedBuildingDef {
   collisionBox: CollisionBox;
 }
 
+export type FurnitureType =
+  | 'STREETLIGHT'
+  | 'BENCH'
+  | 'BUS_STOP'
+  | 'TRASH_RECEPTACLE'
+  | 'BOLLARD'
+  | 'CYBER_KIOSK';
+
+export interface StreetFurnitureDef {
+  id: string;
+  type: FurnitureType;
+  position: THREE.Vector3;
+  rotationY: number;
+  scale?: number;
+  accentColor?: string;
+  emissiveColor?: string;
+}
+
+export type BiomePropType =
+  | 'INDUSTRIAL_PIPE'
+  | 'STORAGE_TANK'
+  | 'STEAM_VENT'
+  | 'CONDUIT_LINE'
+  | 'SERVER_NODE'
+  | 'PLANTER_VASE'
+  | 'HISTORIC_PILLAR'
+  | 'AERO_MAST'
+  | 'CITY_TOTEM';
+
+export interface BiomePropDef {
+  id: string;
+  type: BiomePropType;
+  position: THREE.Vector3;
+  rotationY: number;
+  size: THREE.Vector3;
+  color: string;
+  emissiveColor?: string;
+}
+
 export interface PocketParkDef {
   id: string;
   position: THREE.Vector3;
@@ -40,6 +79,8 @@ export interface StreamedChunkData {
   trees: TreeDef[];
   bushes: PlanterBushDef[];
   parks: PocketParkDef[];
+  furniture: StreetFurnitureDef[];
+  biomeProps: BiomePropDef[];
   collisionBoxes: CollisionBox[];
 }
 
@@ -85,6 +126,8 @@ export class ProceduralChunkGenerator {
         trees: [],
         bushes: [],
         parks,
+        furniture: [],
+        biomeProps: [],
         collisionBoxes,
       };
       this.cache.set(key, emptyChunk);
@@ -315,6 +358,338 @@ export class ProceduralChunkGenerator {
     // 3. Generate Sidewalk Trees & Vegetation
     const { trees, bushes } = VegetationGenerator.generateChunkTrees(cx, cz, district, globalSeed);
 
+    // Register tree trunk colliders
+    trees.forEach((t) => {
+      const r = Math.max(0.4, t.trunkRadius * 1.25);
+      collisionBoxes.push({
+        min: new THREE.Vector3(t.position.x - r, 0, t.position.z - r),
+        max: new THREE.Vector3(t.position.x + r, t.trunkHeight, t.position.z + r),
+      });
+    });
+
+    parks.forEach((p) => {
+      p.trees.forEach((t) => {
+        const r = Math.max(0.4, t.trunkRadius * 1.25);
+        collisionBoxes.push({
+          min: new THREE.Vector3(t.position.x - r, 0, t.position.z - r),
+          max: new THREE.Vector3(t.position.x + r, t.trunkHeight, t.position.z + r),
+        });
+      });
+    });
+
+    // 4. Generate Street Furniture (Streetlights, Benches, Bus Stops, Bollards, Kiosks, Trash Bins)
+    const furniture: StreetFurnitureDef[] = [];
+
+    // 4.1 Streetlights along North-South and East-West sidewalks
+    const slDistZ = 32;
+    const slOffsetX = roadWidth / 2 + 1.2;
+    // West curb lights facing East
+    furniture.push({
+      id: `fur-sl-${key}-w1`,
+      type: 'STREETLIGHT',
+      position: new THREE.Vector3(centerX - slOffsetX, 0, centerZ - slDistZ),
+      rotationY: Math.PI / 2,
+      accentColor: district.accentColor,
+      emissiveColor: district.primaryLightColor,
+    });
+    furniture.push({
+      id: `fur-sl-${key}-w2`,
+      type: 'STREETLIGHT',
+      position: new THREE.Vector3(centerX - slOffsetX, 0, centerZ + slDistZ),
+      rotationY: Math.PI / 2,
+      accentColor: district.accentColor,
+      emissiveColor: district.primaryLightColor,
+    });
+    // East curb lights facing West
+    furniture.push({
+      id: `fur-sl-${key}-e1`,
+      type: 'STREETLIGHT',
+      position: new THREE.Vector3(centerX + slOffsetX, 0, centerZ - slDistZ),
+      rotationY: -Math.PI / 2,
+      accentColor: district.accentColor,
+      emissiveColor: district.primaryLightColor,
+    });
+    furniture.push({
+      id: `fur-sl-${key}-e2`,
+      type: 'STREETLIGHT',
+      position: new THREE.Vector3(centerX + slOffsetX, 0, centerZ + slDistZ),
+      rotationY: -Math.PI / 2,
+      accentColor: district.accentColor,
+      emissiveColor: district.primaryLightColor,
+    });
+
+    // East-West Street streetlights
+    const slDistX = 32;
+    const slOffsetZ = 12 / 2 + 1.2;
+    furniture.push({
+      id: `fur-sl-${key}-n1`,
+      type: 'STREETLIGHT',
+      position: new THREE.Vector3(centerX - slDistX, 0, centerZ - slOffsetZ),
+      rotationY: 0,
+      accentColor: district.accentColor,
+      emissiveColor: district.primaryLightColor,
+    });
+    furniture.push({
+      id: `fur-sl-${key}-n2`,
+      type: 'STREETLIGHT',
+      position: new THREE.Vector3(centerX + slDistX, 0, centerZ - slOffsetZ),
+      rotationY: 0,
+      accentColor: district.accentColor,
+      emissiveColor: district.primaryLightColor,
+    });
+
+    // 4.2 Sidewalk Benches
+    const benchPositions = [
+      { pos: new THREE.Vector3(centerX - 9.8, 0.12, centerZ - 18), rot: Math.PI / 2 },
+      { pos: new THREE.Vector3(centerX + 9.8, 0.12, centerZ + 18), rot: -Math.PI / 2 },
+    ];
+    benchPositions.forEach((bp, bIdx) => {
+      furniture.push({
+        id: `fur-bench-${key}-${bIdx}`,
+        type: 'BENCH',
+        position: bp.pos,
+        rotationY: bp.rot,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      });
+      // Bench collider
+      collisionBoxes.push({
+        min: new THREE.Vector3(bp.pos.x - 1.1, 0, bp.pos.z - 0.5),
+        max: new THREE.Vector3(bp.pos.x + 1.1, 0.9, bp.pos.z + 0.5),
+      });
+    });
+
+    // 4.3 Transit Bus Stop Shelter (regular interval, placed along curb)
+    if ((Math.abs(cx) * 3 + Math.abs(cz)) % 2 === 0) {
+      const busPos = new THREE.Vector3(centerX + 9.6, 0.12, centerZ - 20);
+      furniture.push({
+        id: `fur-bus-${key}`,
+        type: 'BUS_STOP',
+        position: busPos,
+        rotationY: Math.PI,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      });
+      collisionBoxes.push({
+        min: new THREE.Vector3(busPos.x - 2.2, 0, busPos.z - 1.1),
+        max: new THREE.Vector3(busPos.x + 2.2, 3.2, busPos.z + 1.1),
+      });
+    }
+
+    // 4.4 Trash / Recycling Receptacles near cross corners
+    furniture.push({
+      id: `fur-trash-${key}-1`,
+      type: 'TRASH_RECEPTACLE',
+      position: new THREE.Vector3(centerX - 8.8, 0.12, centerZ - 10),
+      rotationY: 0,
+      accentColor: district.accentColor,
+      emissiveColor: '#38bdf8',
+    });
+    furniture.push({
+      id: `fur-trash-${key}-2`,
+      type: 'TRASH_RECEPTACLE',
+      position: new THREE.Vector3(centerX + 8.8, 0.12, centerZ + 10),
+      rotationY: Math.PI,
+      accentColor: district.accentColor,
+      emissiveColor: '#10b981',
+    });
+
+    // 4.5 Security Curb Bollards around the intersection corners
+    const bollardCorners = [
+      { x: centerX - 8.2, z: centerZ - 7.2 },
+      { x: centerX + 8.2, z: centerZ - 7.2 },
+      { x: centerX - 8.2, z: centerZ + 7.2 },
+      { x: centerX + 8.2, z: centerZ + 7.2 },
+    ];
+    bollardCorners.forEach((bc, bIdx) => {
+      furniture.push({
+        id: `fur-bollard-${key}-${bIdx}`,
+        type: 'BOLLARD',
+        position: new THREE.Vector3(bc.x, 0.12, bc.z),
+        rotationY: 0,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      });
+    });
+
+    // 4.6 Holographic Cyber Kiosk / Info Terminal
+    if (district.type !== 'INDUSTRIAL_DISTRICT' && rng.next() > 0.3) {
+      const kioskPos = new THREE.Vector3(centerX - 9.6, 0.12, centerZ + 20);
+      furniture.push({
+        id: `fur-kiosk-${key}`,
+        type: 'CYBER_KIOSK',
+        position: kioskPos,
+        rotationY: Math.PI / 2,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      });
+      collisionBoxes.push({
+        min: new THREE.Vector3(kioskPos.x - 0.7, 0, kioskPos.z - 0.5),
+        max: new THREE.Vector3(kioskPos.x + 0.7, 2.5, kioskPos.z + 0.5),
+      });
+    }
+
+    // 5. Generate District-Specific Biome Props
+    const biomeProps: BiomePropDef[] = [];
+
+    switch (district.type) {
+      case 'INDUSTRIAL_DISTRICT': {
+        // Large Heavy Silo / Storage Tank in alley
+        const tankPos = new THREE.Vector3(centerX - 24, 0, centerZ - 24);
+        const tankSize = new THREE.Vector3(6.5, 9.0, 6.5);
+        biomeProps.push({
+          id: `biome-tank-${key}`,
+          type: 'STORAGE_TANK',
+          position: tankPos,
+          rotationY: rng.range(0, Math.PI),
+          size: tankSize,
+          color: '#334155',
+          emissiveColor: '#f59e0b',
+        });
+        collisionBoxes.push({
+          min: new THREE.Vector3(tankPos.x - tankSize.x / 2, 0, tankPos.z - tankSize.z / 2),
+          max: new THREE.Vector3(tankPos.x + tankSize.x / 2, tankSize.y, tankPos.z + tankSize.z / 2),
+        });
+
+        // Overhead industrial pipe conduit across avenue
+        biomeProps.push({
+          id: `biome-pipe-${key}`,
+          type: 'INDUSTRIAL_PIPE',
+          position: new THREE.Vector3(centerX, 6.8, centerZ - 26),
+          rotationY: 0,
+          size: new THREE.Vector3(28, 0.7, 0.7),
+          color: '#475569',
+          emissiveColor: '#f59e0b',
+        });
+
+        // Sidewalk steam exhaust vent
+        biomeProps.push({
+          id: `biome-vent-${key}`,
+          type: 'STEAM_VENT',
+          position: new THREE.Vector3(centerX + 8.6, 0.08, centerZ + 14),
+          rotationY: 0,
+          size: new THREE.Vector3(2.0, 0.15, 2.0),
+          color: '#1e293b',
+          emissiveColor: '#f97316',
+        });
+        break;
+      }
+
+      case 'NEURAL_DISTRICT': {
+        // Glowing data conduit strip along sidewalk curb
+        biomeProps.push({
+          id: `biome-conduit-${key}`,
+          type: 'CONDUIT_LINE',
+          position: new THREE.Vector3(centerX - 7.6, 0.09, centerZ),
+          rotationY: 0,
+          size: new THREE.Vector3(0.35, 0.12, 60),
+          color: '#1e1b4b',
+          emissiveColor: '#a855f7',
+        });
+
+        // Quantum Server Node Pillar
+        const serverPos = new THREE.Vector3(centerX + 10.2, 0, centerZ - 12);
+        const serverSize = new THREE.Vector3(1.6, 4.2, 1.6);
+        biomeProps.push({
+          id: `biome-server-${key}`,
+          type: 'SERVER_NODE',
+          position: serverPos,
+          rotationY: -Math.PI / 4,
+          size: serverSize,
+          color: '#0f172a',
+          emissiveColor: '#8b5cf6',
+        });
+        collisionBoxes.push({
+          min: new THREE.Vector3(serverPos.x - serverSize.x / 2, 0, serverPos.z - serverSize.z / 2),
+          max: new THREE.Vector3(serverPos.x + serverSize.x / 2, serverSize.y, serverPos.z + serverSize.z / 2),
+        });
+        break;
+      }
+
+      case 'GREEN_DISTRICT': {
+        // High-LOD Planter Vases & Floral Beds along sidewalks
+        const vase1 = new THREE.Vector3(centerX - 9.6, 0.12, centerZ - 14);
+        const vase2 = new THREE.Vector3(centerX + 9.6, 0.12, centerZ + 14);
+        [vase1, vase2].forEach((vPos, vIdx) => {
+          biomeProps.push({
+            id: `biome-vase-${key}-${vIdx}`,
+            type: 'PLANTER_VASE',
+            position: vPos,
+            rotationY: 0,
+            size: new THREE.Vector3(2.4, 0.9, 2.4),
+            color: '#064e3b',
+            emissiveColor: '#10b981',
+          });
+          collisionBoxes.push({
+            min: new THREE.Vector3(vPos.x - 1.2, 0, vPos.z - 1.2),
+            max: new THREE.Vector3(vPos.x + 1.2, 1.0, vPos.z + 1.2),
+          });
+        });
+        break;
+      }
+
+      case 'OLD_CITY': {
+        // Historic masonry pillars / arches along walkways
+        const pillarPos = new THREE.Vector3(centerX + 10.0, 0, centerZ + 16);
+        const pillarSize = new THREE.Vector3(1.4, 4.4, 1.4);
+        biomeProps.push({
+          id: `biome-pillar-${key}`,
+          type: 'HISTORIC_PILLAR',
+          position: pillarPos,
+          rotationY: 0,
+          size: pillarSize,
+          color: '#334155',
+          emissiveColor: '#fb923c',
+        });
+        collisionBoxes.push({
+          min: new THREE.Vector3(pillarPos.x - pillarSize.x / 2, 0, pillarPos.z - pillarSize.z / 2),
+          max: new THREE.Vector3(pillarPos.x + pillarSize.x / 2, pillarSize.y, pillarPos.z + pillarSize.z / 2),
+        });
+        break;
+      }
+
+      case 'SKY_DISTRICT': {
+        // Aero-sensor weather mast
+        const mastPos = new THREE.Vector3(centerX - 9.8, 0, centerZ - 18);
+        const mastSize = new THREE.Vector3(0.8, 7.5, 0.8);
+        biomeProps.push({
+          id: `biome-mast-${key}`,
+          type: 'AERO_MAST',
+          position: mastPos,
+          rotationY: 0,
+          size: mastSize,
+          color: '#0284c7',
+          emissiveColor: '#38bdf8',
+        });
+        collisionBoxes.push({
+          min: new THREE.Vector3(mastPos.x - 0.5, 0, mastPos.z - 0.5),
+          max: new THREE.Vector3(mastPos.x + 0.5, mastSize.y, mastPos.z + 0.5),
+        });
+        break;
+      }
+
+      case 'CENTRAL_CITY':
+      default: {
+        // Smart city communication totem
+        const totemPos = new THREE.Vector3(centerX + 9.8, 0, centerZ + 22);
+        const totemSize = new THREE.Vector3(0.9, 4.0, 0.9);
+        biomeProps.push({
+          id: `biome-totem-${key}`,
+          type: 'CITY_TOTEM',
+          position: totemPos,
+          rotationY: 0,
+          size: totemSize,
+          color: '#0e7490',
+          emissiveColor: '#00f0ff',
+        });
+        collisionBoxes.push({
+          min: new THREE.Vector3(totemPos.x - 0.5, 0, totemPos.z - 0.5),
+          max: new THREE.Vector3(totemPos.x + 0.5, totemSize.y, totemPos.z + 0.5),
+        });
+        break;
+      }
+    }
+
     const chunkData: StreamedChunkData = {
       key,
       cx,
@@ -327,6 +702,8 @@ export class ProceduralChunkGenerator {
       trees,
       bushes,
       parks,
+      furniture,
+      biomeProps,
       collisionBoxes,
     };
 

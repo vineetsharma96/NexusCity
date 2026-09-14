@@ -265,7 +265,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
       {/* 7. Procedural Trees & Street Planters with Dynamic Wind Sway */}
       {trees.map((tree) => (
-        <ProceduralTree key={tree.id} tree={tree} />
+        <ProceduralTree key={tree.id} tree={tree} registerGlobalCollider={true} />
       ))}
 
       {/* 8. Dynamic Wind-Driven Falling Leaves Particle System */}
