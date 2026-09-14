@@ -9,6 +9,7 @@ import { NavigationSystem } from '../map/NavigationSystem';
 
 import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
 import { InteriorManager } from '../world/InteriorManager';
+import { SaveSystem, NexusSaveData, DiscoveredEntity } from '../core/SaveSystem';
 
 interface TeleportLocation {
   id: string;
@@ -64,7 +65,7 @@ const TELEPORT_LOCATIONS: TeleportLocation[] = [
   })),
 ];
 
-interface CyberMenuModalProps {
+export interface CyberMenuModalProps {
   isOpen: boolean;
   onClose: () => void;
   onTeleport: (newPos: THREE.Vector3) => void;
@@ -77,7 +78,8 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
   onTeleport,
   onOpenAI,
 }) => {
-  const [activeTab, setActiveTab] = useState<'TELEPORT' | 'WORLD' | 'SETTINGS' | 'GUIDE'>('TELEPORT');
+  const [activeTab, setActiveTab] = useState<'TELEPORT' | 'WORLD' | 'SETTINGS' | 'CODEX' | 'GUIDE'>('TELEPORT');
+  const [saveData, setSaveData] = useState<NexusSaveData>(() => SaveSystem.getInstance().getData());
   const [metrics, setMetrics] = useState<PerformanceMetrics>({
     fps: 60,
     frameTimeMs: 16.6,
@@ -93,10 +95,12 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
     const unsubPerf = PerformanceMonitor.getInstance().subscribe(setMetrics);
     const unsubQuality = QualityManager.subscribe((q) => setQualityPreset(q.name));
     const unsubAudio = AudioManager.getInstance().subscribe((s) => setIsMuted(s.isMuted));
+    const unsubSave = SaveSystem.getInstance().subscribe(setSaveData);
     return () => {
       unsubPerf();
       unsubQuality();
       unsubAudio();
+      unsubSave();
     };
   }, []);
 
@@ -235,6 +239,20 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
           }}
         >
           ⚙️ SETTINGS & AUDIO
+        </button>
+        <button
+          onClick={() => setActiveTab('CODEX')}
+          className="cyber-btn"
+          style={{
+            padding: '8px 14px',
+            fontSize: '0.8rem',
+            color: activeTab === 'CODEX' ? '#050811' : '#00ffaa',
+            backgroundColor: activeTab === 'CODEX' ? '#00ffaa' : 'transparent',
+            borderColor: '#00ffaa',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          📜 DISCOVERY CODEX
         </button>
         <button
           onClick={() => setActiveTab('GUIDE')}
@@ -795,8 +813,187 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
               <div><strong>WASD:</strong> Camera-relative movement</div>
               <div><strong>SPACE:</strong> Jump | <strong>SHIFT:</strong> Sprint</div>
               <div><strong>E:</strong> Interact with citizens & enter buildings</div>
+              <div><strong>V:</strong> 360° Cinematic Drone Vista Mode</div>
+              <div><strong>F5:</strong> Quick Save Progress to Neural Cache</div>
               <div><strong>M:</strong> Fullscreen City Map</div>
               <div><strong>I or ~:</strong> NEXUS-AI Assistant Terminal</div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================
+            TAB 5: DISCOVERY CODEX & OPERATIVE TELEMETRY
+            ========================================================= */}
+        {activeTab === 'CODEX' && (
+          <div>
+            <div
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '1.2rem',
+                color: '#00ffaa',
+                marginBottom: 16,
+                fontWeight: 700,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 8,
+              }}
+            >
+              <span>📜 OPERATIVE CODEX & DISCOVERY TELEMETRY</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => {
+                    SaveSystem.getInstance().save(true);
+                    AudioManager.getInstance().playSaveSound();
+                  }}
+                  className="cyber-btn"
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '0.78rem',
+                    color: '#38bdf8',
+                    borderColor: 'rgba(56, 189, 248, 0.6)',
+                  }}
+                >
+                  💾 QUICK SAVE [F5]
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm('Reset all operative progress, discovered landmarks, and saved location?')) {
+                      SaveSystem.getInstance().resetProgress();
+                    }
+                  }}
+                  className="cyber-btn"
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '0.78rem',
+                    color: '#ff0055',
+                    borderColor: 'rgba(255, 0, 85, 0.6)',
+                  }}
+                >
+                  ⚠️ RESET PROGRESS
+                </button>
+              </div>
+            </div>
+
+            {/* Lifetime Stats Matrix */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: 12,
+                marginBottom: 24,
+              }}
+            >
+              <div className="glass-panel" style={{ padding: 14, border: '1px solid rgba(0, 255, 170, 0.25)' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
+                  DISTRICTS EXPLORED
+                </div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#00ffaa', marginTop: 4 }}>
+                  {saveData.discoveredDistricts.length} / 16
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: 2 }}>
+                  {Math.round((saveData.discoveredDistricts.length / 16) * 100)}% Metropolitan Coverage
+                </div>
+              </div>
+
+              <div className="glass-panel" style={{ padding: 14, border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
+                  LANDMARKS & POIS
+                </div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#38bdf8', marginTop: 4 }}>
+                  {Object.keys(saveData.discoveredLandmarks).length} / 16
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: 2 }}>
+                  Facilities & Sights Logged
+                </div>
+              </div>
+
+              <div className="glass-panel" style={{ padding: 14, border: '1px solid rgba(255, 170, 0, 0.25)' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
+                  DISTANCE TRAVELED
+                </div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#ffaa00', marginTop: 4 }}>
+                  {(saveData.stats.distanceTraveledMeters / 1000).toFixed(2)} km
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: 2 }}>
+                  Pedestrian Locomotion
+                </div>
+              </div>
+
+              <div className="glass-panel" style={{ padding: 14, border: '1px solid rgba(192, 132, 252, 0.25)' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
+                  FACILITIES ENTERED
+                </div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#c084fc', marginTop: 4 }}>
+                  {saveData.stats.interiorsEnteredCount} Visits
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: 2 }}>
+                  {saveData.stats.elevatorsRiddenCount} Elevator Lifts
+                </div>
+              </div>
+            </div>
+
+            {/* Discovered Landmarks Registry */}
+            <div
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '1.05rem',
+                color: 'var(--neon-cyan)',
+                marginBottom: 12,
+                fontWeight: 700,
+              }}
+            >
+              DISCOVERED LANDMARKS & FACILITIES REGISTRY
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: 10,
+              }}
+            >
+              {Object.values(saveData.discoveredLandmarks).map((landmark: DiscoveredEntity) => (
+                <div
+                  key={landmark.id}
+                  className="glass-panel"
+                  style={{
+                    padding: 12,
+                    border: '1px solid rgba(0, 240, 255, 0.2)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.9rem' }}>
+                        {landmark.name}
+                      </span>
+                      <span
+                        className="cyber-badge"
+                        style={{
+                          fontSize: '0.62rem',
+                          color: landmark.category === 'INTERIOR' ? '#00ffaa' : '#38bdf8',
+                          borderColor: landmark.category === 'INTERIOR' ? '#00ffaa' : '#38bdf8',
+                        }}
+                      >
+                        {landmark.category}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '0.72rem',
+                        color: 'var(--text-muted)',
+                        fontFamily: 'var(--font-mono)',
+                        marginTop: 4,
+                      }}
+                    >
+                      LOGGED: {new Date(landmark.discoveredAt).toLocaleTimeString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

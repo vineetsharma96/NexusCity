@@ -10,11 +10,16 @@ export const CinematicOverlay: React.FC = () => {
     return CinematicManager.getInstance().subscribe(setCinematic);
   }, []);
 
-  if (cinematic.phase !== 'CINEMATIC_INTRO' && cinematic.phase !== 'TRANSITION_TO_PLAYER') {
+  if (
+    cinematic.phase !== 'CINEMATIC_INTRO' &&
+    cinematic.phase !== 'TRANSITION_TO_PLAYER' &&
+    cinematic.phase !== 'VISTA_MODE'
+  ) {
     return null;
   }
 
   const isTransitioning = cinematic.phase === 'TRANSITION_TO_PLAYER';
+  const isVista = cinematic.phase === 'VISTA_MODE';
 
   return (
     <div
@@ -64,11 +69,11 @@ export const CinematicOverlay: React.FC = () => {
               fontWeight: 700,
             }}
           >
-            REC // ORBITAL DRONE CAMERA
+            {isVista ? 'REC // 360° CINEMATIC DRONE VISTA' : 'REC // ORBITAL DRONE CAMERA'}
           </span>
         </div>
 
-        {/* Prominent SKIP INTRO Button */}
+        {/* Prominent SKIP INTRO / RESUME Button */}
         {cinematic.canSkip && (
           <button
             onClick={() => CinematicManager.getInstance().skip()}
@@ -98,8 +103,8 @@ export const CinematicOverlay: React.FC = () => {
               e.currentTarget.style.boxShadow = '0 0 16px rgba(0, 240, 255, 0.4)';
             }}
           >
-            <span>SKIP INTRO</span>
-            <span style={{ color: '#ff007f' }}>⏭</span>
+            <span>{isVista ? 'RESUME CONTROL [ESC / V]' : 'SKIP INTRO [SPACE]'}</span>
+            <span style={{ color: '#00f0ff' }}>→</span>
           </button>
         )}
       </div>

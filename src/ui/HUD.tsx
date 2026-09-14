@@ -153,7 +153,7 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
   useEffect(() => {
     if (interiorState.current !== 'NONE') {
       setInteriorArrivalBanner({
-        name: interiorState.name,
+        name: interiorState.name || 'INTERIOR FACILITY',
         floor: interiorState.currentFloor || 1,
       });
       AudioManager.getInstance().playDiscoveryChime();
@@ -663,6 +663,46 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
             {audioSettings.isMuted ? '🔇 AUDIO OFF' : '🔊 AUDIO ON'}
           </button>
         )}
+
+        {/* Cinematic Vista Drone Mode Button */}
+        <button
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('nexus:vista'));
+          }}
+          className="cyber-btn"
+          style={{
+            padding: isMobile ? '4px 8px' : '4px 10px',
+            fontSize: isMobile ? '0.74rem' : '0.78rem',
+            color: '#c084fc',
+            borderColor: 'rgba(192, 132, 252, 0.6)',
+            backgroundColor: 'rgba(192, 132, 252, 0.12)',
+            boxShadow: '0 0 10px rgba(192, 132, 252, 0.25)',
+            fontWeight: 700,
+          }}
+          title="Toggle 360° Cinematic Drone Vista Tour [V]"
+        >
+          🎥 VISTA
+        </button>
+
+        {/* Quick Save Game Button */}
+        <button
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('nexus:quicksave'));
+          }}
+          className="cyber-btn"
+          style={{
+            padding: isMobile ? '4px 8px' : '4px 10px',
+            fontSize: isMobile ? '0.74rem' : '0.78rem',
+            color: '#38bdf8',
+            borderColor: 'rgba(56, 189, 248, 0.6)',
+            backgroundColor: 'rgba(56, 189, 248, 0.12)',
+            boxShadow: '0 0 10px rgba(56, 189, 248, 0.25)',
+            fontWeight: 700,
+          }}
+          title="Quick Save Progress to Local Storage [F5]"
+        >
+          💾 SAVE
+        </button>
 
         {/* AI City Intelligence Assistant Button */}
         <button

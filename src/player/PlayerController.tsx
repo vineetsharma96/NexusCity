@@ -6,6 +6,9 @@ import { ProceduralProtagonist } from './ProceduralProtagonist';
 import { PlayerCamera } from './PlayerCamera';
 import { KinematicCollisionSolver } from './KinematicCollision';
 import { CinematicManager } from '../cinematics/CinematicManager';
+import { SaveSystem } from '../core/SaveSystem';
+import { DiscoverySystem } from '../world/DiscoverySystem';
+import { AudioManager } from '../audio/AudioManager';
 
 export interface PlayerControllerProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -27,9 +30,16 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
 
   const cameraYaw = useRef(0);
 
-  // Spawns player in Central Plaza intersection & registers teleport
+  // Spawns player from save or default in Central Plaza intersection & registers teleport
   useEffect(() => {
-    controllerRef.current.position.set(0, 0.2, 10);
+    const saved = SaveSystem.getInstance().getData().player;
+    if (saved && Array.isArray(saved.position) && saved.interiorId === 'NONE') {
+      controllerRef.current.position.set(saved.position[0], saved.position[1], saved.position[2]);
+      controllerRef.current.rotationY = saved.rotationY || 0;
+    } else {
+      controllerRef.current.position.set(0, 0.2, 10);
+    }
+
     if (playerPosRef) {
       playerPosRef.current.copy(controllerRef.current.position);
     }
@@ -55,22 +65,76 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
         }
       }
     };
+
+    // Hotkeys: [V] for Cinematic Vista, [F5] for Quick Save
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (document.activeElement?.tagName || '').toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      if (e.key === 'v' || e.key === 'V') {
+        CinematicManager.getInstance().toggleVista(
+          controllerRef.current.position,
+          'CINEMATIC DRONE VISTA // SECTOR RECON',
+          'SWEEPING AERIAL DRONE OVERVIEW • PRESS [V] OR MOVE TO RESUME CONTROL'
+        );
+        AudioManager.getInstance().playUI('toggle');
+      } else if (e.key === 'F5') {
+        e.preventDefault();
+        SaveSystem.getInstance().save(true);
+        AudioManager.getInstance().playSaveSound();
+      }
+    };
+
+    const handleCustomVista = () => {
+      CinematicManager.getInstance().toggleVista(
+        controllerRef.current.position,
+        'CINEMATIC DRONE VISTA // SECTOR RECON',
+        'SWEEPING AERIAL DRONE OVERVIEW • PRESS [V] OR MOVE TO RESUME CONTROL'
+      );
+      AudioManager.getInstance().playUI('toggle');
+    };
+
+    const handleCustomQuickSave = () => {
+      SaveSystem.getInstance().save(true);
+      AudioManager.getInstance().playSaveSound();
+    };
+
     window.addEventListener('nexus:teleport', handleCustomTeleport);
+    window.addEventListener('nexus:vista', handleCustomVista);
+    window.addEventListener('nexus:quicksave', handleCustomQuickSave);
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('nexus:teleport', handleCustomTeleport);
+      window.removeEventListener('nexus:vista', handleCustomVista);
+      window.removeEventListener('nexus:quicksave', handleCustomQuickSave);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [playerPosRef, registerTeleport]);
 
   useFrame((_, delta) => {
-    const isCinematic = CinematicManager.getInstance().getState().phase !== 'GAMEPLAY';
+    const cinematic = CinematicManager.getInstance();
+    const cinState = cinematic.getState();
+    const isCinematic = cinState.phase !== 'GAMEPLAY';
+
     if (isCinematic) {
       controllerRef.current.velocity.set(0, 0, 0);
     }
+
     const updatedState = controllerRef.current.update(delta, cameraYaw.current);
     setKinematicState({ ...updatedState });
+
     if (playerPosRef) {
       playerPosRef.current.copy(updatedState.position);
+    }
+
+    // Update persistent SaveSystem & DiscoverySystem
+    SaveSystem.getInstance().updatePlayerPosition(updatedState.position, updatedState.rotationY);
+    DiscoverySystem.getInstance().update(updatedState.position);
+
+    // If in VISTA_MODE and player starts moving, automatically return to gameplay
+    if (cinState.phase === 'VISTA_MODE' && controllerRef.current.isMoving) {
+      cinematic.exitVista();
     }
   });
 

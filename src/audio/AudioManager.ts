@@ -499,7 +499,7 @@ export class AudioManager {
     osc.stop(now + 0.36);
   }
 
-  public playUI(type: 'click' | 'open' | 'close' = 'click'): void {
+  public playUI(type: 'click' | 'open' | 'close' | 'toggle' = 'click'): void {
     if (!this.ctx || !this.sfxGain || this.isMuted) return;
 
     const now = this.ctx.currentTime;
@@ -507,7 +507,7 @@ export class AudioManager {
     const gain = this.ctx.createGain();
 
     osc.type = 'sine';
-    const freq = type === 'open' ? 1480 : type === 'close' ? 740 : 1200;
+    const freq = type === 'open' ? 1480 : type === 'close' ? 740 : type === 'toggle' ? 1680 : 1200;
     osc.frequency.setValueAtTime(freq, now);
 
     gain.gain.setValueAtTime(0.08, now);
@@ -518,6 +518,10 @@ export class AudioManager {
 
     osc.start(now);
     osc.stop(now + 0.06);
+  }
+
+  public playDiscovery(): void {
+    this.playDiscoveryChime();
   }
 
   public playVehicleHorn(): void {
@@ -710,6 +714,41 @@ export class AudioManager {
 
     osc.start(now);
     osc.stop(now + 0.13);
+  }
+
+  public playSaveSound(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    [880, 1318.51, 1760].forEach((freq, idx) => {
+      const startTime = now + idx * 0.04;
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, startTime);
+
+      gain.gain.setValueAtTime(0.06, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.25);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain!);
+
+      osc.start(startTime);
+      osc.stop(startTime + 0.26);
+    });
+  }
+
+  public duck(durationSeconds: number = 1.0, duckFactor: number = 0.25): void {
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    const currentGain = this.masterGain.gain.value;
+    const duckedGain = currentGain * duckFactor;
+
+    this.masterGain.gain.cancelScheduledValues(now);
+    this.masterGain.gain.setValueAtTime(currentGain, now);
+    this.masterGain.gain.linearRampToValueAtTime(duckedGain, now + 0.12);
+    this.masterGain.gain.linearRampToValueAtTime(currentGain, now + durationSeconds);
   }
 
   public subscribe(listener: AudioListener): () => void {

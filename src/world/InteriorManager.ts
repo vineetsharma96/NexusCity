@@ -21,13 +21,18 @@ export type InteriorType =
   | 'METRO_STATION'
   | 'ARCADE';
 
+import { SaveSystem } from '../core/SaveSystem';
+
 export interface InteriorState {
   current: InteriorType;
-  destinationId: string | null;
-  destination: InteriorDestination | null;
-  name: string;
-  currentFloor: number;
+  currentDestinationId: string | null;
+  activeDestination: InteriorDestination | null;
+  destinationId?: string | null;
+  destination?: InteriorDestination | null;
+  name?: string;
   isTransitioning: boolean;
+  currentFloor: number; // 1 = Main Floor, 2 = Mezzanine / Sky Observation
+  lastError?: string | null;
   errorMessage?: string | null;
 }
 
@@ -101,6 +106,7 @@ export class InteriorManager {
 
     this.isTransitioning = true;
     this.lastError = null;
+    AudioManager.getInstance().duck(1.5, 0.2);
 
     // Save exterior return point (using destination's specified exitPosition if available)
     if (dest.exitPosition) {
@@ -117,6 +123,8 @@ export class InteriorManager {
       this.currentDestinationId = destinationId;
       this.activeDestination = dest;
       this.currentFloor = 1;
+
+      SaveSystem.getInstance().updateInterior(dest.interiorId, 1);
 
       const spawnPoint = dest.interiorSpawnPoint.clone();
       onTeleport(spawnPoint);
@@ -144,10 +152,11 @@ export class InteriorManager {
   ): boolean {
     const dest = getDestinationByInteriorType(type);
     if (dest) {
-      // Find key matching destination
-      const destId = Object.keys(INTERIOR_DESTINATIONS).find((k) => INTERIOR_DESTINATIONS[k] === dest);
-      if (destId) {
-        return this.enterDestination(destId, playerPos, onTeleport);
+      // Find matching destination key
+      for (const [destId, d] of Object.entries(INTERIOR_DESTINATIONS)) {
+        if (d.interiorId === dest.interiorId) {
+          return this.enterDestination(destId, playerPos, onTeleport);
+        }
       }
     }
 
@@ -183,6 +192,7 @@ export class InteriorManager {
     if (this.isTransitioning || this.currentInterior === 'NONE') return;
 
     this.isTransitioning = true;
+    AudioManager.getInstance().duck(1.5, 0.2);
     this.notify();
 
     setTimeout(() => {
@@ -191,6 +201,8 @@ export class InteriorManager {
       this.currentFloor = 1;
       const exitPos = this.activeDestination?.exitPosition?.clone() || this.savedExteriorPos.clone();
       this.activeDestination = null;
+
+      SaveSystem.getInstance().updateInterior('NONE', 1);
 
       onTeleport(exitPos);
 
@@ -218,10 +230,13 @@ export class InteriorManager {
 
     this.isTransitioning = true;
     AudioManager.getInstance().playElevatorMove();
+    AudioManager.getInstance().duck(1.8, 0.3);
     this.notify();
 
     setTimeout(() => {
       this.currentFloor = targetFloor;
+      SaveSystem.getInstance().incrementElevator();
+      SaveSystem.getInstance().updateInterior(this.currentInterior, targetFloor);
 
       // Elevator arrival position
       const elevatorSpawn =
@@ -254,11 +269,14 @@ export class InteriorManager {
 
     return {
       current: this.currentInterior,
+      currentDestinationId: this.currentDestinationId,
+      activeDestination: this.activeDestination,
       destinationId: this.currentDestinationId,
       destination: this.activeDestination,
       name,
       currentFloor: this.currentFloor,
       isTransitioning: this.isTransitioning,
+      lastError: this.lastError,
       errorMessage: this.lastError,
     };
   }

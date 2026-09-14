@@ -40,6 +40,7 @@ export class KinematicController {
   private footstepTimer: number = 0;
 
   public gait: MovementGait = 'IDLE';
+  public isMoving: boolean = false;
 
   public update(delta: number, cameraYaw: number): KinematicState {
     const input = InputManager.getState();
@@ -49,6 +50,7 @@ export class KinematicController {
     const moveX = input.moveX;
     const moveZ = input.moveZ;
     const isMoving = Math.abs(moveX) > 0.05 || Math.abs(moveZ) > 0.05;
+    this.isMoving = isMoving;
 
     const inputDir = new THREE.Vector3(moveX, 0, moveZ);
     if (inputDir.lengthSq() > 1) {

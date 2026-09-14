@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type CinematicPhase = 'LOADING' | 'CINEMATIC_INTRO' | 'TRANSITION_TO_PLAYER' | 'GAMEPLAY';
+export type CinematicPhase = 'LOADING' | 'CINEMATIC_INTRO' | 'TRANSITION_TO_PLAYER' | 'GAMEPLAY' | 'VISTA_MODE';
 
 export interface CinematicState {
   phase: CinematicPhase;
@@ -32,6 +32,12 @@ export class CinematicManager {
   private transitionDuration: number = 2.2;
   private startTransitionCamPos: THREE.Vector3 = new THREE.Vector3();
   private startTransitionLookAt: THREE.Vector3 = new THREE.Vector3();
+
+  // Vista drone tour variables
+  private vistaCenter: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  private vistaAngle: number = 0;
+  private vistaRadius: number = 36;
+  private vistaHeight: number = 18;
 
   private currentCamPos: THREE.Vector3 = new THREE.Vector3(0, 240, 280);
   private currentLookAt: THREE.Vector3 = new THREE.Vector3(0, 30, 0);
@@ -90,8 +96,36 @@ export class CinematicManager {
   }
 
   public skip(): void {
-    if (this.phase === 'CINEMATIC_INTRO' || this.phase === 'LOADING') {
+    if (this.phase === 'CINEMATIC_INTRO' || this.phase === 'LOADING' || this.phase === 'VISTA_MODE') {
       this.beginTransitionToPlayer();
+    }
+  }
+
+  public triggerVista(
+    centerPos: THREE.Vector3,
+    caption: string = 'CINEMATIC DRONE VISTA // RECONNAISSANCE',
+    subcaption: string = 'SWEEPING AERIAL DRONE OVERVIEW • PRESS [V] OR MOVE TO RESUME CONTROL'
+  ): void {
+    if (this.phase !== 'GAMEPLAY') return;
+    this.phase = 'VISTA_MODE';
+    this.vistaCenter.copy(centerPos);
+    this.vistaAngle = 0;
+    this.currentCaption = caption;
+    this.currentSubcaption = subcaption;
+    this.notify();
+  }
+
+  public exitVista(): void {
+    if (this.phase === 'VISTA_MODE') {
+      this.beginTransitionToPlayer();
+    }
+  }
+
+  public toggleVista(centerPos: THREE.Vector3, caption?: string, subcaption?: string): void {
+    if (this.phase === 'VISTA_MODE') {
+      this.exitVista();
+    } else if (this.phase === 'GAMEPLAY') {
+      this.triggerVista(centerPos, caption, subcaption);
     }
   }
 
@@ -119,6 +153,23 @@ export class CinematicManager {
       // Hold high overview camera during loading screen
       this.currentCamPos.set(0, 240, 280);
       this.currentLookAt.set(0, 30, 0);
+      outCamPos.copy(this.currentCamPos);
+      outLookAt.copy(this.currentLookAt);
+      return true;
+    }
+
+    if (this.phase === 'VISTA_MODE') {
+      this.vistaAngle += delta * 0.22;
+      const targetLookAt = this.vistaCenter.clone().add(new THREE.Vector3(0, 3.5, 0));
+      const targetCamPos = new THREE.Vector3(
+        this.vistaCenter.x + Math.cos(this.vistaAngle) * this.vistaRadius,
+        this.vistaCenter.y + this.vistaHeight,
+        this.vistaCenter.z + Math.sin(this.vistaAngle) * this.vistaRadius
+      );
+
+      this.currentCamPos.lerp(targetCamPos, delta * 2.2);
+      this.currentLookAt.lerp(targetLookAt, delta * 3.0);
+
       outCamPos.copy(this.currentCamPos);
       outLookAt.copy(this.currentLookAt);
       return true;
@@ -208,7 +259,7 @@ export class CinematicManager {
         : this.phase === 'TRANSITION_TO_PLAYER'
         ? this.transitionTimer / this.transitionDuration
         : 1.0,
-      canSkip: this.phase === 'CINEMATIC_INTRO' || this.phase === 'LOADING',
+      canSkip: this.phase === 'CINEMATIC_INTRO' || this.phase === 'LOADING' || this.phase === 'VISTA_MODE',
     };
   }
 

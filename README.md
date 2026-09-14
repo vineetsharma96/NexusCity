@@ -1,148 +1,199 @@
 # 🌆 NEXUS CITY
 
-> **A Production-Quality Procedural 3D Open-World Exploration Experience Running in the Browser**  
-> *Zero External 3D Models • Zero External Textures • Zero External Audio • 100% Procedural WebGL & Web Audio*
+> **A Flagship Procedural 3D Cyberpunk Open-World Simulation Running in the Browser**  
+> *Zero External 3D Models • Zero External Textures • Zero External Audio • 100% Pure Procedural WebGL & Web Audio*
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
+[![Three.js](https://img.shields.io/badge/Three.js-r174-black.svg)](https://threejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6.svg)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-6.4-646cff.svg)](https://vitejs.dev/)
 
 ---
 
-## 🌟 Overview
+## 🌟 Vision & Zero-Asset Architecture
 
-**NEXUS CITY** is an interactive, browser-based 3D cyberpunk open-world game experience built with React 19, TypeScript, Three.js, and React Three Fiber.
+**NEXUS CITY** is a vast, fully explorable cyberpunk metropolis running natively in the browser. Unlike conventional WebGL experiences that download hundreds of megabytes of external 3D models (`.glb`/`.fbx`), image textures (`.png`/`.jpg`), and audio clips (`.mp3`/`.wav`), **every single atom of Nexus City is procedurally generated at runtime via code, shaders, mathematics, and the Web Audio API**:
 
-Unlike typical WebGL demonstrations that rely on multi-gigabyte downloaded 3D assets (`.glb` / `.gltf` / `.fbx`), **every single aspect of Nexus City is procedurally generated at runtime via pure mathematics, shaders, and code**:
-- **Zero external 3D models** — All skyscrapers, cyber-armor characters, interior laboratories, furniture, and trees are procedural meshes.
-- **Zero external image textures** — All road asphalt grains, concrete slab joints, building facades, and holographic signs are generated via HTML5 Canvas procedural shaders.
-- **Zero external audio files** — All ambient district hums, traffic drones, rain patter, thunder rumbles, and footstep sound effects are synthesized in real time via the native Web Audio API.
+* 🏛️ **0 External 3D Models** — Every skyscraper, neon gantry, vehicle, cyber-armor operative, streetlamp, tree, bench, and interior laboratory is synthesized using Three.js procedural primitives and custom buffer geometries.
+* 🎨 **0 External Textures** — All asphalt roadways, concrete facade paneling, illuminated window matrices, holographic signage, and puddle surface maps are drawn on demand by HTML5 Canvas procedural texture generators.
+* 🔊 **0 External Audio Files** — District ambient drones, atmospheric rain patter, thunder cracks, Doppler hover-car flybys, elevator hums, UI clicks, footsteps, and discovery arpeggios are generated in real-time by an advanced Web Audio synthesizer engine.
+* 🎲 **100% Deterministic World** — Built upon a seeded Linear Congruential PRNG (`SeedRandom.ts`, Seed `#847291`), ensuring infinite reproducibility across every device and session.
 
 ---
 
-## 🎮 Features
+## 🗺️ 12-Phase Complete Engineering Architecture
 
-### 🏃 Procedural Protagonist & Kinematic Controller
-- **Fully Articulated Cyber-Armor Protagonist**: Helmet, amber HUD visor, arc reactor chestplate, thruster boots, articulated limbs.
-- **Kinematic Physics**: Camera-relative WASD movement, coyote jump, custom gravity, smooth slerp orientation, and sliding AABB collision resolution.
-- **Procedural IK Gait System**: Real-time forward kinematics for idle breathing, walk stride, sprint velocity, jump ascent, falling, and ground impact.
-- **Collision-Aware Spring-Arm Camera**: Raycasting collision solver that automatically pulls the third-person camera in front of obstacles.
+Nexus City was constructed across 12 comprehensive phases of systems architecture:
 
-### 🏙️ Metropolis Architecture & 3km World Streaming (24×24 Chunks)
-- **16 Skyscraper Archetypes**: Monoliths, Stepped Ziggurats, Cantilevers, and Twin Spires connected by high-altitude skybridges at 60m elevation.
-- **7 Thematic Urban Districts**: Central City, Neural District, Sky District, Industrial Zone, Old Metro Sector, Biosphere Green District, and Classified Sector.
-- **576 Spatial Chunks (~3,000m × 3,000m World Scale)**: Thrice expanded world bounds with 4 distance-based LOD tiers and 240 instanced distant skyline silhouettes maintaining smooth 60 FPS.
+### 1. Core Foundation & Procedural Geometry
+* **Protagonist Cyber-Armor**: Articulated 14-bone procedural humanoid model with helmet visor, glowing arc reactor chestplate, thruster boots, and dynamic IK locomotion.
+* **Kinematic Movement Engine**: 60 FPS camera-relative movement with WASD / gamepad controls, sprint velocity scaling, coyote time jumping, gravity physics, and multi-axis sliding AABB collision detection.
+* **Collision-Aware Spring-Arm Camera**: Raycasting sphere sweep that automatically pulls the third-person camera forward when obstructed by walls, pillars, or buildings.
 
-### 🚗 Autonomous Dual-Layer Traffic System
-- **32 Ground Hover-Cruisers**: Autonomous vehicles navigating multi-lane avenues with glowing twin LED headlights and red rear taillight bars.
-- **24 High-Altitude Skyway Commuters**: Sleek airborne commuters gliding between skyscraper spires along aerial transit corridors with cyan plasma exhaust trails.
-- **Boundary Wrapping & High Performance**: 100% instanced rendering for zero-overhead vehicular movement.
+### 2. Procedural Texturing & Canvas Shaders
+* **Procedural Surface Synthesizer**: Runtime generation of seamless PBR-style textures via Canvas 2D contexts.
+* **Procedural Signage & Billboards**: High-contrast neon corporate typography, holographic warnings, kanji glyphs, and animated advertising screens.
+* **Emissive Facade Matrices**: Skyscraper window lights that automatically balance between daylight silhouettes and nighttime bioluminescence.
 
-### 🚦 Traffic Light System & Intersection Rules
-- **Overhead Signal Gantries (`TrafficLightGantry.tsx`)**: 3D cantilever signal masts over intersections with illuminated Red, Amber, Green emissive lenses and directional visors.
-- **Automated Signal Cycle Engine (`TrafficLightSystem.ts`)**: Coordinated North-South vs East-West signal phases, amber clearance intervals, and pedestrian walk/don't walk cycles.
-- **Vehicle Intersection Deceleration**: Ground hover-cruisers detect approaching stop lines, smoothly decelerating to a stop on Red/Amber with flaring bright red brake lights, and accelerating to cruising speed on Green.
+### 3. Realism, Shaders, Lighting & Celestial Volumetrics
+* **Dynamic Celestial Time of Day**: Four cyclical quadrants (Dawn, Day, Dusk, Night) with physical sun and moon directional arcs, chromatic horizon gradients, and celestial light scattering.
+* **Celestial Volumetric God Rays**: Ray-marched volumetric light shafts piercing through skyscraper canyons, with dynamic density based on weather and sun angles.
+* **Weather & Wet Surface Reflections**: Dynamic road puddle accumulation during rainstorms, with real-time roughness and metalness attenuation simulating drenched asphalt.
 
-### 🚶 NPC Road Crossing & Zebra Footpaths
-- **Zebra Crosswalks (`CrosswalkMarkings.tsx`)**: Delineated thermal striped pavement markings, vehicle stop bars, and illuminated curb ramps connecting sidewalks across multi-lane avenues.
-- **Pedestrian Signal Compliance (`NPCManager.ts`)**: Autonomous citizens observe pedestrian signals, safely walking across avenues via zebra footpaths during vehicle Red phases and waiting patiently at curbs during vehicle Green phases.
+### 4. Traffic, NPC AI & Pedestrian Realism
+* **Dual-Layer Vehicular Traffic**: 32 ground hover-cruisers and 24 high-altitude skyway commuters navigating autonomous lane networks with boundary-wrapping streaming.
+* **Autonomous Gantry Traffic Lights**: Cantilever signal gantries at intersections with automated Red, Amber, Green cycles and vehicle stop-line deceleration.
+* **Pedestrian Crosswalks & Crowd AI**: 30+ procedurally generated citizens walking sidewalks, following wander waypoints, adhering to zebra crossing signals, and greeting the player.
 
-### 🌳 Central Park & Reflective Water Pond Sanctuary
-- **Urban Sanctuary (`ParkSanctuary.tsx`)**: Organic 70m × 70m central park landscape with granite retaining walls and neon accent trims.
-- **Procedural Rippling Water Pond**: Custom GLSL water shader with surface sine wave displacement, deep emerald refraction, caustics, and cyan rim highlights.
-- **Arching Footbridge**: Physical wooden footbridge spanning across the pond that players and NPCs can walk across.
-- **Flora & Amenities**: Bioluminescent floating lotus blossoms, weeping willow cyber-trees, pink sakura cherry blossoms, and ergonomic park benches.
+### 5. Audio Atmosphere & City Audio-Visual Immersion
+* **District Soundscapes**: Procedural sound engines tailored to individual districts (sub-bass hums in Industrial, high-tech synthesizers in Central Metropolis, organic crickets in Central Park).
+* **Spatial Audio Engine**: Distance-attenuated 3D audio for hover-cruisers, Doppler vehicle flybys, and neon gantry buzzing.
+* **Dynamic Audio Transitions**: Low-pass filter muffling when entering building interiors or riding elevators.
 
-### 📺 Skyscraper Dynamic Video Billboards
-- **Multi-Channel Procedural Video Simulation (`CyberVideoBillboard.tsx`)**:
-  - *Channel 1 (Nexus 24 Live News)*: Live scrolling news ticker tape, animated 3D rotating wireframe globe, and pulsing audio spectrum equalizer bars.
-  - *Channel 2 (Cyber-Corp Commercial Adverts)*: Cycling adverts ("NEO-COCA", "KROM-OPTICS", "VELOCITY-X") with glitch VHS scanlines, chromatic aberration, and flashing typography.
-  - *Channel 3 (Metropolis Grid Surveillance)*: 360° sweeping radar beam with blips, digital matrix code rain, and live security camera HUD telemetry.
+### 6. Discovery, Mini-Map / Compass & Interactive UX Polish
+* **Dynamic Mini-Map & Radar Compass**: Real-time rotating HUD radar tracking operative heading, nearby landmarks, street networks, and building entrances.
+* **Holographic 3D Map Modal**: Fullscreen interactive city map with district boundaries, real-time player GPS dot, and instant teleportation nodes.
+* **Operative HUD Telemetry**: Compass heading tape, speed indicators, weather/time fast toggles, and contextual interaction prompts.
 
-### 🏢 11 Enterable Procedural Cyberpunk Interiors
-- Automated proximity sliding doors and distinct neon marquees on 11 enterable locations:
-  1. **Nexus Advanced Labs** — Quantum reactor core, scientific consoles, server racks.
-  2. **Neon Velocity Lounge** — Curved cyber bar counter, cocktail stools, VIP booths.
-  3. **Krom-Doc Augmentation Clinic** — Ripperdoc operating chair, surgical arm, cyber-prosthetics cases.
-  4. **Black-Ice Hacker Safehouse** — Server banks, green matrix terminal arrays, floor cable conduits.
-  5. **Tokyo-Neo Synth-Ramen** — L-shaped wooden ramen bar, broth vats, red paper lanterns.
-  6. **Aero-Cargo Drone Bay** — Quadcopter repair dock, hydraulic lift, industrial gantry crane.
-  7. **Apex Sky Suite Penthouse** — Floor-to-ceiling panoramic skyline glass, luxury couch, glass coffee table.
-  8. **Megacorp Secure Data Vault** — Hexagonal optical data core, rotating red security lasers.
-  9. **Biosphere Hydroponic Flora Lab** — Vertical growth racks, violet UV grow lights, nutrient tanks.
-  10. **Hyperloop Metro Transit Hub** — Subterranean train tracks, electrified 3rd rail, electronic schedule timetable.
-  11. **Cyber-Strike 2099 Retro Arcade** — CRT pixel art arcade cabinets, dance revolution flashing stage.
+### 7. Interiors, Elevators & Multi-Level Exploration
+* **11 Unique Enterable Facilities**: Seamless transitions into fully detailed procedural interiors:
+  1. *Nexus Advanced Labs* — Quantum reactor core, scientific consoles, server mainframes.
+  2. *Neon Velocity Lounge* — Curved cyber bar counter, cocktail stools, VIP booths.
+  3. *Krom-Doc Augmentation Clinic* — Ripperdoc operating chair, surgical arm, cyber-prosthetics cases.
+  4. *Black-Ice Hacker Safehouse* — Server banks, green matrix terminal arrays, floor cable conduits.
+  5. *Tokyo-Neo Synth-Ramen* — L-shaped wooden ramen bar, broth vats, red paper lanterns.
+  6. *Aero-Cargo Drone Bay* — Quadcopter repair dock, hydraulic lift, industrial gantry crane.
+  7. *Apex Sky Suite Penthouse* — Floor-to-ceiling panoramic skyline glass, luxury couch, glass coffee table.
+  8. *Megacorp Secure Data Vault* — Hexagonal optical data core, rotating red security lasers.
+  9. *Biosphere Hydroponic Flora Lab* — Vertical growth racks, violet UV grow lights, nutrient tanks.
+  10. *Hyperloop Metro Transit Hub* — Subterranean train tracks, electrified 3rd rail, electronic schedule timetable.
+  11. *Cyber-Strike 2099 Retro Arcade* — CRT pixel art arcade cabinets, dance revolution flashing stage.
+* **Two-Story Working Elevators**: Elevators in multi-level structures allowing smooth transit between the ground floor and the high-altitude mezzanine / sky-observation deck.
 
-### 🎬 Cinematic Introduction & Dynamic Loading Screen
-- **Cyberpunk Terminal Boot Loader (`LoadingScreen.tsx`)**: Displays system kernel telemetry, procedural seed `#847291` validation, interior generation progress, and shader compilation with an interactive progress bar.
-- **Cinematic Metropolis Aerial Tour (`CinematicManager.ts`, `CinematicOverlay.tsx`)**: High-altitude sweeping cameras showcasing Central Plaza, Sky District transit corridors, and the illuminated Central Park pond with widescreen cinematic letterbox bars, sector coordinates, and a high-contrast **`[SKIP INTRO]`** button.
-- **Seamless Sky-to-Protagonist Dive (`PlayerCamera.tsx`)**: Smooth quintic interpolation camera dive descending from the clouds right into the third-person spring-arm follow camera behind the protagonist.
+### 8. Dynamic Video Billboards & Metropolis Media
+* **Multi-Channel Procedural Video Simulation**: High-altitude skyscraper billboards running procedural 60 FPS video animations:
+  * *Channel 1 (Nexus 24 Live News)*: Live scrolling news ticker tape, animated 3D rotating wireframe globe, and pulsing audio spectrum equalizer bars.
+  * *Channel 2 (Cyber-Corp Commercial Adverts)*: Cycling adverts ("NEO-COCA", "KROM-OPTICS", "VELOCITY-X") with glitch VHS scanlines, chromatic aberration, and flashing typography.
+  * *Channel 3 (Metropolis Grid Surveillance)*: 360° sweeping radar beam with blips, digital matrix code rain, and live security camera HUD telemetry.
 
-### 💨 Global Wind Simulation & Wind-Interactive Dirt Particles
-- **Dynamic Wind Engine (`WindSystem.ts`)**: Real-time vector aerodynamics with prevailing angles, micro-turbulence, and periodic gust surges scaled dynamically with the active weather.
-- **Procedural Urban Dirt Particles (`DirtParticles.tsx`)**: 650+ instanced dust specks, cyber grit sparks, and fluttering digital paper flyers that drift, swirl, and updraft in response to active wind gusts and avenue corridors.
+### 9. Environmental Dynamics & Flora
+* **Central Park Sanctuary**: 70m × 70m organic park landscape with granite retaining walls and neon accent trims.
+* **Procedural Rippling Water Pond**: Custom GLSL water shader with surface sine wave displacement, deep emerald refraction, caustics, and cyan rim highlights.
+* **Dynamic Global Wind System**: Real-time vector aerodynamics with micro-turbulence, wind gust surges, and avenue channel acceleration.
+* **Interactive Foliage & Particles**: Weeping willow cyber-trees, pink sakura cherry blossoms, swaying leaves, falling leaf particles, and urban street dust specks.
+* **Natural 3D Cloud Clusters**: Volumetric cloud banks drifting along high-altitude wind currents, dynamically tinted by celestial time with lightning flash backlighting.
 
-### ☁️ Natural Dynamic Clouds & Night Illumination Overhaul
-- **Procedural 3D Cloud Clusters (`NaturalClouds.tsx`)**: Multi-tiered volumetric cloud banks drifting along high-altitude wind currents, dynamically tinted by celestial time (golden sunset rim, bright midday silver, deep nocturnal indigo) with lightning flash backlighting.
-- **Vibrant Night Illumination (`LightingManager.tsx`)**: Localized streetlamp illumination arrays, warm amber road washes, cyan/magenta neon ground bounce, and park sanctuary lantern lights that automatically illuminate during dusk and night.
-- **Expanded Draw Distance (`QualityManager.ts`)**: Draw distances doubled across all presets (up to 2,600m on ULTRA, with camera far plane expanded to 3,500m) ensuring crystal-clear silhouettes across the colossal 3km city.
+### 10. Grounded AI City Intelligence
+* **Google Gemini 2.5 Flash Integration**: Real-time natural language terminal communicating directly with the operative.
+* **Actual World State Telemetry**: AI understands operative position, active district, current weather, time of day, and all 11 building interior locations.
+* **Zero Location Hallucinations**: Grounded strictly in the actual world coordinate system with deterministic fallback NLP when offline.
+* **Zero Dependency Core Gameplay**: The city remains 100% playable, responsive, and functional even without an API key or internet connection.
+
+### 11. Performance & Quality Scalability
+* **Dynamic Chunk LOD System**: 576 spatial chunks (~3,000m × 3,000m world bounds) streamed dynamically with 4 distance-based LOD tiers and instanced distant silhouettes.
+* **Geometry & Draw Call Optimization**: Unit geometry instancing (`BoxGeometry(1, 1, 1)`) with matrix transforms for thousands of structural features in single draw calls.
+* **Crowd & Traffic Scaling**: Automatic entity throttling based on distance and device capabilities.
+* **7 Quality Presets**: `ULTRA`, `HIGH`, `MEDIUM`, `LOW`, `LITE`, `AUTO`, and `CUSTOM` with dynamic mobile DPR clamping.
+
+### 12. Final Polish, Cinematic Vista Mode & Save System
+* **Cinematic Vista Drone Mode (`[V]`)**: 360° orbital camera sweeping across the sector with widescreen letterbox bars, location typography, and audio ducking.
+* **Persistent Save System (`SaveSystem.ts`)**: Automatic `localStorage` saving (debounced every 45s) and manual quick-save (`[F5]`) preserving operative position, rotation, district, and lifetime statistics.
+* **Landmark Discovery & Codex System (`DiscoverySystem.ts`)**: Proximity triggers for 17 landmarks and facilities with celebratory HUD banners, discovery arpeggios, and codex telemetry logging.
 
 ---
 
 ## ⌨️ Controls Guide
 
-| Input | Action |
+| Key / Input | Action |
 | :--- | :--- |
-| **W, A, S, D** / **Left Thumbstick** | Move Protagonist (Camera-Relative) |
+| **W, A, S, D** / **Left Thumbstick** | Move Operative (Camera-Relative) |
 | **Mouse Drag** / **Right Touch Drag** | Orbit Third-Person Camera |
 | **Scroll Wheel** / **Pinch Gesture** | Zoom Camera Distance (3.5m — 18m) |
 | **Space** / **JUMP Button** | Jump (with Coyote Time) |
-| **Shift** / **RUN Button** | Sprint (13.5 m/s) |
-| **E** / **INTERACT Button** | Interact with NPCs & Enter Buildings |
+| **Shift** / **RUN Button** | Sprint Locomotion (13.5 m/s) |
+| **E** / **INTERACT Button** | Interact with NPCs, Terminals & Enter Buildings |
+| **V** / **VISTA Button** | Toggle Cinematic Aerial Vista Drone Mode |
+| **F5** / **SAVE Button** | Manual Quick Save Operative Progress |
 | **M** / **MAP Button** | Toggle Fullscreen Holographic City Map |
-| **I** or **`~`** (Tilde) | Toggle NEXUS-AI City Assistant Terminal |
-| **HUD Weather Buttons** | Fast-switch: `CLEAR`, `CLOUDY`, `RAIN`, `STORM`, `FOG` |
-| **HUD Time Buttons** | Fast-switch: `DAWN`, `DAY`, `DUSK`, `NIGHT` |
-| **HUD Audio Button** | Toggle Procedural Audio (Mute / Unmute) |
+| **TAB** / **MENU Button** | Open Cyber Command Menu (Codex, Teleport, Audio) |
+| **I** or **`~`** (Tilde) | Toggle NEXUS-AI Grounded City Terminal |
+| **1 - 5 Keys** | Fast Switch Weather (`CLEAR`, `CLOUDY`, `RAIN`, `STORM`, `FOG`) |
+| **6 - 9 Keys** | Fast Switch Time (`DAWN`, `DAY`, `DUSK`, `NIGHT`) |
 
 ---
 
-## 🛠️ Technology Stack
+## 🏗️ Project Architecture
 
-- **Frontend & Rendering**: React 19, TypeScript, Vite, Three.js, React Three Fiber (`@react-three/fiber`), Drei (`@react-three/drei`)
-- **Procedural Audio**: Web Audio API (native oscillators, noise buffers, biquad filters)
-- **Styling**: Modern Vanilla CSS, Glassmorphism, Scanline Shaders, CSS Grid/Flexbox
-- **Deterministic RNG**: Custom Seeded Linear Congruential PRNG (`SeedRandom.ts`, Seed `#847291`)
-- **AI Integration**: Google Gemini API (`gemini-2.5-flash`) + Offline Heuristic NLP Engine
+```
+nexus-city/
+├── src/
+│   ├── ai/               # Grounded Gemini 2.5 Flash & Heuristic NLP Assistant
+│   ├── audio/            # Web Audio Synthesizer (Zero-Asset procedural soundscapes)
+│   ├── cinematics/       # High-altitude intros, drone vista orbits, camera sweeps
+│   ├── city/             # Procedural skyscrapers, roads, chunks, park, water, traffic
+│   ├── core/             # SaveSystem, persistent storage, input manager, PRNG
+│   ├── lighting/         # Dynamic celestial sun/moon, volumetric rays, night lamps
+│   ├── map/              # Holographic 2D/3D map, GPS waypoint navigation
+│   ├── npc/              # Citizen crowd generation, pathfinding, interaction dialogue
+│   ├── player/           # Cyber-armor protagonist, kinematic controller, spring camera
+│   ├── rendering/        # Quality manager, presets, performance profiling monitor
+│   ├── ui/               # Cyberpunk HUD, mini-map, radar, terminal, codex modals
+│   └── world/            # Chunks, weather, wind, time of day, interior destinations
+├── public/               # Minimal HTML entry point & favicon
+├── dist/                 # Production-optimized WebGL bundle
+├── package.json          # Vite + React 19 + Three.js + R3F dependencies
+├── tsconfig.json         # Strict TypeScript configuration
+└── vite.config.ts        # Fast HMR build pipeline
+```
 
 ---
 
-## 🚀 Getting Started Locally
+## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18+ or 20+
-- npm
+* **Node.js**: `v18.0.0` or higher
+* **npm**: `v9.0.0` or higher
+* Modern WebGL2-compatible browser (Chrome, Firefox, Edge, Safari, Brave)
 
-### Installation
+### Installation & Development
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone https://github.com/vineetsharma96/NexusCity.git
 
-# Navigate into project directory
+# 2. Navigate to project root
 cd NexusCity
 
-# Install dependencies
+# 3. Install dependencies
 npm install
 
-# Start local development server
+# 4. Launch development server with HMR
 npm run dev
 
-# Open in browser
-http://localhost:3001/
+# 5. Open in browser
+http://localhost:3000/
 ```
 
 ### Production Build
 ```bash
+# Compile TypeScript and bundle via Vite
 npm run build
+
+# Preview production build locally
+npm run preview
 ```
+
+### Optional: Configure Gemini AI Key
+Nexus City operates seamlessly offline with built-in heuristic intelligence. To enable live Google Gemini 2.5 Flash responses:
+1. Create a `.env.local` file in the project root.
+2. Add your API key:
+   ```env
+   VITE_GEMINI_API_KEY=your_google_gemini_api_key_here
+   ```
+3. Restart the dev server.
 
 ---
 
-## 📜 License
-MIT License. Created by [Vineet Sharma](https://github.com/vineetsharma96).
+## 📜 License & Credits
+
+Distributed under the **MIT License**. Created with passion for procedural WebGL graphics by [Vineet Sharma](https://github.com/vineetsharma96).
