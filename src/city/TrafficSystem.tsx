@@ -251,6 +251,23 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
               AudioManager.getInstance().playVehicleHorn();
             }
           }
+
+          // 3b. Physical Collision Hull Separation (push player out if contacting vehicle)
+          if (Math.abs(pPos.y - v.position.y) < 2.0) {
+            const dx = pPos.x - v.position.x;
+            const dz = pPos.z - v.position.z;
+            const halfW = 1.35;
+            const halfL = 2.45;
+            if (Math.abs(dx) < halfW && Math.abs(dz) < halfL) {
+              const pushX = dx > 0 ? (halfW - dx) : -(halfW + dx);
+              const pushZ = dz > 0 ? (halfL - dz) : -(halfL + dz);
+              if (Math.abs(pushX) < Math.abs(pushZ)) {
+                pPos.x += pushX * 1.15;
+              } else {
+                pPos.z += pushZ * 1.15;
+              }
+            }
+          }
         }
 
         // 4. NPC Pedestrian Crosswalk Avoidance

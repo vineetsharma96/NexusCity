@@ -373,6 +373,11 @@ export class NPCManager {
         if (playerDist < 1.05) {
           // Too close directly to player: politely halt until player steps aside
           npc.isWalking = false;
+          // Physical separation if player walks directly into NPC (< 0.75m)
+          if (playerDist < 0.75 && playerDist > 0.001) {
+            const pushDir = playerPos.clone().sub(npc.position).normalize();
+            playerPos.addScaledVector(pushDir, (0.75 - playerDist) * 0.5);
+          }
           continue;
         }
         // Repulsive steering around player
