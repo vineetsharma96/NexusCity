@@ -46,6 +46,29 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     WindSystem.getInstance().update(delta);
 
     const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
+    const isInterior = pPos.y < -50;
+
+    if (isInterior) {
+      if (scene.background instanceof THREE.Color) {
+        scene.background.set('#03050c');
+      }
+      if (fogRef.current) {
+        fogRef.current.near = 60;
+        fogRef.current.far = 180;
+        fogRef.current.color.set('#03050c');
+      }
+      if (dirLightRef.current) {
+        dirLightRef.current.intensity = 0.05;
+        dirLightRef.current.castShadow = false;
+      }
+      if (hemiLightRef.current) {
+        hemiLightRef.current.intensity = 0.4;
+      }
+      if (ambientLightRef.current) {
+        ambientLightRef.current.intensity = 0.6;
+      }
+      return;
+    }
 
     // 1. Calculate blended sky & fog colors
     const baseSky = new THREE.Color(lighting.skyColor);
@@ -138,6 +161,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
 
   // Calculate local streetlamp illumination points around player
   const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
+  const isInteriorActive = pPos.y < -50;
   const snapX = Math.round(pPos.x / 40) * 40;
   const snapZ = Math.round(pPos.z / 40) * 40;
   const isNightTime = lighting.isNight || lighting.phase === 'DUSK' || lighting.phase === 'DAWN';
@@ -163,7 +187,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         position={[lighting.celestialPosition.x, lighting.celestialPosition.y, lighting.celestialPosition.z]}
         intensity={lighting.celestialIntensity}
         color={lighting.celestialColor}
-        castShadow={quality.shadows}
+        castShadow={!isInteriorActive && quality.shadows}
         shadow-mapSize-width={quality.shadowMapSize}
         shadow-mapSize-height={quality.shadowMapSize}
         shadow-camera-near={1.0}
@@ -176,7 +200,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       />
 
       {/* Night Streetlamp & Neon Ground Bounce Arrays (dynamically gated by maxLights) */}
-      {isNightTime && quality.nightLightsEnabled && quality.maxLights >= 4 && (
+      {!isInteriorActive && isNightTime && quality.nightLightsEnabled && quality.maxLights >= 4 && (
         <group>
           {/* Central road wash light */}
           <pointLight
@@ -241,40 +265,42 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       )}
 
       {/* Realtime Visible Radiant Celestial Orb in Sky (Sun / Moon) */}
-      <group ref={celestialOrbRef}>
-        {/* Core Celestial Sphere */}
-        <mesh>
-          <sphereGeometry args={[lighting.isNight ? 16 : 24, 32, 32]} />
-          <meshBasicMaterial
-            color={lighting.isNight ? '#dbeafe' : '#fffdf0'}
-            fog={false}
-          />
-        </mesh>
+      {!isInteriorActive && (
+        <group ref={celestialOrbRef}>
+          {/* Core Celestial Sphere */}
+          <mesh>
+            <sphereGeometry args={[lighting.isNight ? 16 : 24, 32, 32]} />
+            <meshBasicMaterial
+              color={lighting.isNight ? '#dbeafe' : '#fffdf0'}
+              fog={false}
+            />
+          </mesh>
 
-        {/* Inner Coronal Glow Aura */}
-        <mesh>
-          <sphereGeometry args={[lighting.isNight ? 26 : 40, 16, 16]} />
-          <meshBasicMaterial
-            color={lighting.isNight ? '#60a5fa' : '#ffaa22'}
-            transparent
-            opacity={lighting.isNight ? 0.3 : 0.45}
-            side={THREE.BackSide}
-            fog={false}
-          />
-        </mesh>
+          {/* Inner Coronal Glow Aura */}
+          <mesh>
+            <sphereGeometry args={[lighting.isNight ? 26 : 40, 16, 16]} />
+            <meshBasicMaterial
+              color={lighting.isNight ? '#60a5fa' : '#ffaa22'}
+              transparent
+              opacity={lighting.isNight ? 0.3 : 0.45}
+              side={THREE.BackSide}
+              fog={false}
+            />
+          </mesh>
 
-        {/* Outer Radiant Atmospheric Flare */}
-        <mesh>
-          <sphereGeometry args={[lighting.isNight ? 42 : 68, 16, 16]} />
-          <meshBasicMaterial
-            color={lighting.isNight ? '#3b82f6' : '#ff6600'}
-            transparent
-            opacity={lighting.isNight ? 0.15 : 0.25}
-            side={THREE.BackSide}
-            fog={false}
-          />
-        </mesh>
-      </group>
+          {/* Outer Radiant Atmospheric Flare */}
+          <mesh>
+            <sphereGeometry args={[lighting.isNight ? 42 : 68, 16, 16]} />
+            <meshBasicMaterial
+              color={lighting.isNight ? '#3b82f6' : '#ff6600'}
+              transparent
+              opacity={lighting.isNight ? 0.15 : 0.25}
+              side={THREE.BackSide}
+              fog={false}
+            />
+          </mesh>
+        </group>
+      )}
 
       {/* Ambient fill light */}
       <ambientLight ref={ambientLightRef} intensity={lighting.ambientIntensity} color="#182a4d" />

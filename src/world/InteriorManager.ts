@@ -21,6 +21,8 @@ export type InteriorType =
   | 'METRO_STATION'
   | 'ARCADE';
 
+export type WorldMode = 'WORLD_ACTIVE' | 'ENTERING_INTERIOR' | 'INTERIOR_ACTIVE' | 'EXITING_INTERIOR';
+
 import { SaveSystem } from '../core/SaveSystem';
 
 export interface InteriorState {
@@ -30,6 +32,8 @@ export interface InteriorState {
   destinationId?: string | null;
   destination?: InteriorDestination | null;
   name?: string;
+  worldMode: WorldMode;
+  isWorldActive: boolean;
   isTransitioning: boolean;
   currentFloor: number; // 1 = Main Floor, 2 = Mezzanine / Sky Observation
   lastError?: string | null;
@@ -41,6 +45,7 @@ type InteriorChangeListener = (state: InteriorState) => void;
 export class InteriorManager {
   private static instance: InteriorManager;
 
+  public worldMode: WorldMode = 'WORLD_ACTIVE';
   public currentInterior: InteriorType = 'NONE';
   public currentDestinationId: string | null = null;
   public activeDestination: InteriorDestination | null = null;
@@ -104,6 +109,7 @@ export class InteriorManager {
       return false;
     }
 
+    this.worldMode = 'ENTERING_INTERIOR';
     this.isTransitioning = true;
     this.lastError = null;
     AudioManager.getInstance().duck(1.5, 0.2);
@@ -123,8 +129,10 @@ export class InteriorManager {
       this.currentDestinationId = destinationId;
       this.activeDestination = dest;
       this.currentFloor = 1;
+      this.worldMode = 'INTERIOR_ACTIVE';
 
       SaveSystem.getInstance().updateInterior(dest.interiorId, 1);
+      AudioManager.getInstance().setInteriorMode(true);
 
       const spawnPoint = dest.interiorSpawnPoint.clone();
       onTeleport(spawnPoint);
@@ -168,6 +176,7 @@ export class InteriorManager {
    * Handles failure cleanly without silently dropping player at (0, 0, 0).
    */
   private handleFailedEntry(errorMessage: string, previousValidPos: THREE.Vector3): void {
+    this.worldMode = 'WORLD_ACTIVE';
     this.lastError = errorMessage;
     this.isTransitioning = false;
     this.notify();
@@ -191,6 +200,7 @@ export class InteriorManager {
   public exit(onTeleport: (newPos: THREE.Vector3) => void): void {
     if (this.isTransitioning || this.currentInterior === 'NONE') return;
 
+    this.worldMode = 'EXITING_INTERIOR';
     this.isTransitioning = true;
     AudioManager.getInstance().duck(1.5, 0.2);
     this.notify();
@@ -199,10 +209,12 @@ export class InteriorManager {
       this.currentInterior = 'NONE';
       this.currentDestinationId = null;
       this.currentFloor = 1;
+      this.worldMode = 'WORLD_ACTIVE';
       const exitPos = this.activeDestination?.exitPosition?.clone() || this.savedExteriorPos.clone();
       this.activeDestination = null;
 
       SaveSystem.getInstance().updateInterior('NONE', 1);
+      AudioManager.getInstance().setInteriorMode(false);
 
       onTeleport(exitPos);
 
@@ -229,14 +241,14 @@ export class InteriorManager {
     }
 
     this.isTransitioning = true;
+    AudioManager.getInstance().duck(1.2, 0.3);
     AudioManager.getInstance().playElevatorMove();
-    AudioManager.getInstance().duck(1.8, 0.3);
     this.notify();
 
     setTimeout(() => {
       this.currentFloor = targetFloor;
-      SaveSystem.getInstance().incrementElevator();
       SaveSystem.getInstance().updateInterior(this.currentInterior, targetFloor);
+      AudioManager.getInstance().playElevatorDing();
 
       // Elevator arrival position
       const elevatorSpawn =
@@ -266,6 +278,7 @@ export class InteriorManager {
     const name = dest
       ? `${dest.name.toUpperCase()} [LVL ${this.currentFloor}: ${floorLabel}]`
       : 'DISTRICT 1: CENTRAL METROPOLIS';
+    const isWorldActive = this.worldMode === 'WORLD_ACTIVE' || this.worldMode === 'ENTERING_INTERIOR';
 
     return {
       current: this.currentInterior,
@@ -274,6 +287,8 @@ export class InteriorManager {
       destinationId: this.currentDestinationId,
       destination: this.activeDestination,
       name,
+      worldMode: this.worldMode,
+      isWorldActive,
       currentFloor: this.currentFloor,
       isTransitioning: this.isTransitioning,
       lastError: this.lastError,

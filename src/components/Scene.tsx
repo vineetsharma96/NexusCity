@@ -92,22 +92,23 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       <SceneFrameLoop />
       <LightingManager quality={quality} playerPosRef={playerPosRef} />
 
-      {/* Exterior City District & Infrastructure */}
-      <CityDistrict seed={847291} />
-      <NavigationRibbon />
-      <WorldManager playerPosRef={playerPosRef} />
-      {interiorState.current === 'NONE' && <TrafficSystem playerPosRef={playerPosRef} />}
-      {interiorState.current === 'NONE' && <TrafficLightGantry position={[0, 0, 0]} />}
-      {interiorState.current === 'NONE' && <CrosswalkMarkings position={[0, 0, 0]} />}
-      {interiorState.current === 'NONE' && <ParkSanctuary position={[75, 0, 75]} />}
-      {interiorState.current === 'NONE' && <RainParticles playerPosRef={playerPosRef} />}
-      {interiorState.current === 'NONE' && quality.cloudsEnabled && <NaturalClouds />}
-      {interiorState.current === 'NONE' && quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
-      {interiorState.current === 'NONE' && <AtmosphericDetails playerPosRef={playerPosRef} />}
-
-      {/* 11 Enterable Building Entrances Across City Districts */}
+      {/* Exterior City Infrastructure: Active ONLY during WORLD_MODE */}
       {interiorState.current === 'NONE' && (
         <>
+          <CityDistrict seed={847291} />
+          <NavigationRibbon />
+          <WorldManager playerPosRef={playerPosRef} />
+          <TrafficSystem playerPosRef={playerPosRef} />
+          <TrafficLightGantry position={[0, 0, 0]} />
+          <CrosswalkMarkings position={[0, 0, 0]} />
+          <ParkSanctuary position={[75, 0, 75]} />
+          <RainParticles playerPosRef={playerPosRef} />
+          {quality.cloudsEnabled && <NaturalClouds />}
+          {quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
+          <AtmosphericDetails playerPosRef={playerPosRef} />
+          <NPCCrowd playerPosRef={playerPosRef} />
+
+          {/* 11 Enterable Building Entrances Across City Districts */}
           {Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => (
             <BuildingEntrance
               key={id}
@@ -124,13 +125,14 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
         </>
       )}
 
-      {/* Procedural Interior Room when inside */}
-      <ProceduralInterior
-        type={interiorState.current}
-        onExit={handleExitInterior}
-      />
+      {/* Procedural Interior Room: Active ONLY during INTERIOR_MODE */}
+      {interiorState.current !== 'NONE' && (
+        <ProceduralInterior
+          type={interiorState.current}
+          onExit={handleExitInterior}
+        />
+      )}
 
-      <NPCCrowd playerPosRef={playerPosRef} />
       <PlayerController
         playerPosRef={playerPosRef}
         registerTeleport={(fn) => {

@@ -44,7 +44,7 @@ export class AudioManager {
   private initialized: boolean = false;
 
   private constructor() {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
       const savedMute = localStorage.getItem('nexus_audio_muted');
       if (savedMute !== null) {
         this.isMuted = savedMute === 'true';
@@ -692,6 +692,29 @@ export class AudioManager {
 
       chimeOsc.start(chimeStart);
       chimeOsc.stop(chimeStart + 0.42);
+    });
+  }
+
+  public playElevatorDing(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    [659.25, 987.77].forEach((freq, idx) => {
+      const chimeStart = now + idx * 0.12;
+      const chimeOsc = this.ctx!.createOscillator();
+      const chimeGain = this.ctx!.createGain();
+
+      chimeOsc.type = 'sine';
+      chimeOsc.frequency.setValueAtTime(freq, chimeStart);
+
+      chimeGain.gain.setValueAtTime(0.09, chimeStart);
+      chimeGain.gain.exponentialRampToValueAtTime(0.001, chimeStart + 0.45);
+
+      chimeOsc.connect(chimeGain);
+      chimeGain.connect(this.sfxGain!);
+
+      chimeOsc.start(chimeStart);
+      chimeOsc.stop(chimeStart + 0.46);
     });
   }
 

@@ -53,6 +53,10 @@ export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = (
   const groupRef = useRef<THREE.Group>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
+  if (playerPosRef && playerPosRef.current.y < -50) {
+    return null;
+  }
+
   // Setup ray cone geometries (multiple concentric and angled beams)
   const rayGeometries = useMemo(() => {
     // 5 cascading beam cones of varied heights and base spreads
