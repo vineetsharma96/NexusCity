@@ -2,6 +2,7 @@ import React, { useRef, useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
+import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 
 import { TrafficLightSystem } from './TrafficLightSystem';
 import { AudioManager } from '../audio/AudioManager';
@@ -33,9 +34,15 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
   const [timeState, setTimeState] = useState<TimeLightingState>(() =>
     TimeSystem.getInstance().getState()
   );
+  const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
   useEffect(() => {
-    return TimeSystem.getInstance().subscribe(setTimeState);
+    const unsubTime = TimeSystem.getInstance().subscribe(setTimeState);
+    const unsubQuality = QualityManager.subscribe(setQuality);
+    return () => {
+      unsubTime();
+      unsubQuality();
+    };
   }, []);
 
   // Meshes for instanced rendering
@@ -161,6 +168,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
   useFrame((_, delta) => {
     let groundIdx = 0;
     let aerialIdx = 0;
+    const maxGround = Math.max(6, Math.round(GROUND_COUNT * quality.vehicleDensity));
+    const maxAerial = Math.max(4, Math.round(AERIAL_COUNT * quality.vehicleDensity));
     const pPos = playerPosRef.current;
     const npcs = NPCManager.getInstance().npcs;
     const now = performance.now();
@@ -170,6 +179,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
       // Handle ground vehicle intersection deceleration, headway & obstacle avoidance
       if (v.type === 'GROUND') {
+        if (groundIdx >= maxGround) continue;
+
         const signal = TrafficLightSystem.getInstance().getVehicleSignal(v.axis);
         let targetSpeed = v.cruisingSpeed;
         v.isBraking = false;
@@ -337,6 +348,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
         groundIdx++;
       } else if (v.type === 'AERIAL' && aerialBodyMesh.current) {
+        if (aerialIdx >= maxAerial) continue;
+
         // Aerial Skyway Commuter
         dummy.position.copy(v.position);
         dummy.rotation.set(Math.PI / 2, v.rotationY, 0);
@@ -357,12 +370,30 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
       }
     }
 
-    if (groundBodyMesh.current) groundBodyMesh.current.instanceMatrix.needsUpdate = true;
-    if (groundGlassMesh.current) groundGlassMesh.current.instanceMatrix.needsUpdate = true;
-    if (groundHeadlightMesh.current) groundHeadlightMesh.current.instanceMatrix.needsUpdate = true;
-    if (groundTaillightMesh.current) groundTaillightMesh.current.instanceMatrix.needsUpdate = true;
-    if (aerialBodyMesh.current) aerialBodyMesh.current.instanceMatrix.needsUpdate = true;
-    if (aerialTrailMesh.current) aerialTrailMesh.current.instanceMatrix.needsUpdate = true;
+    if (groundBodyMesh.current) {
+      groundBodyMesh.current.count = groundIdx;
+      groundBodyMesh.current.instanceMatrix.needsUpdate = true;
+    }
+    if (groundGlassMesh.current) {
+      groundGlassMesh.current.count = groundIdx;
+      groundGlassMesh.current.instanceMatrix.needsUpdate = true;
+    }
+    if (groundHeadlightMesh.current) {
+      groundHeadlightMesh.current.count = groundIdx;
+      groundHeadlightMesh.current.instanceMatrix.needsUpdate = true;
+    }
+    if (groundTaillightMesh.current) {
+      groundTaillightMesh.current.count = groundIdx;
+      groundTaillightMesh.current.instanceMatrix.needsUpdate = true;
+    }
+    if (aerialBodyMesh.current) {
+      aerialBodyMesh.current.count = aerialIdx;
+      aerialBodyMesh.current.instanceMatrix.needsUpdate = true;
+    }
+    if (aerialTrailMesh.current) {
+      aerialTrailMesh.current.count = aerialIdx;
+      aerialTrailMesh.current.instanceMatrix.needsUpdate = true;
+    }
   });
 
   const headlightEmissive = timeState.isNight ? 4.5 : 1.8;
@@ -374,8 +405,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
       <instancedMesh
         ref={groundBodyMesh}
         args={[groundBodyGeo, undefined, GROUND_COUNT]}
-        castShadow
-        receiveShadow
+        castShadow={quality.shadows}
+        receiveShadow={quality.shadows}
       >
         <meshStandardMaterial color="#1e293b" roughness={0.25} metalness={0.85} />
       </instancedMesh>

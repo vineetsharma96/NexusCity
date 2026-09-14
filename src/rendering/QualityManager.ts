@@ -237,17 +237,36 @@ class QualityManagerClass {
     }
   }
 
+  public get isMobileDevice(): boolean {
+    if (typeof window === 'undefined') return false;
+    const isMobileUA = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+    const isSmallScreen = window.innerWidth < 768;
+    return isMobileUA || (isSmallScreen && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
+  }
+
   public get current(): QualitySettings {
+    let settings: QualitySettings;
     if (this.currentPreset === 'CUSTOM') {
-      return this.customSettings;
-    }
-    if (this.currentPreset === 'AUTO') {
-      return {
+      settings = this.customSettings;
+    } else if (this.currentPreset === 'AUTO') {
+      settings = {
         ...QUALITY_PROFILES[this.autoBasePreset],
         name: 'AUTO',
       };
+    } else {
+      settings = QUALITY_PROFILES[this.currentPreset];
     }
-    return QUALITY_PROFILES[this.currentPreset];
+
+    // On mobile devices, clamp DPR to prevent severe GPU memory and fill-rate bottlenecks
+    if (this.isMobileDevice) {
+      return {
+        ...settings,
+        dpr: [Math.min(settings.dpr[0], 0.85), Math.min(settings.dpr[1], 1.25)],
+      };
+    }
+    return settings;
   }
 
   public get preset(): QualityPreset {

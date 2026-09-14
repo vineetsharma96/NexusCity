@@ -2,6 +2,7 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
+import { QualityManager } from '../rendering/QualityManager';
 
 interface RainParticlesProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
@@ -81,13 +82,18 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
     const pPos = playerPosRef.current;
     const wind = weather.windVector;
 
+    // Dynamic density scaling by quality profile
+    const density = QualityManager.current.particlesDensity;
+    const activeDropCount = Math.max(120, Math.round(DROP_COUNT * density));
+    const activeSplashCount = Math.max(10, Math.round(SPLASH_COUNT * density));
+
     // Orientation quaternion aligning drop along wind vector
     const windDir = wind.clone().normalize();
     const up = new THREE.Vector3(0, -1, 0); // Drop flows down along wind
     const quat = new THREE.Quaternion().setFromUnitVectors(up, windDir);
 
     // 1. Update Raindrops
-    for (let i = 0; i < DROP_COUNT; i++) {
+    for (let i = 0; i < activeDropCount; i++) {
       const drop = drops[i];
 
       // Integrate motion
@@ -120,11 +126,12 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
 
       meshRef.current.setMatrixAt(i, dummy.matrix);
     }
+    meshRef.current.count = activeDropCount;
     meshRef.current.instanceMatrix.needsUpdate = true;
 
     // 2. Update Ground Splashes
     if (splashMeshRef.current && rainIntensity > 0.1) {
-      for (let i = 0; i < SPLASH_COUNT; i++) {
+      for (let i = 0; i < activeSplashCount; i++) {
         const splash = splashes[i];
         splash.life += delta * (2.8 + rainIntensity * 2.0);
 
@@ -144,6 +151,7 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
 
         splashMeshRef.current.setMatrixAt(i, splashDummy.matrix);
       }
+      splashMeshRef.current.count = activeSplashCount;
       splashMeshRef.current.instanceMatrix.needsUpdate = true;
     }
   });

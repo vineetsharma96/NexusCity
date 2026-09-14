@@ -116,18 +116,23 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       );
     }
 
-    // 5. Hemisphere light (sky irradiance + ground bounce)
+    // 5. Hemisphere light (sky irradiance + ground bounce) with GI quality scaling
+    const giScale =
+      quality.GIQuality === 'HIGH' ? 1.0 : quality.GIQuality === 'MEDIUM' ? 0.85 : quality.GIQuality === 'LOW' ? 0.65 : 0.45;
+
     if (hemiLightRef.current) {
       const hemiDim = 1.0 - weather.skyDarkness * 0.45;
       hemiLightRef.current.color.copy(effectiveSky);
       hemiLightRef.current.groundColor.set(lighting.hemiGroundColor);
-      hemiLightRef.current.intensity = (lighting.isNight ? 0.85 : 1.25) * hemiDim + weather.lightningIntensity * 1.2;
+      hemiLightRef.current.intensity =
+        ((lighting.isNight ? 0.85 : 1.25) * hemiDim + weather.lightningIntensity * 1.2) * giScale;
     }
 
     // 6. Ambient fill light
     if (ambientLightRef.current) {
       const ambDim = 1.0 - weather.skyDarkness * 0.5;
-      ambientLightRef.current.intensity = (lighting.isNight ? 0.75 : lighting.ambientIntensity) * ambDim + weather.lightningIntensity * 1.5;
+      ambientLightRef.current.intensity =
+        ((lighting.isNight ? 0.75 : lighting.ambientIntensity) * ambDim + weather.lightningIntensity * 1.5) * giScale;
     }
   });
 
@@ -137,6 +142,8 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const snapZ = Math.round(pPos.z / 40) * 40;
   const isNightTime = lighting.isNight || lighting.phase === 'DUSK' || lighting.phase === 'DAWN';
   const nightIntensity = lighting.isNight ? 2.4 : 1.4;
+
+  const sDist = quality.shadowDistance;
 
   return (
     <>
@@ -160,47 +167,17 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         shadow-mapSize-width={quality.shadowMapSize}
         shadow-mapSize-height={quality.shadowMapSize}
         shadow-camera-near={1.0}
-        shadow-camera-far={quality.drawDistance * 0.85}
-        shadow-camera-left={-150}
-        shadow-camera-right={150}
-        shadow-camera-top={150}
-        shadow-camera-bottom={-150}
+        shadow-camera-far={Math.min(900, sDist * 3.5)}
+        shadow-camera-left={-sDist}
+        shadow-camera-right={sDist}
+        shadow-camera-top={sDist}
+        shadow-camera-bottom={-sDist}
         shadow-bias={-0.0004}
       />
 
-      {/* Night Streetlamp & Neon Ground Bounce Arrays (dynamically activated at night) */}
+      {/* Night Streetlamp & Neon Ground Bounce Arrays (dynamically gated by maxLights) */}
       {isNightTime && quality.nightLightsEnabled && quality.maxLights >= 4 && (
         <group>
-          {/* Streetlamp pole lights snapped to player's intersection vicinity */}
-          <pointLight
-            position={[snapX - 16, 7.5, snapZ - 16]}
-            intensity={nightIntensity}
-            distance={45}
-            color="#ffbe6b"
-            decay={2}
-          />
-          <pointLight
-            position={[snapX + 16, 7.5, snapZ + 16]}
-            intensity={nightIntensity}
-            distance={45}
-            color="#ffbe6b"
-            decay={2}
-          />
-          <pointLight
-            position={[snapX - 16, 7.5, snapZ + 16]}
-            intensity={nightIntensity * 0.85}
-            distance={45}
-            color="#00f0ff"
-            decay={2}
-          />
-          <pointLight
-            position={[snapX + 16, 7.5, snapZ - 16]}
-            intensity={nightIntensity * 0.85}
-            distance={45}
-            color="#ff007f"
-            decay={2}
-          />
-
           {/* Central road wash light */}
           <pointLight
             position={[snapX, 8.5, snapZ]}
@@ -210,8 +187,48 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
             decay={2}
           />
 
-          {/* Park sanctuary ambient lantern light if in vicinity */}
-          {Math.hypot(pPos.x - 75, pPos.z - 75) < 90 && (
+          {/* Primary streetlamp pair (if maxLights >= 6) */}
+          {quality.maxLights >= 6 && (
+            <>
+              <pointLight
+                position={[snapX - 16, 7.5, snapZ - 16]}
+                intensity={nightIntensity}
+                distance={45}
+                color="#ffbe6b"
+                decay={2}
+              />
+              <pointLight
+                position={[snapX + 16, 7.5, snapZ + 16]}
+                intensity={nightIntensity}
+                distance={45}
+                color="#ffbe6b"
+                decay={2}
+              />
+            </>
+          )}
+
+          {/* Secondary streetlamp pair with cyber accents (if maxLights >= 10) */}
+          {quality.maxLights >= 10 && (
+            <>
+              <pointLight
+                position={[snapX - 16, 7.5, snapZ + 16]}
+                intensity={nightIntensity * 0.85}
+                distance={45}
+                color="#00f0ff"
+                decay={2}
+              />
+              <pointLight
+                position={[snapX + 16, 7.5, snapZ - 16]}
+                intensity={nightIntensity * 0.85}
+                distance={45}
+                color="#ff007f"
+                decay={2}
+              />
+            </>
+          )}
+
+          {/* Park sanctuary ambient lantern light if in vicinity (if maxLights >= 12) */}
+          {quality.maxLights >= 12 && Math.hypot(pPos.x - 75, pPos.z - 75) < 90 && (
             <pointLight
               position={[75, 4.5, 75]}
               intensity={3.2}

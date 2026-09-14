@@ -2,6 +2,7 @@ import React, { useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { WindSystem } from '../world/WindSystem';
+import { QualityManager } from '../rendering/QualityManager';
 
 interface DirtParticlesProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
@@ -84,6 +85,12 @@ export const DirtParticles: React.FC<DirtParticlesProps> = ({ playerPosRef, coun
   useFrame((_, delta) => {
     if (!meshRef.current) return;
 
+    if (!QualityManager.current.windParticlesEnabled) {
+      if (meshRef.current.visible) meshRef.current.visible = false;
+      return;
+    }
+    if (!meshRef.current.visible) meshRef.current.visible = true;
+
     // Update global wind
     windSystem.update(delta);
     const windVec = windSystem.getVector();
@@ -91,7 +98,9 @@ export const DirtParticles: React.FC<DirtParticlesProps> = ({ playerPosRef, coun
     const pPos = playerPosRef.current;
     const boundedRadius = 45; // 90m total field centered on player
 
-    for (let i = 0; i < count; i++) {
+    const activeCount = Math.max(50, Math.round(count * QualityManager.current.particlesDensity));
+
+    for (let i = 0; i < activeCount; i++) {
       const p = particles[i];
       p.life += delta;
 
@@ -140,35 +149,25 @@ export const DirtParticles: React.FC<DirtParticlesProps> = ({ playerPosRef, coun
       // Setup transform
       dummy.position.copy(p.pos);
       dummy.rotation.copy(p.rot);
-
-      // Flatten papers slightly
-      if (p.type === 2) {
-        dummy.scale.set(p.scale * 1.2, p.scale * 0.15, p.scale * 1.5);
-      } else {
-        dummy.scale.setScalar(p.scale);
-      }
-
+      dummy.scale.setScalar(p.scale);
       dummy.updateMatrix();
+
       meshRef.current.setMatrixAt(i, dummy.matrix);
 
-      // Dynamic color depending on type
+      // Cyber grit emissive / color variance
       if (p.type === 0) {
-        // earthy dust speck
-        color.set('#c49a6c');
+        color.set('#d97706'); // warm golden dust
       } else if (p.type === 1) {
-        // cyber metallic grit / sparks
-        color.set(gust > 1.5 ? '#ffaa44' : '#8899aa');
+        color.set('#00f0ff'); // glowing cyber grit
       } else {
-        // flyer / debris paper
-        color.set('#00f0ff');
+        color.set('#e2e8f0'); // paper flyer
       }
       meshRef.current.setColorAt(i, color);
     }
 
+    meshRef.current.count = activeCount;
     meshRef.current.instanceMatrix.needsUpdate = true;
-    if (meshRef.current.instanceColor) {
-      meshRef.current.instanceColor.needsUpdate = true;
-    }
+    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
   });
 
   return (

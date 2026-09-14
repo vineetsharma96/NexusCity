@@ -625,22 +625,23 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
           </div>
         )}
 
-        {!isMobile && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ color: 'var(--text-muted)' }}>QUALITY:</span>
-            <select
-              value={qualityPreset}
-              onChange={handleQualityChange}
-              className="cyber-select"
-            >
-              <option value="ULTRA">ULTRA</option>
-              <option value="HIGH">HIGH</option>
-              <option value="MEDIUM">MEDIUM</option>
-              <option value="LOW">LOW</option>
-              <option value="LITE">LITE</option>
-            </select>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 6 }}>
+          {!isMobile && <span style={{ color: 'var(--text-muted)' }}>QUALITY:</span>}
+          <select
+            value={qualityPreset}
+            onChange={handleQualityChange}
+            className="cyber-select"
+            style={isMobile ? { padding: '2px 4px', fontSize: '0.7rem' } : undefined}
+          >
+            <option value="AUTO">AUTO</option>
+            <option value="ULTRA">ULTRA</option>
+            <option value="HIGH">HIGH</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="LOW">LOW</option>
+            <option value="LITE">LITE</option>
+            {qualityPreset === 'CUSTOM' && <option value="CUSTOM">CUSTOM</option>}
+          </select>
+        </div>
 
         {!isMobile && (
           <button

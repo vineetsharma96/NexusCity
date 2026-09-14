@@ -7,6 +7,12 @@ import { KinematicCollisionSolver } from '../player/KinematicCollision';
 import { ProceduralTextures } from '../core/ProceduralTextures';
 import { WeatherSystem } from '../world/WeatherSystem';
 
+// Shared static unit geometries to eliminate redundant GPU buffer allocations
+const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 6);
+const SHARED_BEACON_SPHERE = new THREE.SphereGeometry(0.7, 8, 8);
+const SHARED_SMALL_SPHERE = new THREE.SphereGeometry(0.2, 6, 6);
+
 // Sub-component for individual building rendering by LOD
 const StreamedBuilding: React.FC<{
   building: StreamedBuildingDef;
@@ -16,10 +22,13 @@ const StreamedBuilding: React.FC<{
   const { position, size, color, accentColor, emissiveColor, tiers, antenna } = building;
 
   if (lod === 'LOW') {
-    // Low LOD: Single massing volume with atmospheric styling
+    // Low LOD: Single massing volume with atmospheric styling using shared unit box
     return (
-      <mesh position={[position.x, size.y / 2, position.z]}>
-        <boxGeometry args={[size.x, size.y, size.z]} />
+      <mesh
+        position={[position.x, size.y / 2, position.z]}
+        geometry={SHARED_UNIT_BOX}
+        scale={[size.x, size.y, size.z]}
+      >
         <meshStandardMaterial
           color={color}
           roughness={0.8}
@@ -35,8 +44,12 @@ const StreamedBuilding: React.FC<{
       {tiers.map((tier, idx) => (
         <group key={idx} position={[tier.offset.x, tier.offset.y, tier.offset.z]}>
           {/* Main Tier Body */}
-          <mesh castShadow={lod === 'HIGH'} receiveShadow>
-            <boxGeometry args={[tier.size.x, tier.size.y, tier.size.z]} />
+          <mesh
+            geometry={SHARED_UNIT_BOX}
+            scale={[tier.size.x, tier.size.y, tier.size.z]}
+            castShadow={lod === 'HIGH'}
+            receiveShadow
+          >
             <meshStandardMaterial
               color={color}
               normalMap={lod === 'HIGH' ? claddingNormal : undefined}
@@ -50,8 +63,11 @@ const StreamedBuilding: React.FC<{
           {lod === 'HIGH' && (
             <>
               {/* Perimeter glowing neon trim */}
-              <mesh position={[0, tier.size.y / 2 - 0.2, 0]}>
-                <boxGeometry args={[tier.size.x + 0.15, 0.4, tier.size.z + 0.15]} />
+              <mesh
+                position={[0, tier.size.y / 2 - 0.2, 0]}
+                geometry={SHARED_UNIT_BOX}
+                scale={[tier.size.x + 0.15, 0.4, tier.size.z + 0.15]}
+              >
                 <meshStandardMaterial
                   color={accentColor}
                   emissive={accentColor}
@@ -61,8 +77,11 @@ const StreamedBuilding: React.FC<{
               </mesh>
 
               {/* Mid-tower horizontal data stripe */}
-              <mesh position={[0, 0, 0]}>
-                <boxGeometry args={[tier.size.x + 0.08, 0.6, tier.size.z + 0.08]} />
+              <mesh
+                position={[0, 0, 0]}
+                geometry={SHARED_UNIT_BOX}
+                scale={[tier.size.x + 0.08, 0.6, tier.size.z + 0.08]}
+              >
                 <meshStandardMaterial
                   color={emissiveColor}
                   emissive={emissiveColor}
@@ -75,8 +94,11 @@ const StreamedBuilding: React.FC<{
 
           {/* Medium LOD: Simplified trim */}
           {lod === 'MEDIUM' && (
-            <mesh position={[0, tier.size.y / 2 - 0.3, 0]}>
-              <boxGeometry args={[tier.size.x + 0.1, 0.6, tier.size.z + 0.1]} />
+            <mesh
+              position={[0, tier.size.y / 2 - 0.3, 0]}
+              geometry={SHARED_UNIT_BOX}
+              scale={[tier.size.x + 0.1, 0.6, tier.size.z + 0.1]}
+            >
               <meshStandardMaterial
                 color={accentColor}
                 emissive={accentColor}
@@ -90,13 +112,15 @@ const StreamedBuilding: React.FC<{
       {/* Rooftop Antenna Spire */}
       {antenna && (
         <group position={[0, size.y, 0]}>
-          <mesh position={[0, antenna.height / 2, 0]}>
-            <cylinderGeometry args={[0.2, 0.4, antenna.height, 6]} />
+          <mesh
+            position={[0, antenna.height / 2, 0]}
+            geometry={SHARED_UNIT_CYLINDER}
+            scale={[0.6, antenna.height, 0.6]}
+          >
             <meshStandardMaterial color="#475569" metalness={0.9} roughness={0.2} />
           </mesh>
           {/* Pulsing Beacon Light on Top */}
-          <mesh position={[0, antenna.height + 0.5, 0]}>
-            <sphereGeometry args={[0.7, 8, 8]} />
+          <mesh position={[0, antenna.height + 0.5, 0]} geometry={SHARED_BEACON_SPHERE}>
             <meshBasicMaterial color={antenna.beaconColor} />
           </mesh>
         </group>
@@ -148,9 +172,10 @@ const StreamedChunkView: React.FC<{
             key={`r-${rIdx}`}
             position={road.position}
             rotation={[0, road.rotationY, 0]}
+            geometry={SHARED_UNIT_BOX}
+            scale={[road.size.x, road.size.y, road.size.z]}
             receiveShadow
           >
-            <boxGeometry args={[road.size.x, road.size.y, road.size.z]} />
             <meshStandardMaterial
               color="#0a0f1d"
               normalMap={chunkInfo.lod === 'HIGH' ? asphaltNormal : undefined}
@@ -165,8 +190,13 @@ const StreamedChunkView: React.FC<{
       {/* 2. Sidewalk Pads (HIGH LOD only) */}
       {chunkInfo.lod === 'HIGH' &&
         data.sidewalks.map((sw, sIdx) => (
-          <mesh key={`sw-${sIdx}`} position={sw.position} receiveShadow>
-            <boxGeometry args={[sw.size.x, sw.size.y, sw.size.z]} />
+          <mesh
+            key={`sw-${sIdx}`}
+            position={sw.position}
+            geometry={SHARED_UNIT_BOX}
+            scale={[sw.size.x, sw.size.y, sw.size.z]}
+            receiveShadow
+          >
             <meshStandardMaterial
               color="#131b2e"
               normalMap={asphaltNormal}
@@ -192,17 +222,31 @@ const StreamedChunkView: React.FC<{
         data.parks.map((park) => (
           <group key={park.id} position={park.position}>
             {/* Lawn Base */}
-            <mesh receiveShadow position={[0, 0.06, 0]}>
-              <boxGeometry args={[park.size.x, 0.12, park.size.z]} />
+            <mesh
+              receiveShadow
+              position={[0, 0.06, 0]}
+              geometry={SHARED_UNIT_BOX}
+              scale={[park.size.x, 0.12, park.size.z]}
+            >
               <meshStandardMaterial color="#062e1a" roughness={0.8} />
             </mesh>
             {/* Perimeter Retaining Walls */}
-            <mesh position={[0, 0.5, -park.size.z / 2]} castShadow receiveShadow>
-              <boxGeometry args={[park.size.x, 1.0, 0.8]} />
+            <mesh
+              position={[0, 0.5, -park.size.z / 2]}
+              geometry={SHARED_UNIT_BOX}
+              scale={[park.size.x, 1.0, 0.8]}
+              castShadow
+              receiveShadow
+            >
               <meshStandardMaterial color="#1e293b" metalness={0.7} roughness={0.3} />
             </mesh>
-            <mesh position={[0, 0.5, park.size.z / 2]} castShadow receiveShadow>
-              <boxGeometry args={[park.size.x, 1.0, 0.8]} />
+            <mesh
+              position={[0, 0.5, park.size.z / 2]}
+              geometry={SHARED_UNIT_BOX}
+              scale={[park.size.x, 1.0, 0.8]}
+              castShadow
+              receiveShadow
+            >
               <meshStandardMaterial color="#1e293b" metalness={0.7} roughness={0.3} />
             </mesh>
             {/* Water Basin / Fountain */}
@@ -216,8 +260,7 @@ const StreamedChunkView: React.FC<{
                   <circleGeometry args={[park.pondRadius, 20]} />
                   <meshStandardMaterial color="#022c22" roughness={0.06} metalness={0.9} />
                 </mesh>
-                <mesh position={[0, 0.45, 0]}>
-                  <sphereGeometry args={[0.4, 8, 8]} />
+                <mesh position={[0, 0.45, 0]} geometry={SHARED_SMALL_SPHERE} scale={[2.0, 2.0, 2.0]}>
                   <meshBasicMaterial color={park.fountainColor} />
                 </mesh>
               </group>
@@ -229,12 +272,19 @@ const StreamedChunkView: React.FC<{
                 position={[bench.position.x - park.position.x, 0.2, bench.position.z - park.position.z]}
                 rotation={[0, bench.rotationY, 0]}
               >
-                <mesh castShadow position={[0, 0.38, 0]}>
-                  <boxGeometry args={[2.0, 0.08, 0.6]} />
+                <mesh
+                  castShadow
+                  position={[0, 0.38, 0]}
+                  geometry={SHARED_UNIT_BOX}
+                  scale={[2.0, 0.08, 0.6]}
+                >
                   <meshStandardMaterial color="#78350f" roughness={0.6} />
                 </mesh>
-                <mesh position={[0, 0.32, 0]}>
-                  <boxGeometry args={[1.9, 0.04, 0.04]} />
+                <mesh
+                  position={[0, 0.32, 0]}
+                  geometry={SHARED_UNIT_BOX}
+                  scale={[1.9, 0.04, 0.04]}
+                >
                   <meshBasicMaterial color={park.fountainColor} />
                 </mesh>
               </group>
@@ -246,13 +296,16 @@ const StreamedChunkView: React.FC<{
             {/* Park Bushes */}
             {park.bushes.map((b) => (
               <group key={b.id} position={[b.position.x - park.position.x, b.position.y, b.position.z - park.position.z]}>
-                <mesh castShadow receiveShadow>
-                  <boxGeometry args={[b.size.x, b.size.y, b.size.z]} />
+                <mesh
+                  castShadow
+                  receiveShadow
+                  geometry={SHARED_UNIT_BOX}
+                  scale={[b.size.x, b.size.y, b.size.z]}
+                >
                   <meshStandardMaterial color={b.color} roughness={0.7} />
                 </mesh>
                 {b.hasFlowers && b.flowerColor && (
-                  <mesh position={[0, b.size.y / 2 + 0.05, 0]}>
-                    <sphereGeometry args={[0.2, 6, 6]} />
+                  <mesh position={[0, b.size.y / 2 + 0.05, 0]} geometry={SHARED_SMALL_SPHERE}>
                     <meshBasicMaterial color={b.flowerColor} />
                   </mesh>
                 )}
@@ -271,13 +324,16 @@ const StreamedChunkView: React.FC<{
       {chunkInfo.lod === 'HIGH' &&
         data.bushes.map((bush) => (
           <group key={bush.id} position={bush.position}>
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[bush.size.x, bush.size.y, bush.size.z]} />
+            <mesh
+              castShadow
+              receiveShadow
+              geometry={SHARED_UNIT_BOX}
+              scale={[bush.size.x, bush.size.y, bush.size.z]}
+            >
               <meshStandardMaterial color={bush.color} roughness={0.7} />
             </mesh>
             {bush.hasFlowers && bush.flowerColor && (
-              <mesh position={[0, bush.size.y / 2 + 0.05, 0]}>
-                <sphereGeometry args={[0.18, 6, 6]} />
+              <mesh position={[0, bush.size.y / 2 + 0.05, 0]} geometry={SHARED_SMALL_SPHERE}>
                 <meshBasicMaterial color={bush.flowerColor} />
               </mesh>
             )}

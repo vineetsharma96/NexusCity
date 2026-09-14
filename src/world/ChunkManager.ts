@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DistrictGenerator, DistrictInfo } from '../city/DistrictGenerator';
+import { QualityManager } from '../rendering/QualityManager';
 
 export type ChunkLOD = 'HIGH' | 'MEDIUM' | 'LOW' | 'UNLOADED';
 
@@ -139,7 +140,13 @@ export class ChunkManager {
     }
     this.lastCheckedPos.copy(playerPos);
 
-    // 2. Evaluate Distance, Discovery & LOD for Each Chunk
+    // 2. Evaluate Distance, Discovery & LOD for Each Chunk using active Quality Preset
+    const quality = QualityManager.current;
+    const maxDrawDist = quality.drawDistance || 1200;
+    const highCutoff = quality.LODQuality === 'HIGH' ? 220 : quality.LODQuality === 'MEDIUM' ? 165 : 120;
+    const medCutoff = quality.LODQuality === 'HIGH' ? 440 : quality.LODQuality === 'MEDIUM' ? 330 : 240;
+    const lowCutoff = Math.min(maxDrawDist, quality.LODQuality === 'HIGH' ? 1800 : quality.LODQuality === 'MEDIUM' ? 1100 : 650);
+
     this.chunks.forEach((chunk) => {
       const dist = playerPos.distanceTo(chunk.center);
       chunk.distanceToPlayer = dist;
@@ -152,11 +159,11 @@ export class ChunkManager {
       }
 
       let newLod: ChunkLOD = 'UNLOADED';
-      if (dist < 180) {
+      if (dist < highCutoff) {
         newLod = 'HIGH';
-      } else if (dist < 380) {
+      } else if (dist < medCutoff) {
         newLod = 'MEDIUM';
-      } else if (dist < 850) {
+      } else if (dist < lowCutoff) {
         newLod = 'LOW';
       } else {
         newLod = 'UNLOADED';

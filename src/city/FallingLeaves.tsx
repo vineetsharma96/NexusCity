@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { TreeDef } from './VegetationGenerator';
 import { WindSystem } from '../world/WindSystem';
+import { QualityManager } from '../rendering/QualityManager';
 
 interface FallingLeavesProps {
   trees: TreeDef[];
@@ -58,31 +59,27 @@ export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 850
       const radius = Math.random() * 3.5;
       const startX = basePos.x + Math.cos(angle) * radius;
       const startZ = basePos.z + Math.sin(angle) * radius;
-      const startY = basePos.y + (tree ? tree.trunkHeight : 6.0) + Math.random() * 2.5;
+      const startY = (tree ? tree.trunkHeight : 6.0) + Math.random() * 2.8;
 
       list.push({
         pos: new THREE.Vector3(startX, startY, startZ),
-        rot: new THREE.Euler(
-          Math.random() * Math.PI,
-          Math.random() * Math.PI,
-          Math.random() * Math.PI
-        ),
+        rot: new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI),
         rotSpeed: new THREE.Vector3(
-          (Math.random() - 0.5) * 4.0,
           (Math.random() - 0.5) * 4.5,
-          (Math.random() - 0.5) * 3.5
+          (Math.random() - 0.5) * 4.5,
+          (Math.random() - 0.5) * 4.5
         ),
-        fallSpeed: 0.8 + Math.random() * 1.6,
-        wobbleSpeed: 2.2 + Math.random() * 3.8,
-        wobbleAmp: 0.25 + Math.random() * 0.45,
-        scale: 0.7 + Math.random() * 0.6,
-        treePos: basePos.clone(),
+        fallSpeed: 1.2 + Math.random() * 1.4,
+        wobbleSpeed: 2.0 + Math.random() * 3.0,
+        wobbleAmp: 0.8 + Math.random() * 0.8,
+        scale: 0.18 + Math.random() * 0.16,
+        treePos: basePos,
         groundRestTime: 0,
       });
     }
 
     return list;
-  }, [trees, count, playerPosRef]);
+  }, [count, trees, playerPosRef]);
 
   // Set initial colors once
   useMemo(() => {
@@ -96,18 +93,18 @@ export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 850
     }
   }, [count, colors]);
 
-  // Leaf Geometry: double-sided faceted aerodynamic diamond leaf
+  // Leaf geometry: Curled stylized diamond
   const leafGeometry = useMemo(() => {
     const geom = new THREE.BufferGeometry();
     const vertices = new Float32Array([
-      0, 0, 0.24,     // Top tip
-      -0.13, 0.025, 0, // Left edge
-      0.13, 0.025, 0,  // Right edge
-      0, 0, -0.16,    // Stem bottom
+      0, 0, -0.4,
+      -0.25, 0.08, 0,
+      0, 0.02, 0.4,
+      0.25, 0.08, 0,
     ]);
     const indices = [
-      0, 1, 2, // Upper face
-      1, 3, 2, // Lower face
+      0, 1, 2,
+      0, 2, 3,
     ];
     geom.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
     geom.setIndex(indices);
@@ -118,6 +115,12 @@ export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 850
   useFrame(({ clock }, delta) => {
     if (!meshRef.current) return;
 
+    if (!QualityManager.current.windParticlesEnabled) {
+      if (meshRef.current.visible) meshRef.current.visible = false;
+      return;
+    }
+    if (!meshRef.current.visible) meshRef.current.visible = true;
+
     const t = clock.getElapsedTime();
     const windVec = windSystem.getVector();
     const gustFactor = windSystem.getGustFactor();
@@ -127,7 +130,9 @@ export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 850
     const windForceX = (windVec.x * 0.35 * gustFactor) * delta;
     const windForceZ = (windVec.z * 0.35 * gustFactor) * delta;
 
-    for (let i = 0; i < particles.length; i++) {
+    const activeCount = Math.max(50, Math.round(count * QualityManager.current.particlesDensity));
+
+    for (let i = 0; i < activeCount; i++) {
       const p = particles[i];
 
       // Ground settling behavior
@@ -189,6 +194,7 @@ export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 850
       meshRef.current.setMatrixAt(i, dummy.matrix);
     }
 
+    meshRef.current.count = activeCount;
     meshRef.current.instanceMatrix.needsUpdate = true;
   });
 
@@ -196,7 +202,7 @@ export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 850
     <instancedMesh
       ref={meshRef}
       args={[leafGeometry, undefined, count]}
-      castShadow
+      castShadow={QualityManager.current.shadows}
     >
       <meshStandardMaterial
         color="#f59e0b"

@@ -121,8 +121,8 @@ export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = (
     );
   });
 
-  // Only active when volumetrics or high quality is enabled
-  if (!quality.volumetrics && quality.name === 'LOW') {
+  // Only active when volumetrics is enabled in quality profile
+  if (!quality.volumetrics) {
     return null;
   }
 

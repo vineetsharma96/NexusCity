@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { NPCDef } from './NPCManager';
+import { QualityManager } from '../rendering/QualityManager';
 
 interface ProceduralNPCProps {
   npc: NPCDef;
@@ -21,9 +22,12 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
   useFrame((state, delta) => {
     if (!rootRef.current) return;
 
-    // Distance LOD & culling optimization: cull NPCs beyond 115m
+    // Dynamic distance LOD & culling optimization based on active quality profile
     const camDist = state.camera.position.distanceTo(npc.position);
-    if (camDist > 115) {
+    const lod = QualityManager.current.LODQuality;
+    const maxDist = lod === 'LOW' ? 55 : lod === 'MEDIUM' ? 85 : 125;
+
+    if (camDist > maxDist) {
       if (rootRef.current.visible) rootRef.current.visible = false;
       return;
     }
@@ -38,8 +42,9 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
     while (diff < -Math.PI) diff += Math.PI * 2;
     rootRef.current.rotation.y += diff * Math.min(1.0, delta * 9.0);
 
-    // Skip fine joint transforms for distant NPCs (>65m) to maximize FPS
-    const isClose = camDist <= 65;
+    // Skip fine joint transforms for distant NPCs to maximize FPS
+    const closeThreshold = lod === 'LOW' ? 28 : lod === 'MEDIUM' ? 45 : 65;
+    const isClose = camDist <= closeThreshold;
 
     if (npc.isWalking) {
       walkTimer.current += delta * (npc.walkSpeed * 3.2);
