@@ -11,6 +11,7 @@ interface BuildingEntranceProps {
   type: InteriorType;
   position: THREE.Vector3;
   rotationY?: number;
+  interactionPosition?: THREE.Vector3;
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
   onTeleport: (newPos: THREE.Vector3) => void;
 }
@@ -21,6 +22,7 @@ export const BuildingEntrance: React.FC<BuildingEntranceProps> = ({
   type,
   position,
   rotationY = 0,
+  interactionPosition,
   playerPosRef,
   onTeleport,
 }) => {
@@ -47,19 +49,19 @@ export const BuildingEntrance: React.FC<BuildingEntranceProps> = ({
   const floatingBeaconRef = useRef<THREE.Group>(null);
 
   useEffect(() => {
-    // Calculate world interaction position based on gate's rotation
-    const forwardOffset = new THREE.Vector3(0, 0, 1.8).applyAxisAngle(
-      new THREE.Vector3(0, 1, 0),
-      rotationY
-    );
-    const interactionPos = position.clone().add(forwardOffset);
+    // Use validated explicit interaction position or compute from rotation
+    const interactionPos =
+      interactionPosition ||
+      position.clone().add(
+        new THREE.Vector3(0, 0, 1.8).applyAxisAngle(new THREE.Vector3(0, 1, 0), rotationY)
+      );
 
     InteractionSystem.getInstance().register({
       id: `entrance_${id}`,
       name,
       actionText: `ENTER ${name.toUpperCase()} [E]`,
       position: interactionPos,
-      radius: 3.6,
+      radius: 3.8,
       onInteract: () => {
         InteriorManager.getInstance().enterDestination(id, playerPosRef.current, onTeleport);
       },

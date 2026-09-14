@@ -43,6 +43,13 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         return;
       }
 
+      // Hide exterior markers when inside an interior room
+      if (pPos.y < -50) {
+        setMarkers([]);
+        animId = requestAnimationFrame(updateProjections);
+        return;
+      }
+
       cam.getWorldDirection(camDir);
       const width = window.innerWidth;
       const height = window.innerHeight;

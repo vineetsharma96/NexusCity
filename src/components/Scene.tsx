@@ -108,29 +108,19 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       {/* 11 Enterable Building Entrances Across City Districts */}
       {interiorState.current === 'NONE' && (
         <>
-          {Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => {
-            const rotY =
-              id === 'nexus_labs' || id === 'netrunner_den' || id === 'biosphere_greenhouse'
-                ? -Math.PI / 2
-                : id === 'cyber_lounge' || id === 'ripperdoc_clinic'
-                ? Math.PI / 2
-                : id === 'ramen_diner' || id === 'drone_hangar' || id === 'cyber_arcade'
-                ? Math.PI
-                : 0;
-
-            return (
-              <BuildingEntrance
-                key={id}
-                id={id}
-                name={dest.name}
-                type={dest.interiorId}
-                position={dest.entrancePosition}
-                rotationY={rotY}
-                playerPosRef={playerPosRef}
-                onTeleport={handleTeleport}
-              />
-            );
-          })}
+          {Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => (
+            <BuildingEntrance
+              key={id}
+              id={id}
+              name={dest.name}
+              type={dest.interiorId}
+              position={dest.entrancePosition}
+              rotationY={dest.entranceRotationY}
+              interactionPosition={dest.interactionPosition}
+              playerPosRef={playerPosRef}
+              onTeleport={handleTeleport}
+            />
+          ))}
         </>
       )}
 

@@ -8,6 +8,8 @@ export interface InteriorDestination {
   district: string;
   category: string;
   entrancePosition: THREE.Vector3;
+  entranceRotationY: number;
+  interactionPosition: THREE.Vector3;
   exitPosition: THREE.Vector3;
   interiorSpawnPoint: THREE.Vector3;
   interiorChunkId: string;
@@ -17,7 +19,7 @@ export interface InteriorDestination {
 }
 
 // Interior room origin at y = -80.0m
-const INTERIOR_BASE_Y = -80.0;
+export const INTERIOR_BASE_Y = -80.0;
 
 export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
   nexus_labs: {
@@ -26,8 +28,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Nexus Advanced Labs',
     district: 'Central Metropolis',
     category: 'RESEARCH',
-    entrancePosition: new THREE.Vector3(15.2, 0.18, 32),
-    exitPosition: new THREE.Vector3(13.2, 0.18, 32),
+    entrancePosition: new THREE.Vector3(21.0, 0.18, 32.0),
+    entranceRotationY: -Math.PI / 2, // Facing West toward Central Avenue
+    interactionPosition: new THREE.Vector3(19.2, 0.18, 32.0),
+    exitPosition: new THREE.Vector3(19.0, 0.18, 32.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_lab',
     description: 'Quantum stabilizer core, supercomputer mainframes, and holographic diagnostics.',
@@ -40,8 +44,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Neon Velocity Lounge',
     district: 'West Night District',
     category: 'ENTERTAINMENT',
-    entrancePosition: new THREE.Vector3(-15.2, 0.18, 32),
-    exitPosition: new THREE.Vector3(-13.2, 0.18, 32),
+    entrancePosition: new THREE.Vector3(-21.0, 0.18, 32.0),
+    entranceRotationY: Math.PI / 2, // Facing East toward Central Avenue
+    interactionPosition: new THREE.Vector3(-19.2, 0.18, 32.0),
+    exitPosition: new THREE.Vector3(-19.0, 0.18, 32.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_lounge',
     description: 'Curved synth-bar counter, neon cocktails, VIP booths, and high-energy music.',
@@ -54,8 +60,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Krom-Doc Augmentation Clinic',
     district: 'Medical Alley',
     category: 'CYBERWARE',
-    entrancePosition: new THREE.Vector3(-15.2, 0.18, -32),
-    exitPosition: new THREE.Vector3(-13.2, 0.18, -32),
+    entrancePosition: new THREE.Vector3(-21.0, 0.18, -32.0),
+    entranceRotationY: Math.PI / 2, // Facing East toward Central Avenue
+    interactionPosition: new THREE.Vector3(-19.2, 0.18, -32.0),
+    exitPosition: new THREE.Vector3(-19.0, 0.18, -32.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_clinic',
     description: 'Cybernetic operating table, neural diagnostics, prosthetic limb display cases.',
@@ -68,8 +76,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Black-Ice Hacker Safehouse',
     district: 'Neural Undergrid',
     category: 'UNDERGROUND',
-    entrancePosition: new THREE.Vector3(15.2, 0.18, -32),
-    exitPosition: new THREE.Vector3(13.2, 0.18, -32),
+    entrancePosition: new THREE.Vector3(21.0, 0.18, -32.0),
+    entranceRotationY: -Math.PI / 2, // Facing West toward Central Avenue
+    interactionPosition: new THREE.Vector3(19.2, 0.18, -32.0),
+    exitPosition: new THREE.Vector3(19.0, 0.18, -32.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_netrunner',
     description: 'Matrix terminal racks, cooling tubes, green phosphor monitors, floor cable conduits.',
@@ -82,8 +92,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Tokyo-Neo Synth-Ramen',
     district: 'East Food Bazaar',
     category: 'DINING',
-    entrancePosition: new THREE.Vector3(32, 0.18, 15.2),
-    exitPosition: new THREE.Vector3(32, 0.18, 13.2),
+    entrancePosition: new THREE.Vector3(36.0, 0.18, 18.0),
+    entranceRotationY: Math.PI, // Facing North toward East-West Blvd
+    interactionPosition: new THREE.Vector3(36.0, 0.18, 16.2),
+    exitPosition: new THREE.Vector3(36.0, 0.18, 16.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_ramen',
     description: 'L-shaped wooden noodle counter, steaming synthetic broth vats, red paper lanterns.',
@@ -96,8 +108,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Aero-Cargo Drone Bay',
     district: 'Industrial Harbor',
     category: 'INDUSTRIAL',
-    entrancePosition: new THREE.Vector3(32, 0.18, -15.2),
-    exitPosition: new THREE.Vector3(32, 0.18, -13.2),
+    entrancePosition: new THREE.Vector3(36.0, 0.18, -18.0),
+    entranceRotationY: 0, // Facing South toward East-West Blvd
+    interactionPosition: new THREE.Vector3(36.0, 0.18, -16.2),
+    exitPosition: new THREE.Vector3(36.0, 0.18, -16.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_hangar',
     description: 'Hydraulic drone repair hoist, cargo crates, overhead gantry rails, welding tool racks.',
@@ -110,8 +124,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Apex Sky Suite Penthouse',
     district: 'Sky Spire Towers',
     category: 'RESIDENTIAL',
-    entrancePosition: new THREE.Vector3(-32, 0.18, 15.2),
-    exitPosition: new THREE.Vector3(-32, 0.18, 13.2),
+    entrancePosition: new THREE.Vector3(-36.0, 0.18, 18.0),
+    entranceRotationY: Math.PI, // Facing North toward East-West Blvd
+    interactionPosition: new THREE.Vector3(-36.0, 0.18, 16.2),
+    exitPosition: new THREE.Vector3(-36.0, 0.18, 16.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_penthouse',
     description: 'Floor-to-ceiling panoramic glass, minimalist luxury sofa, glass coffee table, skyline vistas.',
@@ -124,8 +140,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Megacorp Secure Data Vault',
     district: 'Corporate Core',
     category: 'SECURITY',
-    entrancePosition: new THREE.Vector3(-32, 0.18, -15.2),
-    exitPosition: new THREE.Vector3(-32, 0.18, -13.2),
+    entrancePosition: new THREE.Vector3(-36.0, 0.18, -18.0),
+    entranceRotationY: 0, // Facing South toward East-West Blvd
+    interactionPosition: new THREE.Vector3(-36.0, 0.18, -16.2),
+    exitPosition: new THREE.Vector3(-36.0, 0.18, -16.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_vault',
     description: 'Hexagonal optical storage pillar, rotating crimson security beams, chilled floor vents.',
@@ -138,8 +156,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Biosphere Hydroponic Flora Lab',
     district: 'Biosphere District',
     category: 'SANCTUARY',
-    entrancePosition: new THREE.Vector3(42, 0.18, 75),
-    exitPosition: new THREE.Vector3(39, 0.18, 75),
+    entrancePosition: new THREE.Vector3(48.0, 0.18, 48.0),
+    entranceRotationY: -Math.PI / 2, // Facing West into Sanctuary Promenade
+    interactionPosition: new THREE.Vector3(46.2, 0.18, 48.0),
+    exitPosition: new THREE.Vector3(46.0, 0.18, 48.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_greenhouse',
     description: 'Tiered vertical hydroponics, violet UV photosynthesis lamps, bubbling nutrient feeds.',
@@ -152,8 +172,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Hyperloop Metro Transit Hub',
     district: 'Subterranean Rail',
     category: 'TRANSIT',
-    entrancePosition: new THREE.Vector3(0, 0.18, 52),
-    exitPosition: new THREE.Vector3(0, 0.18, 49),
+    entrancePosition: new THREE.Vector3(10.0, 0.18, -14.0),
+    entranceRotationY: 0, // Facing South into Central Plaza
+    interactionPosition: new THREE.Vector3(10.0, 0.18, -12.2),
+    exitPosition: new THREE.Vector3(10.0, 0.18, -12.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_metro',
     description: 'Subterranean high-speed train platform, warning tiles, illuminated transit arrival timetable.',
@@ -166,8 +188,10 @@ export const INTERIOR_DESTINATIONS: Record<string, InteriorDestination> = {
     name: 'Cyber-Strike 2099 Retro Arcade',
     district: 'South Entertainment Grid',
     category: 'ENTERTAINMENT',
-    entrancePosition: new THREE.Vector3(0, 0.18, -52),
-    exitPosition: new THREE.Vector3(0, 0.18, -49),
+    entrancePosition: new THREE.Vector3(-10.0, 0.18, 14.0),
+    entranceRotationY: Math.PI, // Facing North into Central Plaza
+    interactionPosition: new THREE.Vector3(-10.0, 0.18, 12.2),
+    exitPosition: new THREE.Vector3(-10.0, 0.18, 12.0),
     interiorSpawnPoint: new THREE.Vector3(0, INTERIOR_BASE_Y + 0.2, 5.5),
     interiorChunkId: 'chunk_int_arcade',
     description: 'Rows of CRT pixel-art arcade cabinets, rhythm dance floor, neon prize counter.',
@@ -190,6 +214,9 @@ export function validateInteriorDestination(destId: string): { valid: boolean; e
   if (!dest.exitPosition || typeof dest.exitPosition.x !== 'number') {
     return { valid: false, error: `Destination '${destId}' is missing a valid exitPosition.` };
   }
+  if (!dest.interactionPosition || typeof dest.interactionPosition.x !== 'number') {
+    return { valid: false, error: `Destination '${destId}' is missing a valid interactionPosition.` };
+  }
   if (!dest.interiorChunkId) {
     return { valid: false, error: `Destination '${destId}' is missing interiorChunkId identifier.` };
   }
@@ -198,4 +225,48 @@ export function validateInteriorDestination(destId: string): { valid: boolean; e
 
 export function getDestinationByInteriorType(type: InteriorType): InteriorDestination | undefined {
   return Object.values(INTERIOR_DESTINATIONS).find((d) => d.interiorId === type);
+}
+
+/**
+ * Automatic Portal Accessibility & Collision Validator
+ */
+export function validateAllPortals(): { passed: number; failed: number; reports: string[] } {
+  let passed = 0;
+  let failed = 0;
+  const reports: string[] = [];
+
+  Object.entries(INTERIOR_DESTINATIONS).forEach(([id, dest]) => {
+    const val = validateInteriorDestination(id);
+    if (!val.valid) {
+      failed++;
+      reports.push(`[PortalValidator] ✗ '${id}' FAILED: ${val.error}`);
+      return;
+    }
+
+    // Check interaction point is above ground
+    if (dest.interactionPosition.y < 0.1) {
+      failed++;
+      reports.push(`[PortalValidator] ✗ '${id}' FAILED: Interaction point below sidewalk (${dest.interactionPosition.y})`);
+      return;
+    }
+
+    // Check exit point is above ground
+    if (dest.exitPosition.y < 0.1) {
+      failed++;
+      reports.push(`[PortalValidator] ✗ '${id}' FAILED: Exit point below sidewalk (${dest.exitPosition.y})`);
+      return;
+    }
+
+    // Check interior spawn is deep below city
+    if (dest.interiorSpawnPoint.y > -50) {
+      failed++;
+      reports.push(`[PortalValidator] ✗ '${id}' FAILED: Interior spawn point (${dest.interiorSpawnPoint.y}) not in interior coordinate space`);
+      return;
+    }
+
+    passed++;
+    reports.push(`[PortalValidator] ✓ '${id}' [${dest.name}] OK (entrance=${dest.entrancePosition.x},${dest.entrancePosition.z} rot=${(dest.entranceRotationY * 180 / Math.PI).toFixed(0)}°)`);
+  });
+
+  return { passed, failed, reports };
 }

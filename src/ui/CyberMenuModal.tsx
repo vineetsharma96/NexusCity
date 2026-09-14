@@ -59,7 +59,7 @@ const TELEPORT_LOCATIONS: TeleportLocation[] = [
     name: dest.name,
     category: 'INTERIOR',
     district: dest.district,
-    position: dest.entrancePosition.clone(),
+    position: dest.interactionPosition.clone(),
     icon: dest.icon,
     color: dest.accentColor,
   })),

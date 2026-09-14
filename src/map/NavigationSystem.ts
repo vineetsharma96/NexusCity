@@ -64,7 +64,7 @@ export class NavigationSystem {
       id,
       name: dest.name,
       category: (dest.interiorId === 'LAB' ? 'LAB' : dest.interiorId === 'LOUNGE' ? 'LOUNGE' : 'INTERIOR') as LandmarkDef['category'],
-      position: dest.entrancePosition.clone(),
+      position: dest.interactionPosition.clone(),
       description: dest.description,
       isEnterable: true,
     })),

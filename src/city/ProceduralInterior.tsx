@@ -439,7 +439,9 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
     ARCADE: { floor: '#180728', wall: '#2a0845', accent: '#d946ef', light: '#a855f7' },
   };
 
-  const currentTheme = themeColors[type] || themeColors.LAB;
+  if ((type as string) === 'NONE') return null;
+
+  const currentTheme = themeColors[type as keyof typeof themeColors] || themeColors.LAB;
 
   return (
     <group position={origin} name="InteriorContainer">
