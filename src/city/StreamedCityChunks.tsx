@@ -12,6 +12,7 @@ import { ProceduralTree } from './ProceduralTree';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
 import { ProceduralTextures } from '../core/ProceduralTextures';
 import { WeatherSystem } from '../world/WeatherSystem';
+import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 
 // Shared static unit geometries to eliminate redundant GPU buffer allocations
 const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -401,9 +402,10 @@ const StreamedBiomeProp: React.FC<{ prop: BiomePropDef; lod: ChunkLOD }> = React
 const StreamedChunkView: React.FC<{
   chunkInfo: ChunkInfo;
   wetnessFactor: number;
+  reflectionQuality: 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH';
   asphaltNormal: THREE.CanvasTexture;
   claddingNormal: THREE.CanvasTexture;
-}> = React.memo(({ chunkInfo, wetnessFactor, asphaltNormal, claddingNormal }) => {
+}> = React.memo(({ chunkInfo, wetnessFactor, reflectionQuality, asphaltNormal, claddingNormal }) => {
   const data: StreamedChunkData = useMemo(() => {
     return ProceduralChunkGenerator.getChunkData(chunkInfo.cx, chunkInfo.cz);
   }, [chunkInfo.cx, chunkInfo.cz]);
@@ -425,6 +427,11 @@ const StreamedChunkView: React.FC<{
   if (data.buildings.length === 0 && data.roads.length === 0) {
     return null;
   }
+
+  const envReflectionScale =
+    reflectionQuality === 'HIGH' ? 1.4 :
+    reflectionQuality === 'MEDIUM' ? 0.9 :
+    reflectionQuality === 'LOW' ? 0.4 : 0.0;
 
   const roadRoughness = THREE.MathUtils.lerp(0.65, 0.12, wetnessFactor);
   const roadMetalness = THREE.MathUtils.lerp(0.4, 0.85, wetnessFactor);
@@ -450,7 +457,7 @@ const StreamedChunkView: React.FC<{
               normalScale={new THREE.Vector2(0.6, 0.6)}
               roughness={roadRoughness}
               metalness={roadMetalness}
-              envMapIntensity={wetnessFactor > 0.1 ? 1.4 : 0.8}
+              envMapIntensity={wetnessFactor > 0.1 ? envReflectionScale : envReflectionScale * 0.5}
             />
           </mesh>
         ))}
@@ -633,6 +640,7 @@ export const StreamedCityChunks: React.FC = () => {
   const [weatherState, setWeatherState] = useState(() =>
     WeatherSystem.getInstance().getState()
   );
+  const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
   const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
   const claddingNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
@@ -641,6 +649,7 @@ export const StreamedCityChunks: React.FC = () => {
 
   useEffect(() => {
     const unsubWeather = WeatherSystem.getInstance().subscribe(setWeatherState);
+    const unsubQuality = QualityManager.subscribe(setQuality);
     const unsubChunks = ChunkManager.getInstance().subscribe((state) => {
       // Filter out central 3x3 core (handled by CityDistrict) and unloaded chunks
       const active = state.chunks.filter(
@@ -657,6 +666,7 @@ export const StreamedCityChunks: React.FC = () => {
 
     return () => {
       unsubWeather();
+      unsubQuality();
       unsubChunks();
       // Clean up all chunk collision boxes when unmounted
       const allActive = ChunkManager.getInstance().getActiveChunks();
@@ -673,6 +683,7 @@ export const StreamedCityChunks: React.FC = () => {
           key={chunk.key}
           chunkInfo={chunk}
           wetnessFactor={weatherState.wetnessFactor}
+          reflectionQuality={quality.reflectionQuality}
           asphaltNormal={asphaltNormal}
           claddingNormal={claddingNormal}
         />

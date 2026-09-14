@@ -22,18 +22,21 @@ export const Minimap: React.FC<MinimapProps> = ({ playerPosRef }) => {
     return NavigationSystem.getInstance().subscribe(setNavState);
   }, []);
 
-  // Update position & heading loop
+  // Update position & heading loop with change detection to prevent 60fps React re-renders
   useEffect(() => {
     let animId: number;
     let lastNavUpdate = 0;
+    const dir = new THREE.Vector3();
 
     const tick = (now: number) => {
       const pPos = playerPosRef?.current;
       if (pPos) {
-        setCoords({ x: Math.round(pPos.x), z: Math.round(pPos.z) });
+        const rx = Math.round(pPos.x);
+        const rz = Math.round(pPos.z);
+        setCoords((prev) => (prev.x === rx && prev.z === rz ? prev : { x: rx, z: rz }));
 
         // Periodically update navigation system
-        if (now - lastNavUpdate > 150) {
+        if (now - lastNavUpdate > 200) {
           NavigationSystem.getInstance().updatePlayerPosition(pPos);
           lastNavUpdate = now;
         }
@@ -42,11 +45,10 @@ export const Minimap: React.FC<MinimapProps> = ({ playerPosRef }) => {
       // Heading from camera
       const cam = (window as any).__NEXUS_CAMERA__ as THREE.Camera | undefined;
       if (cam) {
-        const dir = new THREE.Vector3();
         cam.getWorldDirection(dir);
-        let deg = Math.atan2(dir.x, -dir.z) * (180 / Math.PI);
+        let deg = Math.round(Math.atan2(dir.x, -dir.z) * (180 / Math.PI));
         if (deg < 0) deg += 360;
-        setHeadingDeg(deg);
+        setHeadingDeg((prev) => (Math.abs(prev - deg) >= 1 ? deg : prev));
       }
 
       animId = requestAnimationFrame(tick);

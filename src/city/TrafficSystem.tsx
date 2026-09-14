@@ -270,15 +270,18 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           }
         }
 
-        // 4. NPC Pedestrian Crosswalk Avoidance
-        for (let n = 0; n < npcs.length; n++) {
-          const npc = npcs[n];
-          const nLatDiff = v.axis === 'z' ? Math.abs(npc.position.x - v.position.x) : Math.abs(npc.position.z - v.position.z);
-          const nLongDist = (v.axis === 'z' ? npc.position.z - v.position.z : npc.position.x - v.position.x) * v.direction;
-          if (nLatDiff < 2.4 && nLongDist > 0 && nLongDist < 14.0) {
-            targetSpeed = 0;
-            v.isBraking = true;
-            break;
+        // 4. NPC Pedestrian Crosswalk Avoidance (only needed when approaching central crosswalk area)
+        if (Math.abs(v.position.x) < 28 && Math.abs(v.position.z) < 28) {
+          for (let n = 0; n < npcs.length; n++) {
+            const npc = npcs[n];
+            const nLatDiff = v.axis === 'z' ? Math.abs(npc.position.x - v.position.x) : Math.abs(npc.position.z - v.position.z);
+            if (nLatDiff > 2.4) continue;
+            const nLongDist = (v.axis === 'z' ? npc.position.z - v.position.z : npc.position.x - v.position.x) * v.direction;
+            if (nLongDist > 0 && nLongDist < 14.0) {
+              targetSpeed = 0;
+              v.isBraking = true;
+              break;
+            }
           }
         }
 
@@ -327,6 +330,10 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
         }
       }
 
+      // Pre-calculate yaw orientation trigonometry without allocating Vector3
+      const sinY = Math.sin(v.rotationY);
+      const cosY = Math.cos(v.rotationY);
+
       if (v.type === 'GROUND' && groundBodyMesh.current) {
         // Ground Cruiser Chassis
         dummy.position.copy(v.position);
@@ -342,21 +349,21 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           groundGlassMesh.current.setMatrixAt(groundIdx, dummy.matrix);
         }
 
-        // Headlights (forward relative offset)
+        // Headlights (forward relative offset, zero allocation)
         if (groundHeadlightMesh.current) {
-          const forward = new THREE.Vector3(0, 0, 2.05).applyAxisAngle(new THREE.Vector3(0, 1, 0), v.rotationY);
-          dummy.position.copy(v.position).add(forward);
-          dummy.position.y += 0.05;
+          const fwdX = sinY * 2.05;
+          const fwdZ = cosY * 2.05;
+          dummy.position.set(v.position.x + fwdX, v.position.y + 0.05, v.position.z + fwdZ);
           dummy.scale.set(1, 1, 1);
           dummy.updateMatrix();
           groundHeadlightMesh.current.setMatrixAt(groundIdx, dummy.matrix);
         }
 
-        // Taillights (rear relative offset): flare brighter/taller when braking or stopped
+        // Taillights (rear relative offset, zero allocation): flare brighter/taller when braking or stopped
         if (groundTaillightMesh.current) {
-          const rear = new THREE.Vector3(0, 0, -2.05).applyAxisAngle(new THREE.Vector3(0, 1, 0), v.rotationY);
-          dummy.position.copy(v.position).add(rear);
-          dummy.position.y += 0.05;
+          const rearX = -sinY * 2.05;
+          const rearZ = -cosY * 2.05;
+          dummy.position.set(v.position.x + rearX, v.position.y + 0.05, v.position.z + rearZ);
           const brakeScale = v.isBraking || v.speed < 2.0 ? 1.8 : 1.0;
           dummy.scale.set(1, brakeScale, 1);
           dummy.updateMatrix();
@@ -374,11 +381,13 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
         dummy.updateMatrix();
         aerialBodyMesh.current.setMatrixAt(aerialIdx, dummy.matrix);
 
-        // Plasma Exhaust Trail
+        // Plasma Exhaust Trail (zero allocation)
         if (aerialTrailMesh.current) {
-          const rearOffset = new THREE.Vector3(0, 0, -3.2).applyAxisAngle(new THREE.Vector3(0, 1, 0), v.rotationY);
-          dummy.position.copy(v.position).add(rearOffset);
+          const trailX = -sinY * 3.2;
+          const trailZ = -cosY * 3.2;
+          dummy.position.set(v.position.x + trailX, v.position.y, v.position.z + trailZ);
           dummy.rotation.set(Math.PI / 2, v.rotationY, 0);
+          dummy.scale.set(1, 1, 1);
           dummy.updateMatrix();
           aerialTrailMesh.current.setMatrixAt(aerialIdx, dummy.matrix);
         }

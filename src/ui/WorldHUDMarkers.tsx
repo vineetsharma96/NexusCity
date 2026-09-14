@@ -32,6 +32,7 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
   useEffect(() => {
     let animId: number;
     const tempVec = new THREE.Vector3();
+    const tempPos = new THREE.Vector3();
     const camDir = new THREE.Vector3();
 
     const updateProjections = () => {
@@ -43,9 +44,9 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         return;
       }
 
-      // Hide exterior markers when inside an interior room
+      // Hide exterior markers when inside an interior room without triggering continuous empty re-renders
       if (pPos.y < -50) {
-        setMarkers([]);
+        setMarkers((prev) => (prev.length > 0 ? [] : prev));
         animId = requestAnimationFrame(updateProjections);
         return;
       }
@@ -58,13 +59,14 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
       // 1. Project Active Landmark (if set)
       if (navState.activeLandmark) {
         const target = navState.activeLandmark;
-        const pos = target.position.clone().add(new THREE.Vector3(0, 3.2, 0));
+        tempPos.copy(target.position);
+        tempPos.y += 3.2;
         const dist = pPos.distanceTo(target.position);
 
         // Check if in front of camera
-        tempVec.subVectors(pos, cam.position);
+        tempVec.subVectors(tempPos, cam.position);
         if (tempVec.dot(camDir) > 0.2) {
-          tempVec.copy(pos).project(cam);
+          tempVec.copy(tempPos).project(cam);
           // If within screen NDC bounds [-1.1 to 1.1]
           if (tempVec.z < 1.0 && Math.abs(tempVec.x) <= 1.1 && Math.abs(tempVec.y) <= 1.1) {
             const sx = (tempVec.x * 0.5 + 0.5) * width;
@@ -91,10 +93,11 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         const dist = pPos.distanceTo(dest.entrancePosition);
         if (dist > 75) return;
 
-        const pos = dest.entrancePosition.clone().add(new THREE.Vector3(0, 2.5, 0));
-        tempVec.subVectors(pos, cam.position);
+        tempPos.copy(dest.entrancePosition);
+        tempPos.y += 2.5;
+        tempVec.subVectors(tempPos, cam.position);
         if (tempVec.dot(camDir) > 0.25) {
-          tempVec.copy(pos).project(cam);
+          tempVec.copy(tempPos).project(cam);
           if (tempVec.z < 1.0 && Math.abs(tempVec.x) <= 1.05 && Math.abs(tempVec.y) <= 1.05) {
             const sx = (tempVec.x * 0.5 + 0.5) * width;
             const sy = (-(tempVec.y * 0.5) + 0.5) * height;
@@ -123,10 +126,11 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         const dist = pPos.distanceTo(lm.position);
         if (dist > 85) return;
 
-        const pos = lm.position.clone().add(new THREE.Vector3(0, 3.5, 0));
-        tempVec.subVectors(pos, cam.position);
+        tempPos.copy(lm.position);
+        tempPos.y += 3.5;
+        tempVec.subVectors(tempPos, cam.position);
         if (tempVec.dot(camDir) > 0.3) {
-          tempVec.copy(pos).project(cam);
+          tempVec.copy(tempPos).project(cam);
           if (tempVec.z < 1.0 && Math.abs(tempVec.x) <= 1.05 && Math.abs(tempVec.y) <= 1.05) {
             const sx = (tempVec.x * 0.5 + 0.5) * width;
             const sy = (-(tempVec.y * 0.5) + 0.5) * height;

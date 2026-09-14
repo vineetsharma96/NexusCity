@@ -296,6 +296,12 @@ export class NPCManager {
     });
   }
 
+  // Pre-allocated static scratch vectors to eliminate 60fps GC allocations
+  private static readonly _dir = new THREE.Vector3();
+  private static readonly _avoidPlayer = new THREE.Vector3();
+  private static readonly _pushDir = new THREE.Vector3();
+  private static readonly _avoidNpc = new THREE.Vector3();
+
   public update(delta: number, playerPos: THREE.Vector3): void {
     const hour = TimeSystem.getInstance().getHour();
     const isLateNight = hour > 1.0 && hour < 5.0;
@@ -305,7 +311,7 @@ export class NPCManager {
 
       // Distance culling for performance optimization
       const distToPlayerSq = npc.position.distanceToSquared(playerPos);
-      if (distToPlayerSq > 160 * 160) {
+      if (distToPlayerSq > 140 * 140) {
         continue; // skip far NPCs
       }
 
@@ -363,11 +369,11 @@ export class NPCManager {
       }
 
       // Move smoothly toward target waypoint with collision & mutual avoidance steering
-      const dir = target.clone().sub(npc.position);
+      const dir = NPCManager._dir.subVectors(target, npc.position);
       dir.y = 0;
       dir.normalize();
 
-      // 1. Dynamic Player Collision & Personal Space Avoidance
+      // 1. Dynamic Player Collision & Personal Space Avoidance (zero-allocation)
       const playerDist = npc.position.distanceTo(playerPos);
       if (playerDist < 2.4) {
         if (playerDist < 1.05) {
@@ -375,24 +381,30 @@ export class NPCManager {
           npc.isWalking = false;
           // Physical separation if player walks directly into NPC (< 0.75m)
           if (playerDist < 0.75 && playerDist > 0.001) {
-            const pushDir = playerPos.clone().sub(npc.position).normalize();
+            const pushDir = NPCManager._pushDir.subVectors(playerPos, npc.position).normalize();
             playerPos.addScaledVector(pushDir, (0.75 - playerDist) * 0.5);
           }
           continue;
         }
         // Repulsive steering around player
-        const avoidPlayer = npc.position.clone().sub(playerPos);
+        const avoidPlayer = NPCManager._avoidPlayer.subVectors(npc.position, playerPos);
         avoidPlayer.y = 0;
         const avoidWeight = (2.4 - playerDist) * 1.8;
         dir.addScaledVector(avoidPlayer.normalize(), avoidWeight).normalize();
       }
 
-      // 2. Dynamic NPC-to-NPC Mutual Steering Avoidance
+      // 2. Dynamic NPC-to-NPC Mutual Steering Avoidance with Fast Manhattan Pre-Rejection
       let yielded = false;
       for (let j = 0; j < this.npcs.length; j++) {
         if (i === j) continue;
         const other = this.npcs[j];
-        const npcDistSq = npc.position.distanceToSquared(other.position);
+        // Fast AABB Manhattan rejection (avoids sqrt and distanceToSquared for >95% of pairs)
+        const dx = npc.position.x - other.position.x;
+        if (dx > 2.8 || dx < -2.8) continue;
+        const dz = npc.position.z - other.position.z;
+        if (dz > 2.8 || dz < -2.8) continue;
+
+        const npcDistSq = dx * dx + dz * dz;
         if (npcDistSq < 2.8 * 2.8) {
           const npcDist = Math.sqrt(npcDistSq);
           if (npcDist < 0.85) {
@@ -403,8 +415,7 @@ export class NPCManager {
               break;
             }
           }
-          const avoidNpc = npc.position.clone().sub(other.position);
-          avoidNpc.y = 0;
+          const avoidNpc = NPCManager._avoidNpc.set(dx, 0, dz);
           dir.addScaledVector(avoidNpc.normalize(), (2.8 - npcDist) * 0.9).normalize();
         }
       }

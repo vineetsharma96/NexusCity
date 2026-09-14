@@ -9,6 +9,12 @@ import { CyberVideoBillboard } from './CyberVideoBillboard';
 import { ProceduralTextures } from '../core/ProceduralTextures';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
+import { QualityManager, QualitySettings } from '../rendering/QualityManager';
+
+// Shared static geometries to eliminate redundant GPU vertex buffer uploads
+const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
+const SHARED_BEACON_SPHERE = new THREE.SphereGeometry(0.3, 8, 8);
 
 interface CityDistrictProps {
   seed?: number;
@@ -26,17 +32,25 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const [weatherState, setWeatherState] = useState<WeatherState>(() =>
     WeatherSystem.getInstance().getState()
   );
+  const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
   useEffect(() => {
     const unsubTime = TimeSystem.getInstance().subscribe(setTimeState);
     const unsubWeather = WeatherSystem.getInstance().subscribe(setWeatherState);
+    const unsubQuality = QualityManager.subscribe(setQuality);
     return () => {
       unsubTime();
       unsubWeather();
+      unsubQuality();
     };
   }, []);
 
-  // Dynamic surface wetness calculations
+  // Dynamic surface wetness and reflection scaling based on Quality profile
+  const envReflectionScale =
+    quality.reflectionQuality === 'HIGH' ? 1.4 :
+    quality.reflectionQuality === 'MEDIUM' ? 0.9 :
+    quality.reflectionQuality === 'LOW' ? 0.4 : 0.0;
+
   const roadRoughness = THREE.MathUtils.lerp(0.35, 0.08, weatherState.wetnessFactor);
   const roadMetalness = THREE.MathUtils.lerp(0.65, 0.88, weatherState.wetnessFactor);
   const sidewalkRoughness = THREE.MathUtils.lerp(0.6, 0.18, weatherState.wetnessFactor);
@@ -77,25 +91,32 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
           key={`ave-${idx}`}
           position={ave.position}
           rotation={[0, ave.rotationY, 0]}
+          geometry={SHARED_UNIT_BOX}
+          scale={[ave.size.x, ave.size.y, ave.size.z]}
           receiveShadow
         >
-          <boxGeometry args={[ave.size.x, ave.size.y, ave.size.z]} />
           <meshStandardMaterial
             map={asphaltTex}
             normalMap={asphaltNormal}
             normalScale={new THREE.Vector2(0.7, 0.7)}
-            roughnessMap={weatherState.wetnessFactor > 0.05 ? puddleRoughness : undefined}
+            roughnessMap={quality.reflectionQuality !== 'OFF' && weatherState.wetnessFactor > 0.05 ? puddleRoughness : undefined}
             roughness={roadRoughness}
             metalness={roadMetalness}
-            envMapIntensity={weatherState.wetnessFactor > 0.05 ? 1.4 : 0.8}
+            envMapIntensity={weatherState.wetnessFactor > 0.05 ? envReflectionScale : envReflectionScale * 0.5}
           />
         </mesh>
       ))}
 
       {/* 4. Raised Sidewalk Slabs */}
       {cityData.sidewalks.map((sw, idx) => (
-        <mesh key={`sw-${idx}`} position={sw.position} receiveShadow castShadow>
-          <boxGeometry args={[sw.size.x, sw.size.y, sw.size.z]} />
+        <mesh
+          key={`sw-${idx}`}
+          position={sw.position}
+          geometry={SHARED_UNIT_BOX}
+          scale={[sw.size.x, sw.size.y, sw.size.z]}
+          receiveShadow
+          castShadow
+        >
           <meshStandardMaterial
             map={sidewalkTex}
             normalMap={asphaltNormal}
@@ -114,10 +135,11 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
             <mesh
               key={`tier-${tIdx}`}
               position={tier.offset}
-              castShadow
+              geometry={SHARED_UNIT_BOX}
+              scale={[tier.size.x, tier.size.y, tier.size.z]}
+              castShadow={quality.shadows}
               receiveShadow
             >
-              <boxGeometry args={[tier.size.x, tier.size.y, tier.size.z]} />
               <meshStandardMaterial
                 map={facadeTex}
                 normalMap={claddingNormal}
@@ -129,8 +151,12 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
           ))}
 
           {/* Storefront Arcade at Street Level */}
-          <mesh position={[0, 2.2, bldg.totalSize.z / 2 + 0.05]} castShadow>
-            <boxGeometry args={[bldg.totalSize.x * 0.7, 4.4, 0.4]} />
+          <mesh
+            position={[0, 2.2, bldg.totalSize.z / 2 + 0.05]}
+            geometry={SHARED_UNIT_BOX}
+            scale={[bldg.totalSize.x * 0.7, 4.4, 0.4]}
+            castShadow={quality.shadows}
+          >
             <meshStandardMaterial
               color="#091428"
               emissive={bldg.storefrontColor}
@@ -140,15 +166,22 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
             />
           </mesh>
           {/* Glowing Storefront Sign Header */}
-          <mesh position={[0, 4.2, bldg.totalSize.z / 2 + 0.3]}>
-            <boxGeometry args={[bldg.totalSize.x * 0.5, 0.6, 0.1]} />
+          <mesh
+            position={[0, 4.2, bldg.totalSize.z / 2 + 0.3]}
+            geometry={SHARED_UNIT_BOX}
+            scale={[bldg.totalSize.x * 0.5, 0.6, 0.1]}
+          >
             <meshBasicMaterial color={bldg.storefrontColor} />
           </mesh>
 
           {/* Vertical Neon Architectural Light Strips */}
           {bldg.lightStrips.map((strip, sIdx) => (
-            <mesh key={`strip-${sIdx}`} position={strip.position}>
-              <boxGeometry args={[strip.size.x, strip.size.y, strip.size.z]} />
+            <mesh
+              key={`strip-${sIdx}`}
+              position={strip.position}
+              geometry={SHARED_UNIT_BOX}
+              scale={[strip.size.x, strip.size.y, strip.size.z]}
+            >
               <meshBasicMaterial color={strip.color} />
             </mesh>
           ))}
@@ -241,17 +274,15 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
             <meshStandardMaterial color="#1e293b" metalness={0.85} />
           </mesh>
           {/* Luminaire Head */}
-          <mesh position={[1.4, 6.4, 0]}>
-            <boxGeometry args={[0.8, 0.15, 0.3]} />
+          <mesh position={[1.4, 6.4, 0]} geometry={SHARED_UNIT_BOX} scale={[0.8, 0.15, 0.3]}>
             <meshStandardMaterial color="#0f172a" metalness={0.9} />
           </mesh>
           {/* Glowing Emissive Light Diffuser */}
-          <mesh position={[1.4, 6.32, 0]}>
-            <boxGeometry args={[0.65, 0.04, 0.22]} />
+          <mesh position={[1.4, 6.32, 0]} geometry={SHARED_UNIT_BOX} scale={[0.65, 0.04, 0.22]}>
             <meshBasicMaterial color={timeState.nightFactor > 0.3 ? '#00f0ff' : '#083344'} />
           </mesh>
-          {/* Localized point light on every 3rd street lamp for high-performance ambient illumination */}
-          {idx % 3 === 0 && (
+          {/* Localized point light on street lamps adhering to quality maxLights budget */}
+          {quality.maxLights >= 16 && quality.nightLightsEnabled && idx % 4 === 0 && (
             <pointLight
               position={[1.4, 5.8, 0]}
               color="#00f0ff"
