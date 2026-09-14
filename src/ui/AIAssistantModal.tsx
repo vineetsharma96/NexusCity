@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { AIAssistant, AIMessage } from '../ai/AIAssistant';
+import { AIAssistant, AIMessage, AIWorldStateSnapshot } from '../ai/AIAssistant';
 
 interface AIAssistantModalProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   const [inputText, setInputText] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [apiKey, setApiKey] = useState(AIAssistant.getInstance().getApiKey());
+  const [worldState, setWorldState] = useState<AIWorldStateSnapshot | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -26,17 +27,19 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     return AIAssistant.getInstance().subscribe((msgs, processing) => {
       setMessages([...msgs]);
       setIsProcessing(processing);
+      setApiKey(AIAssistant.getInstance().getApiKey());
     });
   }, []);
 
   useEffect(() => {
     if (isOpen) {
+      setWorldState(AIAssistant.getInstance().getWorldState(playerPosRef.current));
       setTimeout(() => {
         inputRef.current?.focus();
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 50);
     }
-  }, [isOpen]);
+  }, [isOpen, playerPosRef]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -49,6 +52,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     if (!text.trim() || isProcessing) return;
     AIAssistant.getInstance().sendMessage(text, playerPosRef.current);
     setInputText('');
+    setWorldState(AIAssistant.getInstance().getWorldState(playerPosRef.current));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -65,12 +69,12 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   };
 
   const quickPrompts = [
-    '📍 Take me to Nexus Labs',
-    '☕ Find Neon Velocity Lounge',
-    '⚡ Trigger Electric Storm',
-    '🌇 Set time to Sunset',
-    '🌫️ Deploy Dense Fog',
-    '🏙️ Tell me about this district',
+    '🍜 Route to Tokyo-Neo Ramen',
+    '⚡ Warp to Ripperdoc Clinic',
+    '🧪 Take me to Nexus Labs',
+    '⛈️ Trigger Torrential Storm',
+    '🌇 Set Time to Sunset',
+    '🧭 Where Am I & What Is Nearby?',
   ];
 
   return (
@@ -81,9 +85,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         left: 0,
         width: '100vw',
         height: '100vh',
-        backgroundColor: 'rgba(3, 6, 14, 0.75)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        backgroundColor: 'rgba(3, 6, 14, 0.78)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
         zIndex: 60,
         display: 'flex',
         alignItems: 'center',
@@ -96,14 +100,15 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         className="glass-panel"
         style={{
           width: '92%',
-          maxWidth: '680px',
-          height: '80vh',
-          maxHeight: '620px',
+          maxWidth: '720px',
+          height: '84vh',
+          maxHeight: '660px',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
           border: '1px solid var(--neon-cyan)',
-          boxShadow: '0 0 32px rgba(0, 240, 255, 0.25), inset 0 0 20px rgba(0, 240, 255, 0.05)',
+          boxShadow: '0 0 36px rgba(0, 240, 255, 0.28), inset 0 0 20px rgba(0, 240, 255, 0.06)',
+          borderRadius: 8,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -115,18 +120,18 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             justifyContent: 'space-between',
             padding: '12px 18px',
             borderBottom: '1px solid rgba(0, 240, 255, 0.25)',
-            backgroundColor: 'rgba(8, 14, 28, 0.95)',
+            backgroundColor: 'rgba(8, 14, 28, 0.96)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* Animated Neural Core Indicator */}
+            {/* Pulsing Neural Core Dot */}
             <div
               style={{
                 width: 12,
                 height: 12,
                 borderRadius: '50%',
-                backgroundColor: 'var(--neon-cyan)',
-                boxShadow: '0 0 10px var(--neon-cyan)',
+                backgroundColor: apiKey ? '#00ffaa' : '#00f0ff',
+                boxShadow: apiKey ? '0 0 12px #00ffaa' : '0 0 12px #00f0ff',
                 animation: 'pulse 1.8s infinite',
               }}
             />
@@ -139,17 +144,18 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                 color: 'var(--neon-cyan)',
               }}
             >
-              NEXUS-AI // URBAN NEURAL CORE
+              NEXUS-AI // URBAN INTELLIGENCE
             </span>
             <span
               className="cyber-badge"
               style={{
                 fontSize: '0.62rem',
-                color: apiKey ? '#00ffaa' : '#ffaa00',
-                borderColor: apiKey ? 'rgba(0, 255, 170, 0.3)' : 'rgba(255, 170, 0, 0.3)',
+                color: apiKey ? '#00ffaa' : '#fbbf24',
+                borderColor: apiKey ? 'rgba(0, 255, 170, 0.4)' : 'rgba(251, 191, 36, 0.4)',
+                backgroundColor: apiKey ? 'rgba(0, 255, 170, 0.1)' : 'rgba(251, 191, 36, 0.1)',
               }}
             >
-              {apiKey ? 'GEMINI ONLINE' : 'OFFLINE NLP'}
+              {apiKey ? '● GEMINI 2.0 // NEURAL LINK' : '● OFFLINE NLP // AUTONOMOUS CORE'}
             </span>
           </div>
 
@@ -157,15 +163,15 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             <button
               onClick={() => setShowApiKeyInput(!showApiKeyInput)}
               className="cyber-btn"
-              style={{ padding: '2px 8px', fontSize: '0.65rem' }}
-              title="Configure Gemini API Key"
+              style={{ padding: '3px 9px', fontSize: '0.68rem' }}
+              title="Configure Optional Gemini API Key"
             >
-              ⚙ KEY
+              ⚙ {apiKey ? 'KEY ACTIVE' : 'ADD KEY'}
             </button>
             <button
               onClick={() => AIAssistant.getInstance().clearHistory()}
               className="cyber-btn"
-              style={{ padding: '2px 8px', fontSize: '0.65rem' }}
+              style={{ padding: '3px 9px', fontSize: '0.68rem' }}
               title="Clear Terminal Session"
             >
               CLEAR
@@ -173,7 +179,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             <button
               onClick={onClose}
               className="cyber-btn"
-              style={{ padding: '2px 8px', fontSize: '0.65rem', borderColor: '#ff0055', color: '#ff0055' }}
+              style={{ padding: '3px 9px', fontSize: '0.68rem', borderColor: '#ff0055', color: '#ff0055' }}
               title="Close [ESC]"
             >
               ✕
@@ -181,42 +187,97 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
           </div>
         </div>
 
+        {/* Live Ground-Truth World Telemetry Sub-header Strip */}
+        {worldState && (
+          <div
+            style={{
+              padding: '6px 16px',
+              backgroundColor: 'rgba(5, 10, 22, 0.95)',
+              borderBottom: '1px solid rgba(0, 240, 255, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.68rem',
+              color: '#8ba2c4',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}
+          >
+            <div>
+              <span style={{ color: 'var(--neon-cyan)', fontWeight: 600 }}>LOC: </span>
+              {worldState.isInsideInterior
+                ? `Inside ${worldState.interiorName} [${worldState.interiorFloor}]`
+                : `${worldState.district.name} (${worldState.playerCoordinates.x}, ${worldState.playerCoordinates.z})`}
+            </div>
+            <div>
+              <span style={{ color: 'var(--neon-cyan)', fontWeight: 600 }}>ATMOSPHERE: </span>
+              {worldState.weather.current} // {worldState.wind.speedMps}m/s {worldState.wind.cardinalDirection}
+            </div>
+            <div>
+              <span style={{ color: 'var(--neon-cyan)', fontWeight: 600 }}>CHRONO: </span>
+              {worldState.time.formattedTime} [{worldState.time.phase}]
+            </div>
+            <div>
+              <span style={{ color: 'var(--neon-cyan)', fontWeight: 600 }}>EXPLORATION: </span>
+              {worldState.exploration.exploredPercent}%
+            </div>
+          </div>
+        )}
+
         {/* Optional API Key Configuration Drawer */}
         {showApiKeyInput && (
           <div
             style={{
-              padding: '10px 18px',
-              backgroundColor: 'rgba(10, 20, 36, 0.95)',
-              borderBottom: '1px solid rgba(0, 240, 255, 0.2)',
+              padding: '12px 18px',
+              backgroundColor: 'rgba(10, 22, 42, 0.98)',
+              borderBottom: '1px solid rgba(0, 240, 255, 0.25)',
               display: 'flex',
+              flexDirection: 'column',
               gap: 8,
-              alignItems: 'center',
             }}
           >
-            <input
-              type="password"
-              placeholder="Enter Google Gemini API Key..."
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              style={{
-                flex: 1,
-                background: '#060a14',
-                border: '1px solid var(--border-glass)',
-                color: '#fff',
-                padding: '6px 10px',
-                borderRadius: 4,
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.8rem',
-                outline: 'none',
-              }}
-            />
-            <button
-              onClick={handleSaveApiKey}
-              className="cyber-btn"
-              style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-            >
-              SAVE
-            </button>
+            <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
+              Enter Google Gemini API Key for deep conversational dialogue and character roleplay. (Optional: The autonomous offline NLP engine handles 100% of gameplay commands and queries without a key).
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="password"
+                placeholder="AIzaSy... (Google Gemini API Key)"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                style={{
+                  flex: 1,
+                  background: '#040711',
+                  border: '1px solid var(--border-glass)',
+                  color: '#fff',
+                  padding: '7px 12px',
+                  borderRadius: 4,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.8rem',
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleSaveApiKey}
+                className="cyber-btn"
+                style={{ padding: '7px 16px', fontSize: '0.76rem', color: '#00ffaa', borderColor: '#00ffaa' }}
+              >
+                SAVE KEY
+              </button>
+              {apiKey && (
+                <button
+                  onClick={() => {
+                    setApiKey('');
+                    AIAssistant.getInstance().setApiKey('');
+                  }}
+                  className="cyber-btn"
+                  style={{ padding: '7px 12px', fontSize: '0.72rem', color: '#ff0055', borderColor: '#ff0055' }}
+                >
+                  REMOVE
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -251,31 +312,32 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                   color: msg.sender === 'user' ? '#8ba2c4' : 'var(--neon-cyan)',
                 }}
               >
-                <span>{msg.sender === 'user' ? 'OPERATOR' : 'NEXUS-AI'}</span>
+                <span>{msg.sender === 'user' ? 'OPERATIVE' : 'NEXUS-AI'}</span>
                 <span>•</span>
                 <span>{msg.timestamp}</span>
               </div>
 
               <div
                 style={{
-                  maxWidth: '82%',
+                  maxWidth: '84%',
                   padding: '10px 14px',
                   borderRadius: msg.sender === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
                   backgroundColor:
-                    msg.sender === 'user' ? 'rgba(0, 240, 255, 0.14)' : 'rgba(8, 16, 32, 0.9)',
+                    msg.sender === 'user' ? 'rgba(0, 240, 255, 0.14)' : 'rgba(8, 16, 32, 0.92)',
                   border:
                     msg.sender === 'user'
                       ? '1px solid rgba(0, 240, 255, 0.35)'
-                      : '1px solid rgba(0, 240, 255, 0.2)',
+                      : '1px solid rgba(0, 240, 255, 0.22)',
                   color: 'var(--text-primary)',
                   fontSize: '0.85rem',
                   lineHeight: '1.45',
                   fontFamily: 'var(--font-mono)',
+                  whiteSpace: 'pre-line',
                 }}
               >
                 {msg.text}
 
-                {/* Command Execution Pill */}
+                {/* Command Execution Confirmation Badge */}
                 {msg.actionExecuted && (
                   <div
                     style={{
@@ -299,7 +361,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
           {isProcessing && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--neon-cyan)' }}>
-              <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+              <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', animation: 'pulse 1.2s infinite' }}>
                 NEXUS-AI IS COMPUTING NEURAL VECTOR...
               </span>
             </div>
@@ -311,7 +373,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         <div
           style={{
             padding: '8px 16px',
-            backgroundColor: 'rgba(6, 10, 20, 0.9)',
+            backgroundColor: 'rgba(6, 10, 20, 0.92)',
             borderTop: '1px solid rgba(0, 240, 255, 0.15)',
             display: 'flex',
             gap: 6,
@@ -325,7 +387,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
               onClick={() => handleSend(prompt)}
               className="cyber-btn"
               style={{
-                padding: '3px 9px',
+                padding: '3px 10px',
                 fontSize: '0.68rem',
                 borderRadius: 14,
                 backgroundColor: 'rgba(0, 240, 255, 0.06)',
@@ -350,13 +412,13 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
           <input
             ref={inputRef}
             type="text"
-            placeholder="Ask NEXUS-AI (e.g. 'Navigate to lab', 'Make it storm', 'Where am I?')..."
+            placeholder="Direct NEXUS-AI (e.g. 'Route to Ramen', 'Warp to Ripperdoc', 'Storm', 'Where am I?')..."
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             style={{
               flex: 1,
-              background: 'rgba(5, 8, 16, 0.85)',
+              background: 'rgba(5, 8, 16, 0.88)',
               border: '1px solid var(--border-glass)',
               color: '#ffffff',
               padding: '8px 14px',

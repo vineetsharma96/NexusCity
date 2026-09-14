@@ -663,6 +663,27 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
           </button>
         )}
 
+        {/* AI City Intelligence Assistant Button */}
+        <button
+          onClick={() => {
+            setIsAIModalOpen(true);
+            AudioManager.getInstance().playUI('click');
+          }}
+          className="cyber-btn"
+          style={{
+            padding: isMobile ? '4px 10px' : '4px 12px',
+            fontSize: isMobile ? '0.74rem' : '0.78rem',
+            color: '#00ffaa',
+            borderColor: 'rgba(0, 255, 170, 0.6)',
+            backgroundColor: 'rgba(0, 255, 170, 0.12)',
+            boxShadow: '0 0 12px rgba(0, 255, 170, 0.3)',
+            fontWeight: 700,
+          }}
+          title="Open NEXUS-AI Assistant Terminal [I]"
+        >
+          🤖 AI CORE
+        </button>
+
         {/* Unified Cyberpunk System Menu Button */}
         <button
           onClick={() => {

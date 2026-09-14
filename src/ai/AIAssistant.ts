@@ -1,8 +1,13 @@
 import * as THREE from 'three';
-import { NavigationSystem } from '../map/NavigationSystem';
+import { NavigationSystem, LandmarkDef } from '../map/NavigationSystem';
 import { WeatherSystem, WeatherType } from '../world/WeatherSystem';
+import { WindSystem } from '../world/WindSystem';
 import { TimeSystem } from '../world/TimeSystem';
 import { ChunkManager } from '../world/ChunkManager';
+import { DistrictGenerator, DistrictInfo } from '../city/DistrictGenerator';
+import { InteriorManager } from '../world/InteriorManager';
+import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
+import { AudioManager } from '../audio/AudioManager';
 
 export interface AIMessage {
   id: string;
@@ -10,6 +15,51 @@ export interface AIMessage {
   text: string;
   timestamp: string;
   actionExecuted?: string;
+}
+
+export interface AIWorldStateSnapshot {
+  playerCoordinates: { x: number; y: number; z: number };
+  distanceFromCenter: number;
+  district: DistrictInfo;
+  isInsideInterior: boolean;
+  interiorName?: string;
+  interiorFloor?: string;
+  interiorDescription?: string;
+  weather: {
+    current: WeatherType;
+    rainIntensityPercent: number;
+    wetnessPercent: number;
+    fogMultiplier: number;
+    isLightning: boolean;
+  };
+  wind: {
+    speedMps: number;
+    cardinalDirection: string;
+    gustFactor: number;
+  };
+  time: {
+    formattedTime: string;
+    phase: string;
+    isNight: boolean;
+  };
+  navigation: {
+    activeWaypoint: string;
+    distanceMeters?: number;
+    etaSeconds?: number;
+  };
+  exploration: {
+    revealedSectors: number;
+    totalSectors: number;
+    exploredPercent: number;
+  };
+  nearbyLocations: {
+    id: string;
+    name: string;
+    category: string;
+    distanceMeters: number;
+    direction: string;
+    isEnterable: boolean;
+  }[];
 }
 
 type AIListener = (messages: AIMessage[], isProcessing: boolean) => void;
@@ -21,7 +71,7 @@ export class AIAssistant {
     {
       id: 'init-1',
       sender: 'ai',
-      text: 'Greetings, Operator. NEXUS-AI Urban Core online. I can guide you through the city, control atmospheric conditions, jump daylight cycles, or provide real-time sector intelligence. How may I assist your exploration?',
+      text: 'NEXUS-AI Urban Core online. I possess direct telemetry of your coordinates, district atmospheric readings, enterable facilities, and transit routes. I can route waypoints, warp coordinates, modulate weather, or brief you on sectors and city personnel. How may I direct your mission?',
       timestamp: '00:00:01',
     },
   ];
@@ -48,6 +98,7 @@ export class AIAssistant {
     if (typeof window !== 'undefined') {
       localStorage.setItem('nexus_gemini_api_key', this.userApiKey);
     }
+    this.notify();
   }
 
   public getApiKey(): string {
@@ -74,6 +125,96 @@ export class AIAssistant {
     this.notify();
   }
 
+  /**
+   * Compiles ground-truth world telemetry snapshot based on real simulation state.
+   */
+  public getWorldState(playerPos: THREE.Vector3): AIWorldStateSnapshot {
+    const distFromCenter = Math.round(Math.sqrt(playerPos.x * playerPos.x + playerPos.z * playerPos.z));
+    const district = DistrictGenerator.getDistrictAt(playerPos.x, playerPos.z);
+    const interiorState = InteriorManager.getInstance().getState();
+    const weather = WeatherSystem.getInstance().getState();
+    const wind = WindSystem.getInstance().getState();
+    const time = TimeSystem.getInstance().getState();
+    const nav = NavigationSystem.getInstance().getState();
+    const chunkManager = ChunkManager.getInstance();
+
+    // Wind direction to cardinal compass
+    const windAngleDeg = ((wind.direction * 180) / Math.PI + 360) % 360;
+    const cardinals = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const cardinalDir = cardinals[Math.round(windAngleDeg / 45) % 8];
+
+    // Interior info
+    const isInside = interiorState.current !== 'NONE';
+    const dest = isInside ? INTERIOR_DESTINATIONS[interiorState.current] : undefined;
+
+    // Calculate nearest real locations
+    const allLandmarks = NavigationSystem.getInstance().landmarks;
+    const nearbyLocations = allLandmarks
+      .map((l) => {
+        const dx = l.position.x - playerPos.x;
+        const dz = l.position.z - playerPos.z;
+        const d = Math.round(Math.sqrt(dx * dx + dz * dz));
+        const angle = ((Math.atan2(dz, dx) * 180) / Math.PI + 450) % 360;
+        const dir = cardinals[Math.round(angle / 45) % 8];
+        return {
+          id: l.id,
+          name: l.name,
+          category: l.category,
+          distanceMeters: d,
+          direction: dir,
+          isEnterable: !!l.isEnterable,
+        };
+      })
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)
+      .slice(0, 6);
+
+    return {
+      playerCoordinates: {
+        x: Math.round(playerPos.x * 10) / 10,
+        y: Math.round(playerPos.y * 10) / 10,
+        z: Math.round(playerPos.z * 10) / 10,
+      },
+      distanceFromCenter: distFromCenter,
+      district,
+      isInsideInterior: isInside,
+      interiorName: dest?.name,
+      interiorFloor: isInside
+        ? interiorState.currentFloor === 2
+          ? 'Level 2 (Upper Mezzanine / Observation Window)'
+          : 'Level 1 (Main Hall)'
+        : undefined,
+      interiorDescription: dest?.description,
+      weather: {
+        current: weather.currentWeather,
+        rainIntensityPercent: Math.round(weather.rainIntensity * 100),
+        wetnessPercent: Math.round(weather.wetnessFactor * 100),
+        fogMultiplier: Math.round(weather.fogDensityMultiplier * 10) / 10,
+        isLightning: weather.isLightningActive,
+      },
+      wind: {
+        speedMps: Math.round(wind.speed * 10) / 10,
+        cardinalDirection: cardinalDir,
+        gustFactor: Math.round(wind.gustFactor * 10) / 10,
+      },
+      time: {
+        formattedTime: time.formattedTime,
+        phase: time.phase,
+        isNight: time.isNight,
+      },
+      navigation: {
+        activeWaypoint: nav.activeLandmark ? nav.activeLandmark.name : 'None (Freeroam)',
+        distanceMeters: nav.activeLandmark ? Math.round(nav.distance) : undefined,
+        etaSeconds: nav.activeLandmark ? Math.round(nav.distance / 5.5) : undefined,
+      },
+      exploration: {
+        revealedSectors: chunkManager.getState().discoveredChunks.size,
+        totalSectors: 576,
+        exploredPercent: chunkManager.getExploredPercent(),
+      },
+      nearbyLocations,
+    };
+  }
+
   public async sendMessage(userText: string, playerPos: THREE.Vector3): Promise<void> {
     const trimmed = userText.trim();
     if (!trimmed) return;
@@ -89,33 +230,39 @@ export class AIAssistant {
     this.isProcessing = true;
     this.notify();
 
-    // Small delay to simulate neural processing
-    await new Promise((r) => setTimeout(r, 450));
+    const worldState = this.getWorldState(playerPos);
 
     try {
       const apiKey = this.userApiKey || (import.meta as any).env?.VITE_GEMINI_API_KEY;
       if (apiKey) {
-        const response = await this.queryGemini(trimmed, playerPos, apiKey);
-        this.handleAIResponse(response.text, response.action);
+        const response = await this.queryGemini(trimmed, worldState, apiKey);
+        this.handleAIResponse(response.text, response.action, playerPos);
       } else {
-        const response = this.parseOfflineRule(trimmed, playerPos);
-        this.handleAIResponse(response.text, response.action);
+        // Zero-latency autonomous offline parser
+        await new Promise((r) => setTimeout(r, 200));
+        const response = this.parseOfflineRule(trimmed, worldState);
+        this.handleAIResponse(response.text, response.action, playerPos);
       }
     } catch (err) {
-      console.warn('Gemini query error, falling back to offline NLP:', err);
-      const response = this.parseOfflineRule(trimmed, playerPos);
-      this.handleAIResponse(response.text, response.action);
+      console.warn('Gemini query error, falling back to autonomous offline NLP:', err);
+      const response = this.parseOfflineRule(trimmed, worldState);
+      const fallbackText = `${response.text}\n\n[Autonomous Core: Gemini API unavailable; processed via internal neural heuristic.]`;
+      this.handleAIResponse(fallbackText, response.action, playerPos);
     } finally {
       this.isProcessing = false;
       this.notify();
     }
   }
 
-  private handleAIResponse(text: string, action?: { type: string; param: string }): void {
+  private handleAIResponse(
+    text: string,
+    action?: { type: string; param: string },
+    playerPos?: THREE.Vector3
+  ): void {
     let actionExecuted: string | undefined = undefined;
 
     if (action) {
-      actionExecuted = this.executeAction(action.type, action.param);
+      actionExecuted = this.executeAction(action.type, action.param, playerPos);
     }
 
     const aiMsg: AIMessage = {
@@ -129,16 +276,43 @@ export class AIAssistant {
     this.messages.push(aiMsg);
   }
 
-  private executeAction(type: string, param: string): string | undefined {
+  private executeAction(type: string, param: string, playerPos?: THREE.Vector3): string | undefined {
     switch (type.toLowerCase()) {
       case 'navigate': {
         const nav = NavigationSystem.getInstance();
-        const landmark = nav.landmarks.find(
-          (l) => l.id.toLowerCase() === param.toLowerCase() || l.name.toLowerCase().includes(param.toLowerCase())
-        );
-        if (landmark) {
-          nav.setDestination(landmark.id);
-          return `WAYPOINT SET: ${landmark.name.toUpperCase()}`;
+        const target = this.resolveLandmark(param);
+        if (target) {
+          nav.setDestination(target.id);
+          AudioManager.getInstance().playTerminalBeep();
+          return `WAYPOINT LOCKED: ${target.name.toUpperCase()}`;
+        }
+        break;
+      }
+      case 'teleport': {
+        const target = this.resolveLandmark(param);
+        if (target) {
+          const dest = INTERIOR_DESTINATIONS[target.id];
+          if (dest) {
+            // Enter interior directly
+            InteriorManager.getInstance().enterDestination(
+              target.id,
+              playerPos || target.position,
+              (spawnPos) => {
+                window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: spawnPos }));
+              }
+            );
+          } else {
+            // If currently inside an interior, exit first
+            if (InteriorManager.getInstance().currentInterior !== 'NONE') {
+              InteriorManager.getInstance().exit((exitPos) => {
+                window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: target.position.clone() }));
+              });
+            } else {
+              window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: target.position.clone() }));
+            }
+          }
+          AudioManager.getInstance().playElevatorMove();
+          return `⚡ QUANTUM WARP: ${target.name.toUpperCase()}`;
         }
         break;
       }
@@ -147,7 +321,8 @@ export class AIAssistant {
         const wt = param.toUpperCase() as WeatherType;
         if (['CLEAR', 'CLOUDY', 'RAIN', 'HEAVY_RAIN', 'FOG'].includes(wt)) {
           weather.setWeather(wt);
-          return `ATMOSPHERE MODIFIED: ${wt}`;
+          AudioManager.getInstance().playUI('click');
+          return `ATMOSPHERE MODULATED: ${wt}`;
         }
         break;
       }
@@ -155,7 +330,8 @@ export class AIAssistant {
         const hour = parseFloat(param);
         if (!isNaN(hour)) {
           TimeSystem.getInstance().setHour(hour);
-          return `CHRONO WARP: ${TimeSystem.getInstance().getState().formattedTime}`;
+          AudioManager.getInstance().playUI('click');
+          return `CHRONO JUMP: ${TimeSystem.getInstance().getState().formattedTime}`;
         }
         break;
       }
@@ -164,218 +340,414 @@ export class AIAssistant {
   }
 
   /**
-   * Offline zero-latency rule-based heuristic parser.
+   * Resolves a target string to an authentic registered LandmarkDef (no hallucinations).
+   */
+  private resolveLandmark(query: string): LandmarkDef | undefined {
+    const q = query.toLowerCase().trim();
+    const landmarks = NavigationSystem.getInstance().landmarks;
+
+    // 1. Exact ID match
+    const exactId = landmarks.find((l) => l.id.toLowerCase() === q);
+    if (exactId) return exactId;
+
+    // 2. Keyword dictionary for all real venues
+    const keywordMap: Record<string, string> = {
+      ramen: 'ramen_diner',
+      noodle: 'ramen_diner',
+      food: 'ramen_diner',
+      eat: 'ramen_diner',
+      taro: 'ramen_diner',
+      restaurant: 'ramen_diner',
+
+      ripperdoc: 'ripperdoc_clinic',
+      clinic: 'ripperdoc_clinic',
+      cyberware: 'ripperdoc_clinic',
+      chrome: 'ripperdoc_clinic',
+      doctor: 'ripperdoc_clinic',
+      viktor: 'ripperdoc_clinic',
+      krom: 'ripperdoc_clinic',
+      implant: 'ripperdoc_clinic',
+      medical: 'ripperdoc_clinic',
+
+      lab: 'nexus_labs',
+      labs: 'nexus_labs',
+      research: 'nexus_labs',
+      quantum: 'nexus_labs',
+      vance: 'nexus_labs',
+      science: 'nexus_labs',
+      reactor: 'nexus_labs',
+
+      lounge: 'cyber_lounge',
+      bar: 'cyber_lounge',
+      cocktail: 'cyber_lounge',
+      drink: 'cyber_lounge',
+      club: 'cyber_lounge',
+      neon: 'cyber_lounge',
+      velocity: 'cyber_lounge',
+
+      netrunner: 'netrunner_den',
+      hacker: 'netrunner_den',
+      hack: 'netrunner_den',
+      safehouse: 'netrunner_den',
+      ice: 'netrunner_den',
+      terminal: 'netrunner_den',
+      matrix: 'netrunner_den',
+      cyberdeck: 'netrunner_den',
+
+      drone: 'drone_hangar',
+      hangar: 'drone_hangar',
+      cargo: 'drone_hangar',
+      aero: 'drone_hangar',
+      flight: 'drone_hangar',
+
+      penthouse: 'sky_penthouse',
+      suite: 'sky_penthouse',
+      apex_suite: 'sky_penthouse',
+      vane: 'sky_penthouse',
+      luxury: 'sky_penthouse',
+
+      vault: 'server_vault',
+      server: 'server_vault',
+      data: 'server_vault',
+      storage: 'server_vault',
+
+      greenhouse: 'biosphere_greenhouse',
+      biosphere: 'biosphere_greenhouse',
+      flora: 'biosphere_greenhouse',
+      hydroponic: 'biosphere_greenhouse',
+      garden: 'biosphere_greenhouse',
+      plants: 'biosphere_greenhouse',
+
+      metro: 'metro_station',
+      subway: 'metro_station',
+      transit: 'metro_station',
+      train: 'metro_station',
+      hyperloop: 'metro_station',
+
+      arcade: 'cyber_arcade',
+      retro: 'cyber_arcade',
+      game: 'cyber_arcade',
+      games: 'cyber_arcade',
+      cabinet: 'cyber_arcade',
+
+      plaza: 'central_plaza',
+      center: 'central_plaza',
+      square: 'central_plaza',
+      hub: 'central_plaza',
+
+      spires: 'twin_spires',
+      skybridge: 'twin_spires',
+      twin: 'twin_spires',
+
+      apex: 'apex_tower',
+      monolith: 'apex_tower',
+      tower: 'apex_tower',
+
+      park: 'central_park',
+      sanctuary: 'central_park',
+      lotus: 'central_park',
+      pond: 'central_park',
+      cherry: 'central_park',
+      sakura: 'central_park',
+    };
+
+    for (const [kw, landmarkId] of Object.entries(keywordMap)) {
+      if (q.includes(kw)) {
+        const found = landmarks.find((l) => l.id === landmarkId);
+        if (found) return found;
+      }
+    }
+
+    // 3. Name inclusion
+    return landmarks.find(
+      (l) => l.name.toLowerCase().includes(q) || q.includes(l.name.toLowerCase())
+    );
+  }
+
+  /**
+   * Offline Zero-Latency Rule-Based Heuristic Parser.
+   * Completely autonomous: no internet or Gemini API needed for core gameplay.
    */
   private parseOfflineRule(
     query: string,
-    playerPos: THREE.Vector3
+    world: AIWorldStateSnapshot
   ): { text: string; action?: { type: string; param: string } } {
-    const q = query.toLowerCase();
-    const chunk = ChunkManager.getInstance().getState();
-    const district = chunk.activeDistrict;
-    const time = TimeSystem.getInstance().getState();
-    const weather = WeatherSystem.getInstance().getState();
-    const nav = NavigationSystem.getInstance();
+    const q = query.toLowerCase().trim();
+    const isWarp = q.includes('teleport') || q.includes('warp') || q.includes('fast travel') || q.includes('beam');
 
-    // 1. Navigation intents
-    if (q.includes('lab') || q.includes('research') || q.includes('quantum')) {
+    // 1. Navigation & Teleportation to Ground-Truth Locations
+    const resolvedLandmark = this.resolveLandmark(q);
+    if (resolvedLandmark && (isWarp || q.includes('take me') || q.includes('navigate') || q.includes('go to') || q.includes('find') || q.includes('route') || q.includes('lead') || q.includes('head to') || q.includes('where is'))) {
+      const actionType = isWarp ? 'teleport' : 'navigate';
+      const actionVerb = isWarp ? 'Initiating instantaneous quantum warp to' : 'Plotting optimal sidewalk route vectors to';
+      const promptEnterable = resolvedLandmark.isEnterable ? ' Automated airlock portals will unlock on approach.' : '';
       return {
-        text: 'Plotting direct waypoint vectors to Nexus Advanced Labs. Holographic ground ribbon activated on your HUD.',
-        action: { type: 'navigate', param: 'nexus_labs' },
-      };
-    }
-    if (q.includes('lounge') || q.includes('cafe') || q.includes('bar') || q.includes('drink') || q.includes('coffee')) {
-      return {
-        text: 'Setting destination to Neon Velocity Lounge on West Avenue. Automated double doors are ready for entry.',
-        action: { type: 'navigate', param: 'cyber_lounge' },
-      };
-    }
-    if (q.includes('plaza') || q.includes('center') || q.includes('square')) {
-      return {
-        text: 'Routing course toward Central Plaza Hub. The holographic monument is visible at the city center.',
-        action: { type: 'navigate', param: 'central_plaza' },
-      };
-    }
-    if (q.includes('twin') || q.includes('skybridge') || q.includes('bridge')) {
-      return {
-        text: 'Waypoint locked to Twin Spire Skybridge in the north-east commercial zone.',
-        action: { type: 'navigate', param: 'twin_spires' },
-      };
-    }
-    if (q.includes('apex') || q.includes('tallest') || q.includes('monolith')) {
-      return {
-        text: 'Locking trajectory onto Apex Monolith Tower. Beacon active.',
-        action: { type: 'navigate', param: 'apex_tower' },
+        text: `${actionVerb} ${resolvedLandmark.name}. Ground guidance beacon activated on your HUD.${promptEnterable}`,
+        action: { type: actionType, param: resolvedLandmark.id },
       };
     }
 
-    // 2. Weather intents
+    // 2. Weather Modifications
     if (q.includes('storm') || q.includes('thunder') || q.includes('heavy rain') || q.includes('lightning')) {
       return {
-        text: 'Atmospheric condensers engaged: generating torrential storm precipitation and electrical storm bursts.',
+        text: 'Atmospheric condensers engaged: generating torrential storm precipitation and high-voltage electrical bursts across the metropolis.',
         action: { type: 'weather', param: 'HEAVY_RAIN' },
       };
     }
-    if (q.includes('rain') || q.includes('shower') || q.includes('wet')) {
+    if (q.includes('rain') || q.includes('shower') || q.includes('wet') || q.includes('drizzle')) {
       return {
-        text: 'Triggering moderate rainfall over Nexus City. Pavements are beginning to darken and glisten.',
+        text: 'Deploying cloud seeding matrices. Moderate rainfall initiated; pavements and road asphalt are glistening.',
         action: { type: 'weather', param: 'RAIN' },
       };
     }
-    if (q.includes('clear') || q.includes('sun') || q.includes('sunny') || q.includes('dry')) {
+    if (q.includes('clear') || q.includes('sun') || q.includes('sunny') || q.includes('dry') || q.includes('bright')) {
       return {
-        text: 'Dispersing cloud cover and precipitation. Atmosphere returned to clear pristine status.',
+        text: 'Dispersing moisture clouds and precipitation. Skybox returned to crystal-clear atmospheric transparency.',
         action: { type: 'weather', param: 'CLEAR' },
       };
     }
-    if (q.includes('fog') || q.includes('smog') || q.includes('haze') || q.includes('mist')) {
+    if (q.includes('fog') || q.includes('smog') || q.includes('mist') || q.includes('haze')) {
       return {
-        text: 'Deploying cybernetic dense fog blanket. Distance visibility restricted to 48 meters.',
+        text: 'Generating dense cyberpunk smog blanket. Ground mist and street-level fog layers deployed.',
         action: { type: 'weather', param: 'FOG' },
       };
     }
     if (q.includes('cloud') || q.includes('overcast')) {
       return {
-        text: 'Modulating tropospheric cloud layer to overcast status.',
+        text: 'Tropospheric cloud layer modulated to dense overcast cover.',
         action: { type: 'weather', param: 'CLOUDY' },
       };
     }
 
-    // 3. Time of day intents
-    if (q.includes('night') || q.includes('midnight') || q.includes('dark')) {
+    // 3. Chronometer & Time Jumps
+    if (q.includes('midnight') || q.includes('night') || q.includes('dark')) {
       return {
-        text: 'Advancing city chronometer to 23:00 Midnight. Celestial moonlight and neon emissive channels illuminated.',
+        text: 'Advancing chronometer to 23:00 Midnight. Celestial moonlight and skyscraper neon channels illuminated.',
         action: { type: 'time', param: '23' },
       };
     }
     if (q.includes('sunset') || q.includes('dusk') || q.includes('evening') || q.includes('golden hour')) {
       return {
-        text: 'Warping time to 18:30 Sunset. Golden celestial horizon and purple atmospheric bounce engaged.',
+        text: 'Setting city chronometer to 18:30 Sunset. Horizon gold and violet atmospheric bounce active.',
         action: { type: 'time', param: '18.5' },
       };
     }
-    if (q.includes('dawn') || q.includes('morning') || q.includes('sunrise')) {
+    if (q.includes('dawn') || q.includes('sunrise') || q.includes('morning')) {
       return {
-        text: 'Resetting time to 06:00 Dawn. Morning radiance spreading over the eastern skyline.',
+        text: 'Resetting time to 06:00 Dawn. Early morning sunlight filtering through urban towers.',
         action: { type: 'time', param: '6' },
       };
     }
-    if (q.includes('noon') || q.includes('day') || q.includes('daylight')) {
+    if (q.includes('noon') || q.includes('day') || q.includes('daylight') || q.includes('afternoon')) {
       return {
-        text: 'Setting time to 13:00 High Noon. Maximum ambient visibility across all urban sectors.',
-        action: { type: 'time', param: '13' },
+        text: 'Setting time to 12:00 High Noon. Maximum ambient visibility across all 64 sectors.',
+        action: { type: 'time', param: '12' },
       };
     }
 
-    // 4. Location & District Lore
-    if (q.includes('where am i') || q.includes('district') || q.includes('location') || q.includes('sector')) {
+    // 4. Exact World State Telemetry Queries
+    if (q.includes('where am i') || q.includes('current location') || q.includes('coordinates') || q.includes('my position')) {
+      const { playerCoordinates, distanceFromCenter, district, isInsideInterior, interiorName, interiorFloor } = world;
+      if (isInsideInterior) {
+        return {
+          text: `You are currently inside ${interiorName} (${interiorFloor}) at local coordinates (${playerCoordinates.x}, ${playerCoordinates.z}). Outside district: ${district.name}.`,
+        };
+      }
       return {
-        text: `You are currently standing in the ${district.name} (${district.subtitle}) at coordinates (${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}). Sector characteristics: ${district.description}`,
+        text: `You are outdoors in ${district.name} (${district.subtitle}) at coordinates (${playerCoordinates.x}, ${playerCoordinates.z}), located ${distanceFromCenter}m from Central Plaza. District traits: ${district.description}`,
       };
     }
 
-    // 5. NPC Lore
-    if (q.includes('vance') || q.includes('kael') || q.includes('scientist')) {
+    if (q.includes('weather') || q.includes('atmosphere') || q.includes('wind') || q.includes('forecast')) {
+      const { weather, wind } = world;
       return {
-        text: 'Dr. Vance Kael is the Chief Quantum Architect at Nexus Advanced Labs. He oversees the central atmospheric stabilizer reactor and experimental anti-entropy fields.',
-      };
-    }
-    if (q.includes('kira') || q.includes('jin') || q.includes('courier')) {
-      return {
-        text: 'Kira Jin is a high-priority data courier operating between Central Plaza and the Neon Velocity Lounge. Known for rapid rooftop transversal.',
-      };
-    }
-    if (q.includes('echo') || q.includes('chen') || q.includes('security') || q.includes('officer')) {
-      return {
-        text: 'Officer Chen and Patrol Unit Echo-7 are stationed throughout the Central District to monitor transit safety and biometric compliance.',
+        text: `Active Weather: ${weather.current} (Wetness: ${weather.wetnessPercent}%, Fog Multiplier: ${weather.fogMultiplier}x). Wind speed: ${wind.speedMps} m/s blowing ${wind.cardinalDirection} with gust factor ${wind.gustFactor}x.`,
       };
     }
 
-    // 6. City lore
-    if (q.includes('nexus city') || q.includes('city') || q.includes('lore') || q.includes('history')) {
+    if (q.includes('time') || q.includes('clock') || q.includes('hour')) {
+      const { time } = world;
       return {
-        text: 'Nexus City is an autonomous metropolis built upon 64 procedural sectors across 7 thematic urban zones, powered by zero external 3D models and pure WebGL procedural architecture.',
+        text: `Metropolitan Chronometer: ${time.formattedTime} [${time.phase}]. Status: ${time.isNight ? 'Night Lighting Emissive Grid Active' : 'Daylight Solar Grid Active'}.`,
       };
     }
 
-    // 7. General Help
+    if (q.includes('exploration') || q.includes('map') || q.includes('fog of war') || q.includes('discovered')) {
+      const { exploration } = world;
+      return {
+        text: `Metropolitan Blueprint: ${exploration.exploredPercent}% explored (${exploration.revealedSectors} of ${exploration.totalSectors} sectors mapped). Press [M] to inspect the interactive 24×24 map.`,
+      };
+    }
+
+    if (q.includes('nearby') || q.includes('closest') || q.includes('what is around')) {
+      const list = world.nearbyLocations
+        .map((l) => `• ${l.name} (${l.distanceMeters}m ${l.direction}${l.isEnterable ? ' - Enterable' : ''})`)
+        .join('\n');
+      return {
+        text: `Real verified locations in your vicinity:\n${list}\n\nSay "take me to <name>" to route a ground navigation path.`,
+      };
+    }
+
+    // 5. NPC & Character Lore
+    if (q.includes('vance') || q.includes('kael')) {
+      return {
+        text: 'Dr. Vance Kael is the Chief Quantum Architect at Nexus Advanced Labs. He investigates anti-entropy containment fields and atmospheric stabilization.',
+      };
+    }
+    if (q.includes('kira') || q.includes('jin')) {
+      return {
+        text: 'Kira Jin is an elite high-speed data courier frequently spotted between the Central Boulevard and the Neon Velocity Lounge.',
+      };
+    }
+    if (q.includes('chen') || q.includes('echo') || q.includes('police') || q.includes('officer')) {
+      return {
+        text: 'Officer Chen and Autonomous Patrol Unit Echo-7 enforce municipal civil protocols and biometric compliance throughout the commercial sectors.',
+      };
+    }
+    if (q.includes('viktor') || q.includes('doc')) {
+      return {
+        text: 'Ripperdoc Viktor operates Krom-Doc Augmentation Clinic in Medical Alley, specializing in military-grade neural optics and cyberware prosthetics.',
+      };
+    }
+    if (q.includes('zero-day') || q.includes('zeroday')) {
+      return {
+        text: 'Zero-Day is an elusive legendary netrunner stationed inside the Black-Ice Hacker Safehouse, monitoring megacorp data nodes.',
+      };
+    }
+    if (q.includes('taro') || q.includes('chef')) {
+      return {
+        text: 'Chef Taro crafts legendary synthetic broth ramen at Tokyo-Neo Synth-Ramen on East Food Bazaar.',
+      };
+    }
+
+    // 6. General Guidance / Default Help
     return {
-      text: `NEXUS-AI Operational. Current Status: ${district.name} // ${time.formattedTime} (${time.phase}) // ${weather.currentWeather}. Try asking me: "Take me to the lab", "Make it rain", "Jump to sunset", "Where am I?", or "Tell me about Dr. Vance".`,
+      text: `NEXUS-AI Operational. Telemetry: ${world.district.name} // ${world.time.formattedTime} (${world.time.phase}) // ${world.weather.current}.
+Try commands such as:
+• "Take me to Tokyo-Neo Ramen" or "Route to Ripperdoc"
+• "Warp to Nexus Labs"
+• "Make it rain" or "Clear the sky"
+• "Set time to midnight"
+• "What is nearby?" or "Where am I?"`,
     };
   }
 
   /**
-   * Online query using Gemini API.
+   * Online Gemini API Integration with strict ground-truth context and multi-turn awareness.
    */
   private async queryGemini(
     query: string,
-    playerPos: THREE.Vector3,
+    world: AIWorldStateSnapshot,
     apiKey: string
   ): Promise<{ text: string; action?: { type: string; param: string } }> {
-    const chunk = ChunkManager.getInstance().getState();
-    const district = chunk.activeDistrict;
-    const time = TimeSystem.getInstance().getState();
-    const weather = WeatherSystem.getInstance().getState();
+    // Compile comprehensive ground-truth reference table
+    const landmarkList = NavigationSystem.getInstance().landmarks.map((l) => ({
+      id: l.id,
+      name: l.name,
+      category: l.category,
+      isEnterable: !!l.isEnterable,
+      coordinates: `(${Math.round(l.position.x)}, ${Math.round(l.position.z)})`,
+      description: l.description,
+    }));
 
-    const systemPrompt = `You are "NEXUS-AI", the sophisticated holographic urban assistant embedded in the cyberpunk open-world experience "Nexus City".
-Current World State:
-- Player Position: (${Math.round(playerPos.x)}, ${Math.round(playerPos.y)}, ${Math.round(playerPos.z)})
-- Current District: ${district.name} (${district.subtitle}) - ${district.description}
-- Time of Day: ${time.formattedTime} (${time.phase})
-- Weather: ${weather.currentWeather} (Wetness: ${Math.round(weather.wetnessFactor * 100)}%)
-- Landmarks Available: central_plaza (Central Plaza Hub), nexus_labs (Nexus Advanced Labs, enterable), cyber_lounge (Neon Velocity Lounge, enterable), twin_spires (Twin Spire Skybridge), apex_tower (Apex Monolith Tower).
+    const systemPrompt = `You are "NEXUS-AI", the sophisticated holographic urban assistant embedded in the cyberpunk open-world simulation "Nexus City".
 
-Respond in character (concise, sleek cyberpunk sci-fi AI).
-If the user wants to navigate somewhere, change the weather, or change the time, respond with a JSON object:
+=== LIVE WORLD TELEMETRY (GROUND TRUTH) ===
+- Player Coordinates: (${world.playerCoordinates.x}, ${world.playerCoordinates.y}, ${world.playerCoordinates.z})
+- Current District: ${world.district.name} (${world.district.subtitle}) - ${world.district.description}
+- Interior State: ${world.isInsideInterior ? `Inside ${world.interiorName} [${world.interiorFloor}]: ${world.interiorDescription}` : 'Outdoors on city streets'}
+- Time of Day: ${world.time.formattedTime} [${world.time.phase}] (Night lighting: ${world.time.isNight ? 'ON' : 'OFF'})
+- Weather: ${world.weather.current} (Wetness: ${world.weather.wetnessPercent}%, Fog Multiplier: ${world.weather.fogMultiplier}x)
+- Wind: ${world.wind.speedMps} m/s blowing ${world.wind.cardinalDirection} (Gust factor: ${world.wind.gustFactor}x)
+- Navigation: Active Route = ${world.navigation.activeWaypoint}${world.navigation.distanceMeters ? ` (${world.navigation.distanceMeters}m, ~${world.navigation.etaSeconds}s)` : ''}
+- Exploration Progress: ${world.exploration.exploredPercent}% mapped (${world.exploration.revealedSectors}/${world.exploration.totalSectors} sectors)
+
+=== VERIFIED GROUND-TRUTH LOCATIONS (STRICT NO-HALLUCINATION RULE) ===
+You must ONLY refer to, navigate to, or recommend real registered locations in Nexus City:
+${JSON.stringify(landmarkList, null, 2)}
+
+=== STRICT BEHAVIORAL CONSTRAINTS ===
+1. NO HALLUCINATIONS: Do NOT invent fictional shop names, fictional street names, or non-existent hospitals. Map user requests exclusively to the real locations above (e.g. food -> ramen_diner, chrome/medical -> ripperdoc_clinic, hacker -> netrunner_den, drinks -> cyber_lounge, nature/garden -> biosphere_greenhouse or central_park, luxury -> sky_penthouse, train -> metro_station, games -> cyber_arcade).
+2. TONE: Sleek, highly intelligent, concise cyberpunk operative assistant.
+3. ACTIONS: If the user requests navigation, teleportation, weather modification, or time warping, you must return a valid action object.
+   - For fast travel / warp: action type "teleport" with valid landmark id.
+   - For route guidance / directions: action type "navigate" with valid landmark id.
+   - For weather: action type "weather" with parameter "CLEAR" | "CLOUDY" | "RAIN" | "HEAVY_RAIN" | "FOG".
+   - For time: action type "time" with numeric hour (e.g. "6", "12", "18.5", "23").
+
+Format your response as a JSON object:
 {
-  "reply": "Your in-character spoken response",
+  "reply": "Your in-character spoken dialogue (concise, 1-3 sentences)",
   "action": {
-    "type": "navigate" | "weather" | "time",
-    "param": "landmark_id" | "CLEAR"|"CLOUDY"|"RAIN"|"HEAVY_RAIN"|"FOG" | "hour_number (e.g. 18.5, 23, 6, 12)"
+    "type": "navigate" | "teleport" | "weather" | "time",
+    "param": "landmark_id_or_value"
   }
 }
-If no action is needed, omit the "action" field or set it to null. Return ONLY valid raw JSON with no backticks.`;
+If no action is triggered, set action to null.`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: `${systemPrompt}\n\nUser Query: "${query}"` }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 300,
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Gemini API HTTP ${res.status}`);
+    // Multi-turn context
+    const contents: any[] = [];
+    const recentMessages = this.messages.slice(-4);
+    for (const msg of recentMessages) {
+      contents.push({
+        role: msg.sender === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }],
+      });
     }
 
-    const data = await res.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    // Ensure the final user query is attached
+    if (contents.length === 0 || contents[contents.length - 1].role !== 'user') {
+      contents.push({
+        role: 'user',
+        parts: [{ text: query }],
+      });
+    }
 
-    if (rawText) {
+    // Try gemini-2.0-flash with fallback to gemini-1.5-flash
+    const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+    let lastError: Error | null = null;
+
+    for (const model of models) {
       try {
-        const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(cleaned);
-        return {
-          text: parsed.reply || rawText,
-          action: parsed.action || undefined,
-        };
-      } catch {
-        return { text: rawText };
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: {
+              parts: [{ text: systemPrompt }],
+            },
+            contents,
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 500,
+              responseMimeType: 'application/json',
+            },
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Gemini ${model} HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+        if (rawText) {
+          const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+          return {
+            text: parsed.reply || rawText,
+            action: parsed.action || undefined,
+          };
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Attempt with ${model} failed, trying fallback:`, err.message);
       }
     }
 
-    return this.parseOfflineRule(query, playerPos);
+    throw lastError || new Error('Gemini query failed on all endpoints');
   }
 
   public subscribe(listener: AIListener): () => void {
