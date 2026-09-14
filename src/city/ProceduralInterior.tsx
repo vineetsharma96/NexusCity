@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { InteriorManager, InteriorType, InteriorState } from '../world/InteriorManager';
 import { InteractionSystem } from '../interaction/InteractionSystem';
-import { KinematicCollisionSolver } from '../player/KinematicCollision';
+import { KinematicCollisionSolver, CollisionBox } from '../player/KinematicCollision';
 import { AudioManager } from '../audio/AudioManager';
 import { DialogueSystem } from '../npc/DialogueSystem';
 
@@ -101,6 +101,7 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
   const ringRef = useRef<THREE.Group>(null);
   const holoRef = useRef<THREE.Mesh>(null);
   const cityHoloRef = useRef<THREE.Group>(null);
+  const fanRef = useRef<THREE.Group>(null);
 
   const [interiorState, setInteriorState] = useState<InteriorState>(() =>
     InteriorManager.getInstance().getState()
@@ -116,19 +117,28 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
   useEffect(() => {
     if (type === 'NONE') return;
 
+    const interiorBoxes: CollisionBox[] = [];
+    const addBox = (center: THREE.Vector3, size: THREE.Vector3) => {
+      const half = size.clone().multiplyScalar(0.5);
+      interiorBoxes.push({
+        min: center.clone().sub(half),
+        max: center.clone().add(half),
+      });
+    };
+
     // Room Dimensions: 22m wide, 4.5m high, 18m deep
     const w = 22;
     const h = 4.5;
     const d = 18;
 
     // 1. Perimeter Room Walls
-    KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, h / 2, -d / 2 - 0.5)), new THREE.Vector3(w, h, 1));
-    KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, h / 2, d / 2 + 0.5)), new THREE.Vector3(w, h, 1));
-    KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(-w / 2 - 0.5, h / 2, 0)), new THREE.Vector3(1, h, d));
-    KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(w / 2 + 0.5, h / 2, 0)), new THREE.Vector3(1, h, d));
+    addBox(origin.clone().add(new THREE.Vector3(0, h / 2, -d / 2 - 0.5)), new THREE.Vector3(w, h, 1));
+    addBox(origin.clone().add(new THREE.Vector3(0, h / 2, d / 2 + 0.5)), new THREE.Vector3(w, h, 1));
+    addBox(origin.clone().add(new THREE.Vector3(-w / 2 - 0.5, h / 2, 0)), new THREE.Vector3(1, h, d));
+    addBox(origin.clone().add(new THREE.Vector3(w / 2 + 0.5, h / 2, 0)), new THREE.Vector3(1, h, d));
 
     // 2. Elevator Lift Shaft Collider (Southeast Corner)
-    KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(8.5, h / 2, 6.5)), new THREE.Vector3(3.5, h, 3.5));
+    addBox(origin.clone().add(new THREE.Vector3(8.5, h / 2, 6.5)), new THREE.Vector3(3.5, h, 3.5));
 
     // 3. Register Elevator Interactable
     const elevatorPos = origin.clone().add(new THREE.Vector3(7.5, 0.2, 5.5));
@@ -164,9 +174,9 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
 
       // Type-specific Level 1 colliders & interactive objects
       if (type === 'LAB') {
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, 1.8, 0)), new THREE.Vector3(4.5, 3.6, 4.5));
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(-6, 0.8, -4)), new THREE.Vector3(3.5, 1.6, 2));
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(6, 0.8, -4)), new THREE.Vector3(3.5, 1.6, 2));
+        addBox(origin.clone().add(new THREE.Vector3(0, 1.8, 0)), new THREE.Vector3(4.5, 3.6, 4.5));
+        addBox(origin.clone().add(new THREE.Vector3(-6, 0.8, -4)), new THREE.Vector3(3.5, 1.6, 2));
+        addBox(origin.clone().add(new THREE.Vector3(6, 0.8, -4)), new THREE.Vector3(3.5, 1.6, 2));
 
         // NPC Nova
         InteractionSystem.getInstance().register({
@@ -200,7 +210,7 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
           },
         });
       } else if (type === 'LOUNGE' || type === 'RAMEN_DINER') {
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, 0.8, -4)), new THREE.Vector3(12, 1.6, 2.5));
+        addBox(origin.clone().add(new THREE.Vector3(0, 0.8, -4)), new THREE.Vector3(12, 1.6, 2.5));
 
         if (type === 'LOUNGE') {
           // NPC Bartender K-9
@@ -246,8 +256,8 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
           });
         }
       } else if (type === 'CLINIC') {
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, 0.8, 0)), new THREE.Vector3(3, 1.6, 2.5));
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(-7, 1.2, -4)), new THREE.Vector3(4, 2.4, 2));
+        addBox(origin.clone().add(new THREE.Vector3(0, 0.8, 0)), new THREE.Vector3(3, 1.6, 2.5));
+        addBox(origin.clone().add(new THREE.Vector3(-7, 1.2, -4)), new THREE.Vector3(4, 2.4, 2));
 
         // NPC Doc Viktor
         InteractionSystem.getInstance().register({
@@ -281,9 +291,9 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
           },
         });
       } else if (type === 'NETRUNNER_DEN' || type === 'SERVER_VAULT') {
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(-6, 1.8, 0)), new THREE.Vector3(2.5, 3.6, 10));
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(6, 1.8, 0)), new THREE.Vector3(2.5, 3.6, 10));
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, 1.2, -5)), new THREE.Vector3(4, 2.4, 3));
+        addBox(origin.clone().add(new THREE.Vector3(-6, 1.8, 0)), new THREE.Vector3(2.5, 3.6, 10));
+        addBox(origin.clone().add(new THREE.Vector3(6, 1.8, 0)), new THREE.Vector3(2.5, 3.6, 10));
+        addBox(origin.clone().add(new THREE.Vector3(0, 1.2, -5)), new THREE.Vector3(4, 2.4, 3));
 
         if (type === 'NETRUNNER_DEN') {
           // NPC Netrunner Zero-Day
@@ -317,10 +327,32 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
               }
             },
           });
+        } else {
+          // Server Vault Backup Terminal
+          InteractionSystem.getInstance().register({
+            id: 'term_vault_backup',
+            name: 'Data Vault Core Console',
+            actionText: 'ACCESS OPTICAL DATA CORE // BACKUP LOGS',
+            position: origin.clone().add(new THREE.Vector3(0, 0.2, -3.5)),
+            radius: 2.5,
+            onInteract: () => {
+              AudioManager.getInstance().playTerminalBeep();
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('nexus:notification', {
+                    detail: {
+                      title: 'DATA VAULT ENCRYPTION VERIFIED',
+                      message: 'Quantum storage bank synchronized. Zero anomalous access detected.',
+                    },
+                  })
+                );
+              }
+            },
+          });
         }
       } else if (type === 'PENTHOUSE') {
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, 0.6, 1)), new THREE.Vector3(5, 1.2, 3));
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, 1.0, -8)), new THREE.Vector3(8, 2.0, 1.5));
+        addBox(origin.clone().add(new THREE.Vector3(0, 0.6, 1)), new THREE.Vector3(5, 1.2, 3));
+        addBox(origin.clone().add(new THREE.Vector3(0, 1.0, -8)), new THREE.Vector3(8, 2.0, 1.5));
 
         // NPC Executive Vane
         InteractionSystem.getInstance().register({
@@ -332,9 +364,9 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
           onInteract: () => DialogueSystem.getInstance().startDialogue('penthouse_executive_vane'),
         });
       } else if (type === 'ARCADE') {
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(-7, 1.2, 0)), new THREE.Vector3(2.5, 2.4, 10));
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(7, 1.2, 0)), new THREE.Vector3(2.5, 2.4, 10));
-        KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, 0.4, 0)), new THREE.Vector3(4, 0.6, 4));
+        addBox(origin.clone().add(new THREE.Vector3(-7, 1.2, 0)), new THREE.Vector3(2.5, 2.4, 10));
+        addBox(origin.clone().add(new THREE.Vector3(7, 1.2, 0)), new THREE.Vector3(2.5, 2.4, 10));
+        addBox(origin.clone().add(new THREE.Vector3(0, 0.4, 0)), new THREE.Vector3(4, 0.6, 4));
 
         // Arcade Cabinet Terminal
         InteractionSystem.getInstance().register({
@@ -357,11 +389,85 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
             }
           },
         });
+      } else if (type === 'DRONE_HANGAR') {
+        addBox(origin.clone().add(new THREE.Vector3(0, 1.2, 0)), new THREE.Vector3(5, 2.4, 5));
+        addBox(origin.clone().add(new THREE.Vector3(-6, 1.2, -4)), new THREE.Vector3(4, 2.4, 3));
+
+        InteractionSystem.getInstance().register({
+          id: 'term_hangar_drone',
+          name: 'Drone Diagnostics Bay',
+          actionText: 'DIAGNOSE CARGO DRONE // HYDRAULIC CALIBRATION',
+          position: origin.clone().add(new THREE.Vector3(0, 0.2, -3.2)),
+          radius: 2.5,
+          onInteract: () => {
+            AudioManager.getInstance().playTerminalBeep();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent('nexus:notification', {
+                  detail: {
+                    title: 'AERO-CARGO DRONE READY',
+                    message: 'Thruster output 100% • Nav-mesh synced • Battery at 98.4%',
+                  },
+                })
+              );
+            }
+          },
+        });
+      } else if (type === 'GREENHOUSE') {
+        addBox(origin.clone().add(new THREE.Vector3(0, 0.6, 0)), new THREE.Vector3(4, 1.2, 4));
+        addBox(origin.clone().add(new THREE.Vector3(-7, 1.8, 0)), new THREE.Vector3(2.5, 3.6, 10));
+        addBox(origin.clone().add(new THREE.Vector3(7, 1.8, 0)), new THREE.Vector3(2.5, 3.6, 10));
+
+        InteractionSystem.getInstance().register({
+          id: 'term_greenhouse_nutrients',
+          name: 'Hydroponic Flora Console',
+          actionText: 'CYCLE HYDROPONIC NUTRIENT FEED // PH CALIBRATION',
+          position: origin.clone().add(new THREE.Vector3(0, 0.2, -2.8)),
+          radius: 2.5,
+          onInteract: () => {
+            AudioManager.getInstance().playTerminalBeep();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent('nexus:notification', {
+                  detail: {
+                    title: 'BIOSPHERE NUTRIENT FEED COMPLETE',
+                    message: 'Photosynthesis UV levels optimal. Bio-canopy health: 99.8%.',
+                  },
+                })
+              );
+            }
+          },
+        });
+      } else if (type === 'METRO_STATION') {
+        addBox(origin.clone().add(new THREE.Vector3(0, 0.7, 3.5)), new THREE.Vector3(8, 1.4, 1.2));
+        addBox(origin.clone().add(new THREE.Vector3(0, 1.0, -7.5)), new THREE.Vector3(12, 2.0, 1.5));
+
+        InteractionSystem.getInstance().register({
+          id: 'term_metro_arrival',
+          name: 'Hyperloop Transit Terminal',
+          actionText: 'INSPECT HYPERLOOP SCHEDULE // SUBTERRANEAN TRANSIT',
+          position: origin.clone().add(new THREE.Vector3(0, 0.2, 2.0)),
+          radius: 2.5,
+          onInteract: () => {
+            AudioManager.getInstance().playTerminalBeep();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent('nexus:notification', {
+                  detail: {
+                    title: 'HYPERLOOP ARRIVAL ON TIME',
+                    message: 'Line 4 (Central Metropolis -> Biosphere) arriving in 45s.',
+                  },
+                })
+              );
+            }
+          },
+        });
       }
     } else {
       // Floor 2 (Upper Mezzanine / Sky Deck) specific colliders & interactables
-      KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(0, 0.8, 0)), new THREE.Vector3(8, 1.6, 4));
-      KinematicCollisionSolver.addBox(origin.clone().add(new THREE.Vector3(-6, 0.6, 3)), new THREE.Vector3(4, 1.2, 3));
+      addBox(origin.clone().add(new THREE.Vector3(0, 0.8, 0)), new THREE.Vector3(8, 1.6, 4));
+      addBox(origin.clone().add(new THREE.Vector3(-6, 0.6, 3)), new THREE.Vector3(4, 1.2, 3));
+      addBox(origin.clone().add(new THREE.Vector3(0, 0.6, -7.8)), new THREE.Vector3(14, 1.2, 1.0)); // window rail
 
       // Strategy Blueprint Terminal (Level 2)
       InteractionSystem.getInstance().register({
@@ -384,9 +490,34 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
           }
         },
       });
+
+      // Panoramic Skyline Viewfinder (Level 2)
+      InteractionSystem.getInstance().register({
+        id: 'term_observation_deck',
+        name: 'Panoramic Skyline Viewfinder',
+        actionText: 'ACTIVATE PANORAMIC SKY VISTA // 360° SKYLINE SURVEY',
+        position: origin.clone().add(new THREE.Vector3(0, 0.2, -6.5)),
+        radius: 2.5,
+        onInteract: () => {
+          AudioManager.getInstance().playTerminalBeep();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('nexus:notification', {
+                detail: {
+                  title: 'PANORAMIC SKY VISTA ENGAGED',
+                  message: 'Overlooking Metropolis Central Core. Cloud cover and traffic nominal.',
+                },
+              })
+            );
+          }
+        },
+      });
     }
 
+    KinematicCollisionSolver.setChunkBoxes('interior_room', interiorBoxes);
+
     return () => {
+      KinematicCollisionSolver.removeChunkBoxes('interior_room');
       InteractionSystem.getInstance().unregister('interior_exit_door');
       InteractionSystem.getInstance().unregister('interior_elevator_lift');
       InteractionSystem.getInstance().unregister('npc_lab_nova');
@@ -400,7 +531,12 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
       InteractionSystem.getInstance().unregister('term_hacker_ice');
       InteractionSystem.getInstance().unregister('npc_penthouse_vane');
       InteractionSystem.getInstance().unregister('term_arcade_machine');
+      InteractionSystem.getInstance().unregister('term_hangar_drone');
+      InteractionSystem.getInstance().unregister('term_vault_backup');
+      InteractionSystem.getInstance().unregister('term_greenhouse_nutrients');
+      InteractionSystem.getInstance().unregister('term_metro_arrival');
       InteractionSystem.getInstance().unregister('term_mezzanine_blueprint');
+      InteractionSystem.getInstance().unregister('term_observation_deck');
     };
   }, [type, origin, onExit, floor]);
 
@@ -420,6 +556,9 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
     if (cityHoloRef.current) {
       cityHoloRef.current.rotation.y = t * 0.4;
     }
+    if (fanRef.current) {
+      fanRef.current.rotation.y = t * 8.0;
+    }
   });
 
   if (type === 'NONE') return null;
@@ -438,8 +577,6 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
     METRO_STATION: { floor: '#1e222b', wall: '#2b303c', accent: '#fbbf24', light: '#facc15' },
     ARCADE: { floor: '#180728', wall: '#2a0845', accent: '#d946ef', light: '#a855f7' },
   };
-
-  if ((type as string) === 'NONE') return null;
 
   const currentTheme = themeColors[type as keyof typeof themeColors] || themeColors.LAB;
 
@@ -484,7 +621,7 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
           </mesh>
           <mesh position={[0, -1.5, 0.15]}>
             <boxGeometry args={[18.2, 0.15, 0.2]} />
-            <meshBasicMaterial color="var(--neon-cyan)" />
+            <meshBasicMaterial color="#00f0ff" />
           </mesh>
         </group>
       )}
@@ -565,7 +702,7 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
       </group>
 
       {/* =========================================================
-          LEVEL 1 INTERIOR ROOM PROPS & NPCs
+          LEVEL 1 INTERIOR ROOM PROPS & NPCS
           ========================================================= */}
       {floor === 1 && (
         <>
@@ -780,6 +917,131 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
               ))}
             </group>
           )}
+
+          {/* 8. DRONE_HANGAR: Cargo Bay & Hydraulic Cradle */}
+          {type === 'DRONE_HANGAR' && (
+            <group position={[0, 0, 0]}>
+              {/* Central Drone Maintenance Platform */}
+              <mesh position={[0, 0.3, 0]} receiveShadow>
+                <cylinderGeometry args={[3.2, 3.5, 0.6, 16]} />
+                <meshStandardMaterial color="#18181b" metalness={0.9} />
+              </mesh>
+              {/* Suspended Heavy Cargo Drone */}
+              <group position={[0, 1.8, 0]}>
+                <mesh castShadow>
+                  <boxGeometry args={[2.4, 0.65, 2.8]} />
+                  <meshStandardMaterial color="#ea580c" roughness={0.3} metalness={0.8} />
+                </mesh>
+                {/* 4 Thruster Ducts */}
+                {[-1.4, 1.4].map((tx, ti) =>
+                  [-1.4, 1.4].map((tz, tj) => (
+                    <group key={`thruster-${ti}-${tj}`} position={[tx, 0, tz]}>
+                      <mesh>
+                        <cylinderGeometry args={[0.45, 0.45, 0.4, 12]} />
+                        <meshStandardMaterial color="#27272a" metalness={0.9} />
+                      </mesh>
+                      <mesh position={[0, -0.21, 0]}>
+                        <circleGeometry args={[0.35, 12]} />
+                        <meshBasicMaterial color="#00f0ff" />
+                      </mesh>
+                    </group>
+                  ))
+                )}
+              </group>
+              {/* Heavy Cargo Containers against back wall */}
+              <mesh position={[-6, 1.2, -5]} castShadow>
+                <boxGeometry args={[4.0, 2.4, 2.5]} />
+                <meshStandardMaterial color="#3f3f46" metalness={0.85} roughness={0.3} />
+              </mesh>
+              <mesh position={[6, 1.2, -5]} castShadow>
+                <boxGeometry args={[4.0, 2.4, 2.5]} />
+                <meshStandardMaterial color="#f97316" roughness={0.5} />
+              </mesh>
+              <pointLight position={[0, 3.2, 0]} color="#f97316" distance={14} intensity={3.5} />
+            </group>
+          )}
+
+          {/* 9. SERVER_VAULT: Optical Hexagonal Monolith */}
+          {type === 'SERVER_VAULT' && (
+            <group position={[0, 0, 0]}>
+              {/* Towering Hexagonal Data Core */}
+              <mesh position={[0, 2.2, 0]} castShadow>
+                <cylinderGeometry args={[2.0, 2.2, 4.4, 6]} />
+                <meshStandardMaterial color="#030712" metalness={0.95} roughness={0.1} />
+              </mesh>
+              {/* Optical Data Strip Slots */}
+              {[-1.2, 0, 1.2].map((yOff, yi) => (
+                <mesh key={`slot-${yi}`} position={[0, 2.2 + yOff, 0]}>
+                  <cylinderGeometry args={[2.05, 2.05, 0.25, 6]} />
+                  <meshBasicMaterial color="#38bdf8" />
+                </mesh>
+              ))}
+              {/* Chilled Floor Grates */}
+              <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[2.4, 4.8, 16]} />
+                <meshBasicMaterial color="#1e3a8a" wireframe />
+              </mesh>
+              <pointLight position={[0, 2.5, 0]} color="#38bdf8" distance={12} intensity={4.0} />
+            </group>
+          )}
+
+          {/* 10. GREENHOUSE: Hydroponic Vertical Towers */}
+          {type === 'GREENHOUSE' && (
+            <group position={[0, 0, 0]}>
+              {/* Center Botanical Pool Basin */}
+              <mesh position={[0, 0.25, 0]} receiveShadow>
+                <cylinderGeometry args={[2.6, 2.8, 0.5, 20]} />
+                <meshStandardMaterial color="#064e3b" roughness={0.6} />
+              </mesh>
+              <mesh position={[0, 0.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[2.4, 20]} />
+                <meshStandardMaterial color="#047857" roughness={0.1} metalness={0.8} />
+              </mesh>
+              {/* Left & Right Vertical Grow Towers */}
+              {[-7, 7].map((gx, gi) => (
+                <group key={`grow-${gi}`} position={[gx, 1.8, 0]}>
+                  <mesh castShadow>
+                    <boxGeometry args={[2.2, 3.6, 12]} />
+                    <meshStandardMaterial color="#062e1a" roughness={0.7} />
+                  </mesh>
+                  {/* Glowing Flora Beds */}
+                  <mesh position={[gx > 0 ? -1.12 : 1.12, 0, 0]}>
+                    <boxGeometry args={[0.04, 3.2, 11]} />
+                    <meshBasicMaterial color="#22c55e" />
+                  </mesh>
+                </group>
+              ))}
+              <pointLight position={[0, 3.2, 0]} color="#4ade80" distance={14} intensity={3.0} />
+            </group>
+          )}
+
+          {/* 11. METRO_STATION: Turnstiles & Departure Board */}
+          {type === 'METRO_STATION' && (
+            <group position={[0, 0, 0]}>
+              {/* Fare Gates & Turnstiles */}
+              <mesh position={[0, 0.6, 3.5]} castShadow>
+                <boxGeometry args={[8.0, 1.2, 0.6]} />
+                <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.2} />
+              </mesh>
+              {/* Turnstile LED Indicator Bands */}
+              {[-2.5, 0, 2.5].map((tx, ti) => (
+                <mesh key={`gate-${ti}`} position={[tx, 1.22, 3.5]}>
+                  <boxGeometry args={[1.2, 0.04, 0.5]} />
+                  <meshBasicMaterial color="#22c55e" />
+                </mesh>
+              ))}
+              {/* Large Hyperloop Departure Board on Back Wall */}
+              <mesh position={[0, 2.8, -8.8]}>
+                <boxGeometry args={[14, 2.2, 0.2]} />
+                <meshStandardMaterial color="#090d16" metalness={0.9} />
+              </mesh>
+              <mesh position={[0, 2.8, -8.68]}>
+                <planeGeometry args={[13.6, 1.9]} />
+                <meshBasicMaterial color="#fbbf24" />
+              </mesh>
+              <pointLight position={[0, 3.2, 0]} color="#facc15" distance={16} intensity={3.0} />
+            </group>
+          )}
         </>
       )}
 
@@ -795,7 +1057,7 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
           </mesh>
           <mesh position={[0, 1.62, 0]}>
             <cylinderGeometry args={[3.0, 3.0, 0.05, 24]} />
-            <meshBasicMaterial color="var(--neon-cyan)" />
+            <meshBasicMaterial color="#00f0ff" />
           </mesh>
 
           {/* Rotating 3D City Blueprint Hologram */}
@@ -812,7 +1074,7 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
                 <meshBasicMaterial color="#ff00aa" wireframe />
               </mesh>
             ))}
-            {[ -1.2, 1.2].map((bz, bIdx) => (
+            {[-1.2, 1.2].map((bz, bIdx) => (
               <mesh key={`b2-${bIdx}`} position={[0, 0.25, bz]}>
                 <boxGeometry args={[0.45, 0.8, 0.45]} />
                 <meshBasicMaterial color="#00ffaa" wireframe />
@@ -821,6 +1083,18 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
             {/* Orbiting Telemetry Rings */}
             <mesh rotation={[Math.PI / 3, 0, 0]}>
               <torusGeometry args={[2.0, 0.03, 8, 32]} />
+              <meshBasicMaterial color="#00f0ff" />
+            </mesh>
+          </group>
+
+          {/* Panoramic Skyline Viewfinder Station (Overlooking North Window) */}
+          <group position={[0, 0.8, -7.5]}>
+            <mesh position={[0, 0, 0]} castShadow>
+              <boxGeometry args={[1.4, 1.6, 0.8]} />
+              <meshStandardMaterial color="#0f172a" metalness={0.9} />
+            </mesh>
+            <mesh position={[0, 0.85, 0]}>
+              <boxGeometry args={[1.2, 0.1, 0.6]} />
               <meshBasicMaterial color="#00f0ff" />
             </mesh>
           </group>

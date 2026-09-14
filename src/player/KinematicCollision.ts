@@ -78,6 +78,14 @@ export class KinematicCollisionSolver {
     return this.boxes;
   }
 
+  public static getAllBoxes(): CollisionBox[] {
+    const all = [...this.boxes];
+    for (const cBoxes of this.chunkBoxes.values()) {
+      all.push(...cBoxes);
+    }
+    return all;
+  }
+
   /**
    * Resolves horizontal displacement with wall sliding and returns valid position.
    */
