@@ -47,7 +47,6 @@ nexus-city/
 │   │   ├── DistrictGenerator.ts      # 7 districts (Central, Neural, Sky, Industrial, Old, Green, Unknown)
 │   │   ├── RoadGenerator.ts          # Road grids, cross-sections, procedural asphalt/markings
 │   │   ├── BuildingGenerator.ts      # Floor tiers, procedural windows, antennas, neon signs
-│   │   ├── InteriorGenerator.ts      # Room layouts, procedural props, interior lighting
 │   │   └── VegetationGenerator.ts    # Procedural tree branching, canopy clusters, instanced grass
 │   ├── world/
 │   │   ├── WorldManager.tsx          # World coordinator component
