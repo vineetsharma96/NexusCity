@@ -73,6 +73,9 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
     InteriorManager.getInstance().exit(handleTeleport);
   };
 
+  const isWorldMode = interiorState.worldMode === 'WORLD_ACTIVE' || interiorState.worldMode === 'INTERIOR_TRANSITION_IN';
+  const isInteriorMode = interiorState.worldMode === 'INTERIOR_ACTIVE' || interiorState.worldMode === 'INTERIOR_TRANSITION_OUT';
+
   return (
     <Canvas
       shadows={quality.shadows}
@@ -92,46 +95,54 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       <SceneFrameLoop />
       <LightingManager quality={quality} playerPosRef={playerPosRef} />
 
-      {/* Exterior City Infrastructure: Active ONLY during WORLD_MODE */}
-      {interiorState.current === 'NONE' && (
-        <>
-          <CityDistrict seed={847291} />
-          <NavigationRibbon />
-          <WorldManager playerPosRef={playerPosRef} />
-          <TrafficSystem playerPosRef={playerPosRef} />
-          <TrafficLightGantry position={[0, 0, 0]} />
-          <CrosswalkMarkings position={[0, 0, 0]} />
-          <ParkSanctuary position={[75, 0, 75]} />
-          <RainParticles playerPosRef={playerPosRef} />
-          {quality.cloudsEnabled && <NaturalClouds />}
-          {quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
-          <AtmosphericDetails playerPosRef={playerPosRef} />
-          <NPCCrowd playerPosRef={playerPosRef} />
+      {/* ========================================================
+          WORLD ROOT: Exterior Metropolis Infrastructure & Simulation
+          ======================================================== */}
+      <group name="worldRoot" visible={interiorState.worldMode !== 'INTERIOR_ACTIVE'}>
+        {(isWorldMode || interiorState.worldMode === 'INTERIOR_TRANSITION_OUT') && (
+          <>
+            <CityDistrict seed={847291} />
+            <NavigationRibbon />
+            <WorldManager playerPosRef={playerPosRef} />
+            <TrafficSystem playerPosRef={playerPosRef} />
+            <TrafficLightGantry position={[0, 0, 0]} />
+            <CrosswalkMarkings position={[0, 0, 0]} />
+            <ParkSanctuary position={[75, 0, 75]} />
+            <RainParticles playerPosRef={playerPosRef} />
+            {quality.cloudsEnabled && <NaturalClouds />}
+            {quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
+            <AtmosphericDetails playerPosRef={playerPosRef} />
+            <NPCCrowd playerPosRef={playerPosRef} />
 
-          {/* 11 Enterable Building Entrances Across City Districts */}
-          {Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => (
-            <BuildingEntrance
-              key={id}
-              id={id}
-              name={dest.name}
-              type={dest.interiorId}
-              position={dest.entrancePosition}
-              rotationY={dest.entranceRotationY}
-              interactionPosition={dest.interactionPosition}
-              playerPosRef={playerPosRef}
-              onTeleport={handleTeleport}
-            />
-          ))}
-        </>
-      )}
+            {/* 11 Enterable Building Entrances Across City Districts */}
+            {Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => (
+              <BuildingEntrance
+                key={id}
+                id={id}
+                name={dest.name}
+                type={dest.interiorId}
+                position={dest.entrancePosition}
+                rotationY={dest.entranceRotationY}
+                interactionPosition={dest.interactionPosition}
+                playerPosRef={playerPosRef}
+                onTeleport={handleTeleport}
+              />
+            ))}
+          </>
+        )}
+      </group>
 
-      {/* Procedural Interior Room: Active ONLY during INTERIOR_MODE */}
-      {interiorState.current !== 'NONE' && (
-        <ProceduralInterior
-          type={interiorState.current}
-          onExit={handleExitInterior}
-        />
-      )}
+      {/* ========================================================
+          INTERIOR ROOT: Procedural Interior Facilities & Dedicated Rig
+          ======================================================== */}
+      <group name="interiorRoot" visible={isInteriorMode}>
+        {interiorState.current !== 'NONE' && (
+          <ProceduralInterior
+            type={interiorState.current}
+            onExit={handleExitInterior}
+          />
+        )}
+      </group>
 
       <PlayerController
         playerPosRef={playerPosRef}

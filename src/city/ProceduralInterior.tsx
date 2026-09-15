@@ -652,14 +652,30 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
         <meshBasicMaterial color={floor === 2 ? '#00f0ff' : currentTheme.accent} />
       </mesh>
 
-      {/* Interior Ambient Lighting */}
+      {/* Dedicated High-Visibility Interior Lighting Rig */}
+      <ambientLight intensity={1.15} color="#e0f2fe" />
       <pointLight
-        position={[0, 3.8, 0]}
+        position={[0, 4.0, 0]}
         color={floor === 2 ? '#38bdf8' : currentTheme.light}
-        distance={20}
-        intensity={2.8}
+        distance={26}
+        intensity={3.5}
+        decay={1.8}
       />
-      <pointLight position={[0, 2.5, 7.5]} color="#ffffff" distance={8} intensity={1.5} />
+      <pointLight
+        position={[-6, 3.8, -4]}
+        color={floor === 2 ? '#00f0ff' : currentTheme.accent}
+        distance={18}
+        intensity={2.2}
+        decay={2}
+      />
+      <pointLight
+        position={[6, 3.8, -4]}
+        color={floor === 2 ? '#00f0ff' : currentTheme.accent}
+        distance={18}
+        intensity={2.2}
+        decay={2}
+      />
+      <pointLight position={[0, 3.2, 7.5]} color="#ffffff" distance={12} intensity={2.0} decay={2} />
 
       {/* Exit Doorway Frame & Glowing Indicator (Floor 1 Only) */}
       {floor === 1 && (

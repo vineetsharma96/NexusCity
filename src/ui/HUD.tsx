@@ -9,6 +9,8 @@ import { Minimap } from './Minimap';
 import { CompassTape } from './CompassTape';
 import { WorldHUDMarkers } from './WorldHUDMarkers';
 import { CityMapModal } from './CityMapModal';
+import { InteriorTransitionOverlay } from './InteriorTransitionOverlay';
+import { InteriorDebugOverlay } from './InteriorDebugOverlay';
 import { AIAssistantModal } from './AIAssistantModal';
 import { CyberMenuModal } from './CyberMenuModal';
 import { NavigationSystem } from '../map/NavigationSystem';
@@ -92,10 +94,19 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       if (state.interact) {
         InteractionSystem.getInstance().triggerInteract();
       }
-      // Toggle map on press
+      // Toggle map on press (prevent indoors)
       if (state.map !== prevMapKey) {
         prevMapKey = state.map;
-        NavigationSystem.getInstance().toggleMap();
+        if (state.map) {
+          if (InteriorManager.getInstance().getState().worldMode !== 'WORLD_ACTIVE') {
+            setActiveToast({
+              title: 'NAVIGATION TELEMETRY',
+              message: 'City map unavailable indoors.',
+            });
+          } else {
+            NavigationSystem.getInstance().toggleMap();
+          }
+        }
       }
     });
 
@@ -204,22 +215,11 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
 
   return (
     <>
-      {/* Interior Teleport Transition Fade */}
-      {interiorState.isTransitioning && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            backgroundColor: '#040711',
-            zIndex: 100,
-            transition: 'opacity 0.3s ease',
-            pointerEvents: 'none',
-          }}
-        />
-      )}
+      {/* Interior Teleport Cyber Transition Overlay */}
+      <InteriorTransitionOverlay interiorState={interiorState} />
+
+      {/* Interior Development Debug Overlay */}
+      <InteriorDebugOverlay interiorState={interiorState} playerPosRef={playerPosRef} />
 
       {/* 360° Horizontal Compass Tape */}
       <CompassTape playerPosRef={playerPosRef} />
@@ -895,11 +895,15 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         </div>
       )}
 
-      {/* Floating 3D World Landmark / Objective HUD Markers */}
-      <WorldHUDMarkers playerPosRef={playerPosRef} />
+      {/* Floating 3D World Landmark / Objective HUD Markers (Exterior Only) */}
+      {interiorState.worldMode === 'WORLD_ACTIVE' && (
+        <WorldHUDMarkers playerPosRef={playerPosRef} />
+      )}
 
-      {/* Navigation Minimap Widget */}
-      <Minimap playerPosRef={playerPosRef} />
+      {/* Navigation Minimap Widget (Strictly Exterior Only) */}
+      {interiorState.worldMode === 'WORLD_ACTIVE' && (
+        <Minimap playerPosRef={playerPosRef} />
+      )}
 
       {/* Fullscreen Holographic Vector Map Modal */}
       <CityMapModal playerPosRef={playerPosRef} />

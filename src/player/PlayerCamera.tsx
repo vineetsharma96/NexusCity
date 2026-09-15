@@ -88,21 +88,33 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
       onYawChange(spherical.current.theta);
     }
 
-    // 2. Smoothly follow player focus point
+    // 2. Follow player focus point with instant snap on portal teleportation
     const targetFocus = targetPos.clone().add(focusOffset);
-    currentFocus.current.lerp(targetFocus, THREE.MathUtils.clamp(delta * 10, 0, 1));
+    const isIndoor = targetFocus.y < -50;
 
-    // 3. Collision-Aware Spring-Arm Raycast
-    // Desired camera position in free space
-    spherical.current.radius = desiredRadius.current;
+    if (currentFocus.current.distanceToSquared(targetFocus) > 225) {
+      // Teleport focus point immediately to prevent 80m subterranean ground lerp
+      currentFocus.current.copy(targetFocus);
+      currentRadius.current = isIndoor ? 3.0 : 8.0;
+    } else {
+      currentFocus.current.lerp(targetFocus, THREE.MathUtils.clamp(delta * 10, 0, 1));
+    }
+
+    // 3. Collision-Aware Spring-Arm Raycast with Indoor Room Constraints
+    const effectiveDesiredRadius = isIndoor
+      ? THREE.MathUtils.clamp(desiredRadius.current, 2.2, 3.4)
+      : desiredRadius.current;
+
+    spherical.current.radius = effectiveDesiredRadius;
     const freeOffset = new THREE.Vector3().setFromSpherical(spherical.current);
 
     // Raycast from focus to desiredPos
     const rayDir = freeOffset.clone().normalize();
-    const maxDist = desiredRadius.current;
+    const maxDist = effectiveDesiredRadius;
     let actualDist = maxDist;
 
-    const boxes = KinematicCollisionSolver.getBoxes();
+    // Use getAllBoxes to inspect both static world colliders AND active chunk/interior boxes
+    const boxes = KinematicCollisionSolver.getAllBoxes();
     const ray = new THREE.Ray(currentFocus.current, rayDir);
     const boxTarget = new THREE.Box3();
 
@@ -114,8 +126,8 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
       if (hit) {
         const hitDist = currentFocus.current.distanceTo(hitPoint);
         if (hitDist < actualDist) {
-          // Pull camera in front of obstacle with 0.3m cushion
-          actualDist = Math.max(1.5, hitDist - 0.3);
+          // Pull camera in front of obstacle with cushion
+          actualDist = Math.max(1.4, hitDist - 0.25);
         }
       }
     }
@@ -125,10 +137,13 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
     const finalOffset = rayDir.multiplyScalar(currentRadius.current);
     const finalPos = currentFocus.current.clone().add(finalOffset);
 
-    // Ensure camera never sinks below floor (interior vs exterior)
-    const minFloorY = currentFocus.current.y < -50 ? -79.6 : 0.4;
+    // Ensure camera never sinks below floor or clips above ceiling (interior vs exterior)
+    const minFloorY = isIndoor ? -79.6 : 0.4;
+    const maxCeilY = isIndoor ? -75.8 : Infinity;
     if (finalPos.y < minFloorY) {
       finalPos.y = minFloorY;
+    } else if (finalPos.y > maxCeilY) {
+      finalPos.y = maxCeilY;
     }
 
     // 4. Position and orient camera

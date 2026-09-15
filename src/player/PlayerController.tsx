@@ -9,6 +9,8 @@ import { CinematicManager } from '../cinematics/CinematicManager';
 import { SaveSystem } from '../core/SaveSystem';
 import { DiscoverySystem } from '../world/DiscoverySystem';
 import { AudioManager } from '../audio/AudioManager';
+import { InteractionSystem } from '../interaction/InteractionSystem';
+import { InteriorManager } from '../world/InteriorManager';
 
 export interface PlayerControllerProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -116,8 +118,9 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
     const cinematic = CinematicManager.getInstance();
     const cinState = cinematic.getState();
     const isCinematic = cinState.phase !== 'GAMEPLAY';
+    const isInteriorTransition = InteriorManager.getInstance().isTransitioning;
 
-    if (isCinematic) {
+    if (isCinematic || isInteriorTransition) {
       controllerRef.current.velocity.set(0, 0, 0);
     }
 
@@ -127,6 +130,9 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
     if (playerPosRef) {
       playerPosRef.current.copy(updatedState.position);
     }
+
+    // Always update InteractionSystem position so interactive entities (NPCs, terminals, exit door) work indoors and outdoors
+    InteractionSystem.getInstance().updatePlayerPosition(updatedState.position);
 
     // Update persistent SaveSystem & DiscoverySystem
     SaveSystem.getInstance().updatePlayerPosition(updatedState.position, updatedState.rotationY);

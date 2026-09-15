@@ -6,6 +6,7 @@ import {
   getDestinationByInteriorType,
 } from './InteriorDestinations';
 import { AudioManager } from '../audio/AudioManager';
+import { NavigationSystem } from '../map/NavigationSystem';
 
 export type InteriorType =
   | 'NONE'
@@ -21,7 +22,11 @@ export type InteriorType =
   | 'METRO_STATION'
   | 'ARCADE';
 
-export type WorldMode = 'WORLD_ACTIVE' | 'ENTERING_INTERIOR' | 'INTERIOR_ACTIVE' | 'EXITING_INTERIOR';
+export type WorldMode =
+  | 'WORLD_ACTIVE'
+  | 'INTERIOR_TRANSITION_IN'
+  | 'INTERIOR_ACTIVE'
+  | 'INTERIOR_TRANSITION_OUT';
 
 import { SaveSystem } from '../core/SaveSystem';
 
@@ -50,7 +55,9 @@ export class InteriorManager {
   public currentDestinationId: string | null = null;
   public activeDestination: InteriorDestination | null = null;
   public currentFloor: number = 1; // 1 = Main Floor, 2 = Upper Mezzanine / Sky Deck
+  public savedExteriorBuildingId: string | null = null;
   public savedExteriorPos: THREE.Vector3 = new THREE.Vector3(0, 0.2, 10);
+  public savedExteriorRotY: number = 0;
   public isTransitioning: boolean = false;
   private listeners: Set<InteriorChangeListener> = new Set();
   private lastError: string | null = null;
@@ -109,9 +116,10 @@ export class InteriorManager {
       return false;
     }
 
-    this.worldMode = 'ENTERING_INTERIOR';
+    this.worldMode = 'INTERIOR_TRANSITION_IN';
     this.isTransitioning = true;
     this.lastError = null;
+    this.savedExteriorBuildingId = dest.buildingId || destinationId;
     AudioManager.getInstance().duck(1.5, 0.2);
 
     // Save exterior return point (using destination's specified exitPosition if available)
@@ -121,9 +129,13 @@ export class InteriorManager {
       this.savedExteriorPos.copy(playerPos);
     }
 
+    // Force-close city map modal if open
+    NavigationSystem.getInstance().setMapOpen(false);
+
+    // Trigger visual fade transition and minimap hide
     this.notify();
 
-    // Smooth transition into interior room
+    // Step 2: Under cover of fade, switch scene and teleport player
     setTimeout(() => {
       this.currentInterior = dest.interiorId;
       this.currentDestinationId = destinationId;
@@ -141,11 +153,15 @@ export class InteriorManager {
         window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: spawnPoint }));
       }
 
+      // Immediately notify to mount interiorRoot and lights
+      this.notify();
+
+      // Step 3: Fade in smoothly
       setTimeout(() => {
         this.isTransitioning = false;
         this.notify();
-      }, 250);
-    }, 350);
+      }, 200);
+    }, 300);
 
     return true;
   }
@@ -197,14 +213,15 @@ export class InteriorManager {
   /**
    * Exits current interior and restores player to exterior exit position.
    */
-  public exit(onTeleport: (newPos: THREE.Vector3) => void): void {
+  public exit(onTeleport?: (newPos: THREE.Vector3) => void): void {
     if (this.isTransitioning || this.currentInterior === 'NONE') return;
 
-    this.worldMode = 'EXITING_INTERIOR';
+    this.worldMode = 'INTERIOR_TRANSITION_OUT';
     this.isTransitioning = true;
     AudioManager.getInstance().duck(1.5, 0.2);
     this.notify();
 
+    // Step 2: Under cover of fade, restore exterior and teleport player
     setTimeout(() => {
       this.currentInterior = 'NONE';
       this.currentDestinationId = null;
@@ -216,17 +233,23 @@ export class InteriorManager {
       SaveSystem.getInstance().updateInterior('NONE', 1);
       AudioManager.getInstance().setInteriorMode(false);
 
-      onTeleport(exitPos);
+      if (onTeleport) {
+        onTeleport(exitPos);
+      }
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: exitPos }));
       }
 
+      // Immediately notify to unmount interior and mount worldRoot
+      this.notify();
+
+      // Step 3: Fade in smoothly to restored exterior world
       setTimeout(() => {
         this.isTransitioning = false;
         this.notify();
-      }, 250);
-    }, 350);
+      }, 200);
+    }, 300);
   }
 
   /**
@@ -278,7 +301,7 @@ export class InteriorManager {
     const name = dest
       ? `${dest.name.toUpperCase()} [LVL ${this.currentFloor}: ${floorLabel}]`
       : 'DISTRICT 1: CENTRAL METROPOLIS';
-    const isWorldActive = this.worldMode === 'WORLD_ACTIVE' || this.worldMode === 'ENTERING_INTERIOR';
+    const isWorldActive = this.worldMode === 'WORLD_ACTIVE';
 
     return {
       current: this.currentInterior,
