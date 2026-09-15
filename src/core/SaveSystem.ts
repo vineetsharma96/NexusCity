@@ -6,20 +6,17 @@ export interface SavedPlayerState {
   position: [number, number, number];
   rotationY: number;
   currentDistrict: string;
-  interiorId: string;
-  floor: number;
 }
 
 export interface DiscoveredEntity {
   id: string;
   name: string;
-  category: 'DISTRICT' | 'LANDMARK' | 'INTERIOR';
+  category: 'DISTRICT' | 'LANDMARK';
   discoveredAt: number; // timestamp
 }
 
 export interface OperativeStats {
   distanceTraveledMeters: number;
-  interiorsEnteredCount: number;
   dialoguesCompletedCount: number;
   elevatorsRiddenCount: number;
   fastTravelsCount: number;
@@ -72,8 +69,6 @@ export class SaveSystem {
         position: [0, 0.2, 10],
         rotationY: 0,
         currentDistrict: 'CENTRAL_PLAZA',
-        interiorId: 'NONE',
-        floor: 1,
       },
       discoveredDistricts: ['CENTRAL_PLAZA'],
       discoveredLandmarks: {
@@ -86,7 +81,6 @@ export class SaveSystem {
       },
       stats: {
         distanceTraveledMeters: 0,
-        interiorsEnteredCount: 0,
         dialoguesCompletedCount: 0,
         elevatorsRiddenCount: 0,
         fastTravelsCount: 0,
@@ -105,9 +99,21 @@ export class SaveSystem {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.version) {
+          // Validate and sanitize position if legacy save had subterranean coordinates
+          let pos: [number, number, number] = [0, 0.2, 10];
+          if (Array.isArray(parsed.player?.position) && parsed.player.position.length === 3) {
+            const py = parsed.player.position[1];
+            pos = py < 0 ? [0, 0.2, 10] : parsed.player.position;
+          }
+
           this.data = {
             ...this.getDefaultData(),
             ...parsed,
+            player: {
+              position: pos,
+              rotationY: parsed.player?.rotationY || 0,
+              currentDistrict: parsed.player?.currentDistrict || 'CENTRAL_PLAZA',
+            },
             stats: {
               ...this.getDefaultData().stats,
               ...(parsed.stats || {}),
@@ -180,22 +186,10 @@ export class SaveSystem {
     }
   }
 
-  public updateInterior(interiorId: string, floor: number = 1): void {
-    const wasOutside = this.data.player.interiorId === 'NONE';
-    this.data.player.interiorId = interiorId;
-    this.data.player.floor = floor;
-
-    if (wasOutside && interiorId !== 'NONE') {
-      this.data.stats.interiorsEnteredCount += 1;
-      this.recordLandmarkDiscovery(interiorId, interiorId.toUpperCase(), 'INTERIOR');
-      this.save(false);
-    }
-  }
-
   public recordLandmarkDiscovery(
     id: string,
     name: string,
-    category: 'DISTRICT' | 'LANDMARK' | 'INTERIOR'
+    category: 'DISTRICT' | 'LANDMARK'
   ): boolean {
     if (!this.data.discoveredLandmarks[id]) {
       this.data.discoveredLandmarks[id] = {

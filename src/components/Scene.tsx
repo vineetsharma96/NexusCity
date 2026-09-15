@@ -5,8 +5,6 @@ import { LightingManager } from '../lighting/LightingManager';
 import { CityDistrict } from '../city/CityDistrict';
 import { PlayerController } from '../player/PlayerController';
 import { NPCCrowd } from '../npc/NPCCrowd';
-import { BuildingEntrance } from '../city/BuildingEntrance';
-import { ProceduralInterior } from '../city/ProceduralInterior';
 import { NavigationRibbon } from '../map/NavigationRibbon';
 import { WorldManager } from '../world/WorldManager';
 import { RainParticles } from '../city/RainParticles';
@@ -14,15 +12,12 @@ import { TrafficSystem } from '../city/TrafficSystem';
 import { TrafficLightGantry } from '../city/TrafficLightGantry';
 import { CrosswalkMarkings } from '../city/CrosswalkMarkings';
 import { ParkSanctuary } from '../city/ParkSanctuary';
-import { InteriorManager, InteriorState } from '../world/InteriorManager';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 import { PerformanceMonitor } from '../rendering/PerformanceMonitor';
 import { InputManager } from '../player/InputManager';
 import { NaturalClouds } from '../environment/NaturalClouds';
 import { DirtParticles } from '../city/DirtParticles';
 import { AtmosphericDetails } from '../city/AtmosphericDetails';
-import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
-import { AudioManager } from '../audio/AudioManager';
 
 // Inner component to hook into R3F render loop for telemetry and dynamic updates
 const SceneFrameLoop: React.FC = () => {
@@ -43,9 +38,6 @@ export interface SceneProps {
 
 export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) => {
   const [quality, setQuality] = useState<QualitySettings>(QualityManager.current);
-  const [interiorState, setInteriorState] = useState<InteriorState>(() =>
-    InteriorManager.getInstance().getState()
-  );
 
   const internalPosRef = useRef(new THREE.Vector3(0, 0.2, 10));
   const playerPosRef = externalPosRef || internalPosRef;
@@ -53,38 +45,10 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
 
   useEffect(() => {
     const unsubQ = QualityManager.subscribe(setQuality);
-    const unsubInt = InteriorManager.getInstance().subscribe((state) => {
-      setInteriorState(state);
-      AudioManager.getInstance().setInteriorMode(state.current !== 'NONE');
-    });
     return () => {
       unsubQ();
-      unsubInt();
     };
   }, []);
-
-  const handleTeleport = (newPos: THREE.Vector3) => {
-    if (teleportFnRef.current) {
-      teleportFnRef.current(newPos);
-    }
-  };
-
-  const handleExitInterior = () => {
-    InteriorManager.getInstance().exit(handleTeleport);
-  };
-
-  const worldRootRef = useRef<THREE.Group>(null);
-  const interiorRootRef = useRef<THREE.Group>(null);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).__NEXUS_INTERIOR_ROOT__ = interiorRootRef;
-      (window as any).__NEXUS_WORLD_ROOT__ = worldRootRef;
-    }
-  }, []);
-
-  const isWorldVisible = interiorState.worldMode === 'WORLD_ACTIVE' || interiorState.worldMode === 'INTERIOR_TRANSITION_IN';
-  const isInteriorVisible = interiorState.worldMode !== 'WORLD_ACTIVE';
 
   return (
     <Canvas
@@ -106,53 +70,20 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       <LightingManager quality={quality} playerPosRef={playerPosRef} />
 
       {/* ========================================================
-          WORLD ROOT: Exterior Metropolis Infrastructure & Simulation
+          CONTINUOUS OUTDOOR METROPOLIS EXPLORATION
           ======================================================== */}
-      <group ref={worldRootRef} name="worldRoot" visible={isWorldVisible}>
-        {(isWorldVisible || interiorState.worldMode === 'INTERIOR_TRANSITION_OUT') && (
-          <>
-            <CityDistrict seed={847291} />
-            <NavigationRibbon />
-            <WorldManager playerPosRef={playerPosRef} />
-            <TrafficSystem playerPosRef={playerPosRef} />
-            <TrafficLightGantry position={[0, 0, 0]} />
-            <CrosswalkMarkings position={[0, 0, 0]} />
-            <ParkSanctuary position={[75, 0, 75]} />
-            <RainParticles playerPosRef={playerPosRef} />
-            {quality.cloudsEnabled && <NaturalClouds />}
-            {quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
-            <AtmosphericDetails playerPosRef={playerPosRef} />
-            <NPCCrowd playerPosRef={playerPosRef} />
-
-            {/* 11 Enterable Building Entrances Across City Districts */}
-            {Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => (
-              <BuildingEntrance
-                key={id}
-                id={id}
-                name={dest.name}
-                type={dest.interiorId}
-                position={dest.entrancePosition}
-                rotationY={dest.entranceRotationY}
-                interactionPosition={dest.interactionPosition}
-                playerPosRef={playerPosRef}
-                onTeleport={handleTeleport}
-              />
-            ))}
-          </>
-        )}
-      </group>
-
-      {/* ========================================================
-          INTERIOR ROOT: Procedural Interior Facilities & Dedicated Rig
-          ======================================================== */}
-      <group ref={interiorRootRef} name="interiorRoot" visible={isInteriorVisible}>
-        {interiorState.current !== 'NONE' && (
-          <ProceduralInterior
-            type={interiorState.current}
-            onExit={handleExitInterior}
-          />
-        )}
-      </group>
+      <CityDistrict seed={847291} />
+      <NavigationRibbon />
+      <WorldManager playerPosRef={playerPosRef} />
+      <TrafficSystem playerPosRef={playerPosRef} />
+      <TrafficLightGantry position={[0, 0, 0]} />
+      <CrosswalkMarkings position={[0, 0, 0]} />
+      <ParkSanctuary position={[75, 0, 75]} />
+      <RainParticles playerPosRef={playerPosRef} />
+      {quality.cloudsEnabled && <NaturalClouds />}
+      {quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
+      <AtmosphericDetails playerPosRef={playerPosRef} />
+      <NPCCrowd playerPosRef={playerPosRef} />
 
       <PlayerController
         playerPosRef={playerPosRef}

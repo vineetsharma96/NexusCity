@@ -9,15 +9,12 @@ import { Minimap } from './Minimap';
 import { CompassTape } from './CompassTape';
 import { WorldHUDMarkers } from './WorldHUDMarkers';
 import { CityMapModal } from './CityMapModal';
-import { InteriorTransitionOverlay } from './InteriorTransitionOverlay';
-import { InteriorDebugOverlay } from './InteriorDebugOverlay';
 import { AIAssistantModal } from './AIAssistantModal';
 import { CyberMenuModal } from './CyberMenuModal';
 import { NavigationSystem } from '../map/NavigationSystem';
 import { defaultRNG } from '../core/SeedRandom';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { InteractionSystem, InteractiveEntity } from '../interaction/InteractionSystem';
-import { InteriorManager, InteriorState } from '../world/InteriorManager';
 import { ChunkManager, ChunkManagerState } from '../world/ChunkManager';
 import { WeatherSystem, WeatherState, WeatherType } from '../world/WeatherSystem';
 import { AudioManager, AudioSettings } from '../audio/AudioManager';
@@ -45,9 +42,6 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     TimeSystem.getInstance().getState()
   );
   const [activeInteractable, setActiveInteractable] = useState<InteractiveEntity | null>(null);
-  const [interiorState, setInteriorState] = useState<InteriorState>(() =>
-    InteriorManager.getInstance().getState()
-  );
   const [chunkState, setChunkState] = useState<ChunkManagerState>(() =>
     ChunkManager.getInstance().getState()
   );
@@ -63,10 +57,6 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
   const [cinematicPhase, setCinematicPhase] = useState<CinematicPhase>(() =>
     CinematicManager.getInstance().getState().phase
   );
-  const [interiorArrivalBanner, setInteriorArrivalBanner] = useState<{
-    name: string;
-    floor: number;
-  } | null>(null);
   const [activeToast, setActiveToast] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
@@ -94,18 +84,11 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       if (state.interact) {
         InteractionSystem.getInstance().triggerInteract();
       }
-      // Toggle map on press (prevent indoors)
+      // Toggle map on press
       if (state.map !== prevMapKey) {
         prevMapKey = state.map;
         if (state.map) {
-          if (InteriorManager.getInstance().getState().worldMode !== 'WORLD_ACTIVE') {
-            setActiveToast({
-              title: 'NAVIGATION TELEMETRY',
-              message: 'City map unavailable indoors.',
-            });
-          } else {
-            NavigationSystem.getInstance().toggleMap();
-          }
+          NavigationSystem.getInstance().toggleMap();
         }
       }
     });
@@ -130,7 +113,6 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     const unsubWeather = WeatherSystem.getInstance().subscribe(setWeatherState);
     const unsubAudio = AudioManager.getInstance().subscribe(setAudioSettings);
     const unsubInteract = InteractionSystem.getInstance().subscribe(setActiveInteractable);
-    const unsubInt = InteriorManager.getInstance().subscribe(setInteriorState);
     const unsubChunks = ChunkManager.getInstance().subscribe(setChunkState);
     const unsubCinematic = CinematicManager.getInstance().subscribe((s) => setCinematicPhase(s.phase));
 
@@ -147,7 +129,6 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       unsubWeather();
       unsubAudio();
       unsubInteract();
-      unsubInt();
       unsubChunks();
       unsubCinematic();
     };
@@ -160,22 +141,6 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     }
   }, [chunkState.recentDiscovery?.name]);
 
-  // Trigger interior arrival banner and sound chime when entering interior or switching floors
-  useEffect(() => {
-    if (interiorState.current !== 'NONE') {
-      setInteriorArrivalBanner({
-        name: interiorState.name || 'INTERIOR FACILITY',
-        floor: interiorState.currentFloor || 1,
-      });
-      AudioManager.getInstance().playDiscoveryChime();
-      const timer = setTimeout(() => {
-        setInteriorArrivalBanner(null);
-      }, 4200);
-      return () => clearTimeout(timer);
-    } else {
-      setInteriorArrivalBanner(null);
-    }
-  }, [interiorState.current, interiorState.currentFloor]);
 
   // Listen to interactive object / terminal notifications
   useEffect(() => {
@@ -215,49 +180,8 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
 
   return (
     <>
-      {/* Interior Teleport Cyber Transition Overlay */}
-      <InteriorTransitionOverlay interiorState={interiorState} />
-
-      {/* Interior Development Debug Overlay */}
-      <InteriorDebugOverlay interiorState={interiorState} playerPosRef={playerPosRef} />
-
-      {/* 360° Horizontal Compass Tape (Exterior Only) */}
-      {interiorState.worldMode === 'WORLD_ACTIVE' && (
-        <CompassTape playerPosRef={playerPosRef} />
-      )}
-
-      {/* Active Interior Sector Telemetry Badge */}
-      {interiorState.worldMode !== 'WORLD_ACTIVE' && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 14,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 85,
-            pointerEvents: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 16px',
-            background: 'rgba(5, 12, 24, 0.85)',
-            border: '1px solid rgba(0, 240, 255, 0.4)',
-            borderRadius: 4,
-            boxShadow: '0 0 15px rgba(0, 240, 255, 0.2)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.75rem',
-            letterSpacing: '2px',
-          }}
-        >
-          <span style={{ color: '#00f0ff', fontWeight: 900 }}>INTERIOR //</span>
-          <span style={{ color: '#ffffff', fontWeight: 700 }}>
-            {interiorState.name || 'FACILITY'}
-          </span>
-          <span style={{ color: 'var(--neon-amber)', fontSize: '0.68rem' }}>
-            [LVL {interiorState.currentFloor || 1}]
-          </span>
-        </div>
-      )}
+      {/* 360° Horizontal Compass Tape */}
+      <CompassTape playerPosRef={playerPosRef} />
 
       {/* District Discovery Notification Banner */}
       {chunkState.recentDiscovery && (
@@ -319,68 +243,6 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         </div>
       )}
 
-      {/* Interior Sector Arrival & Floor Transition Banner */}
-      {interiorArrivalBanner && !interiorState.isTransitioning && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 68,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 92,
-            pointerEvents: 'none',
-            animation: 'fadeIn 0.4s ease',
-            width: 'min(92vw, 540px)',
-          }}
-        >
-          <div
-            className="glass-panel"
-            style={{
-              padding: '12px 24px',
-              border: '2px solid var(--neon-cyan)',
-              boxShadow: '0 0 32px rgba(0, 240, 255, 0.4), inset 0 0 16px rgba(0, 240, 255, 0.08)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 3,
-              textAlign: 'center',
-            }}
-          >
-            <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.72rem',
-                color: 'var(--neon-amber)',
-                letterSpacing: '2px',
-                fontWeight: 900,
-              }}
-            >
-              ★ INTERIOR ARCHITECTURE ACCESSED ★
-            </div>
-            <div
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '1.2rem',
-                color: 'var(--neon-cyan)',
-                letterSpacing: '1.5px',
-                fontWeight: 900,
-              }}
-            >
-              {interiorArrivalBanner.name}
-            </div>
-            <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.72rem',
-                color: 'var(--text-secondary)',
-                letterSpacing: '0.5px',
-              }}
-            >
-              LEVEL {interiorArrivalBanner.floor} // ATMOSPHERIC AIR-LOCK NOMINAL // ACCESS GRANTED
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Visual Overlay Scanlines & Vignette */}
       <div className="scanlines-overlay" />
@@ -456,15 +318,15 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
               width: 7,
               height: 7,
               borderRadius: '50%',
-              backgroundColor: interiorState.current !== 'NONE' ? '#ffaa00' : chunkState.activeDistrict.accentColor,
-              boxShadow: `0 0 8px ${interiorState.current !== 'NONE' ? '#ffaa00' : chunkState.activeDistrict.accentColor}`,
+              backgroundColor: chunkState.activeDistrict.accentColor,
+              boxShadow: `0 0 8px ${chunkState.activeDistrict.accentColor}`,
             }}
           />
           <span
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: isMobile ? '0.72rem' : '0.85rem',
-              color: interiorState.current !== 'NONE' ? 'var(--neon-amber)' : chunkState.activeDistrict.accentColor,
+              color: chunkState.activeDistrict.accentColor,
               fontWeight: 700,
               letterSpacing: '0.5px',
               whiteSpace: 'nowrap',
@@ -472,9 +334,7 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
               textOverflow: 'ellipsis',
             }}
           >
-            {interiorState.current !== 'NONE'
-              ? interiorState.name
-              : `${chunkState.activeDistrict.name}`}
+            {chunkState.activeDistrict.name}
           </span>
         </div>
 
@@ -930,15 +790,11 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         </div>
       )}
 
-      {/* Floating 3D World Landmark / Objective HUD Markers (Exterior Only) */}
-      {interiorState.worldMode === 'WORLD_ACTIVE' && (
-        <WorldHUDMarkers playerPosRef={playerPosRef} />
-      )}
+      {/* Floating 3D World Landmark / Objective HUD Markers */}
+      <WorldHUDMarkers playerPosRef={playerPosRef} />
 
-      {/* Navigation Minimap Widget (Strictly Exterior Only) */}
-      {interiorState.worldMode === 'WORLD_ACTIVE' && (
-        <Minimap playerPosRef={playerPosRef} />
-      )}
+      {/* Navigation Minimap Widget */}
+      <Minimap playerPosRef={playerPosRef} />
 
       {/* Fullscreen Holographic Vector Map Modal */}
       <CityMapModal playerPosRef={playerPosRef} />

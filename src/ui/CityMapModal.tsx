@@ -9,7 +9,7 @@ interface CityMapModalProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
 }
 
-type CategoryFilter = 'ALL' | 'INTERIORS' | 'LANDMARKS' | 'TRANSIT';
+type CategoryFilter = 'ALL' | 'LANDMARKS' | 'TRANSIT';
 
 export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
   const [navState, setNavState] = useState<NavigationState>(() =>
@@ -152,14 +152,6 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
   const allLandmarks = NavigationSystem.getInstance().landmarks;
   const filteredLandmarks = allLandmarks.filter((lm) => {
     if (categoryFilter === 'ALL') return true;
-    if (categoryFilter === 'INTERIORS') {
-      return (
-        lm.category === 'INTERIOR' ||
-        lm.category === 'LAB' ||
-        lm.category === 'LOUNGE' ||
-        lm.isEnterable
-      );
-    }
     if (categoryFilter === 'TRANSIT') {
       return lm.category === 'TRANSIT' || lm.category === 'CROSSWAY';
     }
@@ -415,7 +407,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
 
           {/* Category Filter Tabs */}
           <div style={{ display: 'flex', gap: 4 }}>
-            {(['ALL', 'INTERIORS', 'LANDMARKS', 'TRANSIT'] as CategoryFilter[]).map((tab) => (
+            {(['ALL', 'LANDMARKS', 'TRANSIT'] as CategoryFilter[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => {
@@ -576,16 +568,11 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 />
               )}
 
-              {/* 4. Landmark & Interior Destination Markers */}
+              {/* 4. Landmark Destination Markers */}
               {filteredLandmarks.map((lm) => {
                 const lp = worldToSvg(lm.position.x, lm.position.z);
                 const isSelected = selectedLandmark?.id === lm.id;
                 const isTarget = navState.activeLandmark?.id === lm.id;
-                const isInterior =
-                  lm.category === 'INTERIOR' ||
-                  lm.category === 'LAB' ||
-                  lm.category === 'LOUNGE' ||
-                  lm.isEnterable;
 
                 return (
                   <g
@@ -621,28 +608,15 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                       />
                     )}
 
-                    {/* Distinct Pin Shape: Diamond for Interiors, Circle for Landmarks */}
-                    {isInterior ? (
-                      <rect
-                        x={lp.x - 7}
-                        y={lp.y - 7}
-                        width="14"
-                        height="14"
-                        fill={isTarget ? 'var(--neon-amber)' : '#00ffaa'}
-                        stroke="#ffffff"
-                        strokeWidth="1.2"
-                        transform={`rotate(45 ${lp.x} ${lp.y})`}
-                      />
-                    ) : (
-                      <circle
-                        cx={lp.x}
-                        cy={lp.y}
-                        r="8"
-                        fill={isTarget ? 'var(--neon-amber)' : isSelected ? 'var(--neon-cyan)' : '#38bdf8'}
-                        stroke="#ffffff"
-                        strokeWidth="1.2"
-                      />
-                    )}
+                    {/* Pin Shape */}
+                    <circle
+                      cx={lp.x}
+                      cy={lp.y}
+                      r="8"
+                      fill={isTarget ? 'var(--neon-amber)' : isSelected ? 'var(--neon-cyan)' : '#38bdf8'}
+                      stroke="#ffffff"
+                      strokeWidth="1.2"
+                    />
 
                     {/* Landmark Name Label */}
                     <text
@@ -754,14 +728,8 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span
                   style={{
-                    backgroundColor:
-                      selectedLandmark.category === 'INTERIOR' || selectedLandmark.isEnterable
-                        ? 'rgba(0, 255, 170, 0.15)'
-                        : 'rgba(0, 240, 255, 0.15)',
-                    color:
-                      selectedLandmark.category === 'INTERIOR' || selectedLandmark.isEnterable
-                        ? '#00ffaa'
-                        : 'var(--neon-cyan)',
+                    backgroundColor: 'rgba(0, 240, 255, 0.15)',
+                    color: 'var(--neon-cyan)',
                     padding: '2px 8px',
                     borderRadius: 3,
                     fontFamily: 'var(--font-mono)',
@@ -771,12 +739,6 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 >
                   {selectedLandmark.category}
                 </span>
-
-                {selectedLandmark.isEnterable && (
-                  <span style={{ color: '#00ffaa', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}>
-                    ● ENTERABLE INTERIOR
-                  </span>
-                )}
               </div>
 
               {/* Title */}
@@ -878,7 +840,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 textAlign: 'center',
               }}
             >
-              CLICK ANY LANDMARK OR INTERIOR ON THE BLUEPRINT TO INSPECT
+              CLICK ANY LANDMARK ON THE BLUEPRINT TO INSPECT
             </div>
           )}
 

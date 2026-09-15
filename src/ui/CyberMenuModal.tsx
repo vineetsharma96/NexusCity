@@ -7,8 +7,6 @@ import { QualityManager, QualityPreset } from '../rendering/QualityManager';
 import { PerformanceMonitor, PerformanceMetrics } from '../rendering/PerformanceMonitor';
 import { NavigationSystem } from '../map/NavigationSystem';
 
-import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
-import { InteriorManager } from '../world/InteriorManager';
 import { SaveSystem, NexusSaveData, DiscoveredEntity } from '../core/SaveSystem';
 
 interface TeleportLocation {
@@ -51,18 +49,9 @@ const EXTERIOR_TELEPORT_LOCATIONS: TeleportLocation[] = [
   },
 ];
 
-// Combine exterior landmarks and all 11 registered interior destinations
+// Exterior landmarks for fast travel
 const TELEPORT_LOCATIONS: TeleportLocation[] = [
   ...EXTERIOR_TELEPORT_LOCATIONS,
-  ...Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => ({
-    id,
-    name: dest.name,
-    category: 'INTERIOR',
-    district: dest.district,
-    position: dest.interactionPosition.clone(),
-    icon: dest.icon,
-    color: dest.accentColor,
-  })),
 ];
 
 export interface CyberMenuModalProps {
@@ -108,23 +97,7 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
 
   const handleWarp = (loc: TeleportLocation) => {
     AudioManager.getInstance().playUI('click');
-
-    if (loc.category === 'INTERIOR') {
-      const success = InteriorManager.getInstance().enterDestination(loc.id, loc.position, onTeleport);
-      if (success) {
-        onClose();
-        return;
-      }
-    }
-
-    // If player is inside an interior and warps to an exterior landmark, cleanly exit first
-    if (InteriorManager.getInstance().currentInterior !== 'NONE') {
-      InteriorManager.getInstance().exit(() => {
-        onTeleport(loc.position.clone());
-      });
-    } else {
-      onTeleport(loc.position.clone());
-    }
+    onTeleport(loc.position.clone());
     onClose();
   };
 
@@ -784,7 +757,7 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
               </div>
               <div>
                 <strong style={{ color: '#22c55e' }}>💬 INTERACT [E]:</strong> Tap when near
-                citizens or building doors to talk or enter interiors.
+                citizens to engage in dialogue.
               </div>
             </div>
 
@@ -812,7 +785,7 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
             >
               <div><strong>WASD:</strong> Camera-relative movement</div>
               <div><strong>SPACE:</strong> Jump | <strong>SHIFT:</strong> Sprint</div>
-              <div><strong>E:</strong> Interact with citizens & enter buildings</div>
+              <div><strong>E:</strong> Interact with citizens & dialogue</div>
               <div><strong>V:</strong> 360° Cinematic Drone Vista Mode</div>
               <div><strong>F5:</strong> Quick Save Progress to Neural Cache</div>
               <div><strong>M:</strong> Fullscreen City Map</div>
@@ -923,13 +896,13 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
 
               <div className="glass-panel" style={{ padding: 14, border: '1px solid rgba(192, 132, 252, 0.25)' }}>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
-                  FACILITIES ENTERED
+                  FAST TRAVEL TRANSITS
                 </div>
                 <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#c084fc', marginTop: 4 }}>
-                  {saveData.stats.interiorsEnteredCount} Visits
+                  {saveData.stats.fastTravelsCount} Transits
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: 2 }}>
-                  {saveData.stats.elevatorsRiddenCount} Elevator Lifts
+                  Metropolitan Fast-Travel Network
                 </div>
               </div>
             </div>
@@ -974,8 +947,8 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
                         className="cyber-badge"
                         style={{
                           fontSize: '0.62rem',
-                          color: landmark.category === 'INTERIOR' ? '#00ffaa' : '#38bdf8',
-                          borderColor: landmark.category === 'INTERIOR' ? '#00ffaa' : '#38bdf8',
+                          color: '#38bdf8',
+                          borderColor: '#38bdf8',
                         }}
                       >
                         {landmark.category}

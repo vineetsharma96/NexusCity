@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { NavigationSystem, NavigationState } from '../map/NavigationSystem';
-import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
 
 interface CompassTapeProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -77,20 +76,6 @@ export const CompassTape: React.FC<CompassTapeProps> = ({ playerPosRef }) => {
 
   const targetTapeX = targetAngle !== null ? getTapeXPercent(targetAngle) : null;
 
-  // Nearby interior portals within 120m
-  const nearbyPortals = Object.entries(INTERIOR_DESTINATIONS)
-    .map(([id, dest]) => {
-      const dist = pPos.distanceTo(dest.entrancePosition);
-      if (dist > 140) return null;
-      const dx = dest.entrancePosition.x - pPos.x;
-      const dz = dest.entrancePosition.z - pPos.z;
-      let angle = Math.atan2(dx, -dz) * (180 / Math.PI);
-      if (angle < 0) angle += 360;
-      const tapeX = getTapeXPercent(angle);
-      if (tapeX === null) return null;
-      return { id, name: dest.name, tapeX, dist: Math.round(dist) };
-    })
-    .filter(Boolean) as { id: string; name: string; tapeX: number; dist: number }[];
 
   const roundedHeading = Math.round(headingDeg);
   const headingPadded = roundedHeading.toString().padStart(3, '0');
@@ -213,33 +198,6 @@ export const CompassTape: React.FC<CompassTapeProps> = ({ playerPosRef }) => {
           );
         })}
 
-        {/* Nearby Interior Portal Diamond Markers */}
-        {nearbyPortals.map((portal) => (
-          <div
-            key={portal.id}
-            style={{
-              position: 'absolute',
-              left: `${portal.tapeX}%`,
-              bottom: 4,
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              zIndex: 8,
-            }}
-            title={`${portal.name} (${portal.dist}m)`}
-          >
-            <div
-              style={{
-                width: 6,
-                height: 6,
-                backgroundColor: '#00ffaa',
-                transform: 'rotate(45deg)',
-                boxShadow: '0 0 6px #00ffaa',
-              }}
-            />
-          </div>
-        ))}
 
         {/* Active Navigation Landmark Marker */}
         {targetTapeX !== null && (

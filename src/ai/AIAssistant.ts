@@ -5,8 +5,6 @@ import { WindSystem } from '../world/WindSystem';
 import { TimeSystem } from '../world/TimeSystem';
 import { ChunkManager } from '../world/ChunkManager';
 import { DistrictGenerator, DistrictInfo } from '../city/DistrictGenerator';
-import { InteriorManager } from '../world/InteriorManager';
-import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
 import { AudioManager } from '../audio/AudioManager';
 
 export interface AIMessage {
@@ -21,10 +19,6 @@ export interface AIWorldStateSnapshot {
   playerCoordinates: { x: number; y: number; z: number };
   distanceFromCenter: number;
   district: DistrictInfo;
-  isInsideInterior: boolean;
-  interiorName?: string;
-  interiorFloor?: string;
-  interiorDescription?: string;
   weather: {
     current: WeatherType;
     rainIntensityPercent: number;
@@ -58,7 +52,6 @@ export interface AIWorldStateSnapshot {
     category: string;
     distanceMeters: number;
     direction: string;
-    isEnterable: boolean;
   }[];
 }
 
@@ -71,7 +64,7 @@ export class AIAssistant {
     {
       id: 'init-1',
       sender: 'ai',
-      text: 'NEXUS-AI Urban Core online. I possess direct telemetry of your coordinates, district atmospheric readings, enterable facilities, and transit routes. I can route waypoints, warp coordinates, modulate weather, or brief you on sectors and city personnel. How may I direct your mission?',
+      text: 'NEXUS-AI Urban Core online. I possess direct telemetry of your coordinates, district atmospheric readings, outdoor landmarks, and transit routes. I can route waypoints, warp coordinates, modulate weather, or brief you on sectors and city personnel. How may I direct your exploration?',
       timestamp: '00:00:01',
     },
   ];
@@ -131,7 +124,6 @@ export class AIAssistant {
   public getWorldState(playerPos: THREE.Vector3): AIWorldStateSnapshot {
     const distFromCenter = Math.round(Math.sqrt(playerPos.x * playerPos.x + playerPos.z * playerPos.z));
     const district = DistrictGenerator.getDistrictAt(playerPos.x, playerPos.z);
-    const interiorState = InteriorManager.getInstance().getState();
     const weather = WeatherSystem.getInstance().getState();
     const wind = WindSystem.getInstance().getState();
     const time = TimeSystem.getInstance().getState();
@@ -142,10 +134,6 @@ export class AIAssistant {
     const windAngleDeg = ((wind.direction * 180) / Math.PI + 360) % 360;
     const cardinals = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
     const cardinalDir = cardinals[Math.round(windAngleDeg / 45) % 8];
-
-    // Interior info
-    const isInside = interiorState.current !== 'NONE';
-    const dest = isInside ? INTERIOR_DESTINATIONS[interiorState.current] : undefined;
 
     // Calculate nearest real locations
     const allLandmarks = NavigationSystem.getInstance().landmarks;
@@ -162,7 +150,6 @@ export class AIAssistant {
           category: l.category,
           distanceMeters: d,
           direction: dir,
-          isEnterable: !!l.isEnterable,
         };
       })
       .sort((a, b) => a.distanceMeters - b.distanceMeters)
@@ -176,14 +163,6 @@ export class AIAssistant {
       },
       distanceFromCenter: distFromCenter,
       district,
-      isInsideInterior: isInside,
-      interiorName: dest?.name,
-      interiorFloor: isInside
-        ? interiorState.currentFloor === 2
-          ? 'Level 2 (Upper Mezzanine / Observation Window)'
-          : 'Level 1 (Main Hall)'
-        : undefined,
-      interiorDescription: dest?.description,
       weather: {
         current: weather.currentWeather,
         rainIntensityPercent: Math.round(weather.rainIntensity * 100),
@@ -291,26 +270,7 @@ export class AIAssistant {
       case 'teleport': {
         const target = this.resolveLandmark(param);
         if (target) {
-          const dest = INTERIOR_DESTINATIONS[target.id];
-          if (dest) {
-            // Enter interior directly
-            InteriorManager.getInstance().enterDestination(
-              target.id,
-              playerPos || target.position,
-              (spawnPos) => {
-                window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: spawnPos }));
-              }
-            );
-          } else {
-            // If currently inside an interior, exit first
-            if (InteriorManager.getInstance().currentInterior !== 'NONE') {
-              InteriorManager.getInstance().exit((exitPos) => {
-                window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: target.position.clone() }));
-              });
-            } else {
-              window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: target.position.clone() }));
-            }
-          }
+          window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: target.position.clone() }));
           AudioManager.getInstance().playElevatorMove();
           return `⚡ QUANTUM WARP: ${target.name.toUpperCase()}`;
         }
@@ -350,86 +310,8 @@ export class AIAssistant {
     const exactId = landmarks.find((l) => l.id.toLowerCase() === q);
     if (exactId) return exactId;
 
-    // 2. Keyword dictionary for all real venues
+    // 2. Keyword dictionary for authentic registered outdoor landmarks
     const keywordMap: Record<string, string> = {
-      ramen: 'ramen_diner',
-      noodle: 'ramen_diner',
-      food: 'ramen_diner',
-      eat: 'ramen_diner',
-      taro: 'ramen_diner',
-      restaurant: 'ramen_diner',
-
-      ripperdoc: 'ripperdoc_clinic',
-      clinic: 'ripperdoc_clinic',
-      cyberware: 'ripperdoc_clinic',
-      chrome: 'ripperdoc_clinic',
-      doctor: 'ripperdoc_clinic',
-      viktor: 'ripperdoc_clinic',
-      krom: 'ripperdoc_clinic',
-      implant: 'ripperdoc_clinic',
-      medical: 'ripperdoc_clinic',
-
-      lab: 'nexus_labs',
-      labs: 'nexus_labs',
-      research: 'nexus_labs',
-      quantum: 'nexus_labs',
-      vance: 'nexus_labs',
-      science: 'nexus_labs',
-      reactor: 'nexus_labs',
-
-      lounge: 'cyber_lounge',
-      bar: 'cyber_lounge',
-      cocktail: 'cyber_lounge',
-      drink: 'cyber_lounge',
-      club: 'cyber_lounge',
-      neon: 'cyber_lounge',
-      velocity: 'cyber_lounge',
-
-      netrunner: 'netrunner_den',
-      hacker: 'netrunner_den',
-      hack: 'netrunner_den',
-      safehouse: 'netrunner_den',
-      ice: 'netrunner_den',
-      terminal: 'netrunner_den',
-      matrix: 'netrunner_den',
-      cyberdeck: 'netrunner_den',
-
-      drone: 'drone_hangar',
-      hangar: 'drone_hangar',
-      cargo: 'drone_hangar',
-      aero: 'drone_hangar',
-      flight: 'drone_hangar',
-
-      penthouse: 'sky_penthouse',
-      suite: 'sky_penthouse',
-      apex_suite: 'sky_penthouse',
-      vane: 'sky_penthouse',
-      luxury: 'sky_penthouse',
-
-      vault: 'server_vault',
-      server: 'server_vault',
-      data: 'server_vault',
-      storage: 'server_vault',
-
-      greenhouse: 'biosphere_greenhouse',
-      biosphere: 'biosphere_greenhouse',
-      flora: 'biosphere_greenhouse',
-      hydroponic: 'biosphere_greenhouse',
-      garden: 'biosphere_greenhouse',
-      plants: 'biosphere_greenhouse',
-
-      metro: 'metro_station',
-      subway: 'metro_station',
-      transit: 'metro_station',
-      train: 'metro_station',
-      hyperloop: 'metro_station',
-
-      arcade: 'cyber_arcade',
-      retro: 'cyber_arcade',
-      game: 'cyber_arcade',
-      games: 'cyber_arcade',
-      cabinet: 'cyber_arcade',
-
       plaza: 'central_plaza',
       center: 'central_plaza',
       square: 'central_plaza',
@@ -442,13 +324,21 @@ export class AIAssistant {
       apex: 'apex_tower',
       monolith: 'apex_tower',
       tower: 'apex_tower',
+      corporate: 'apex_tower',
 
-      park: 'central_park',
-      sanctuary: 'central_park',
-      lotus: 'central_park',
-      pond: 'central_park',
-      cherry: 'central_park',
-      sakura: 'central_park',
+      park: 'park_sanctuary',
+      sanctuary: 'park_sanctuary',
+      lotus: 'park_sanctuary',
+      pond: 'park_sanctuary',
+      trees: 'park_sanctuary',
+      nature: 'park_sanctuary',
+
+      north: 'north_crossway',
+      highway: 'north_crossway',
+
+      south: 'south_crossway',
+      artery: 'south_crossway',
+      crossing: 'north_crossway',
     };
 
     for (const [kw, landmarkId] of Object.entries(keywordMap)) {
@@ -480,9 +370,8 @@ export class AIAssistant {
     if (resolvedLandmark && (isWarp || q.includes('take me') || q.includes('navigate') || q.includes('go to') || q.includes('find') || q.includes('route') || q.includes('lead') || q.includes('head to') || q.includes('where is'))) {
       const actionType = isWarp ? 'teleport' : 'navigate';
       const actionVerb = isWarp ? 'Initiating instantaneous quantum warp to' : 'Plotting optimal sidewalk route vectors to';
-      const promptEnterable = resolvedLandmark.isEnterable ? ' Automated airlock portals will unlock on approach.' : '';
       return {
-        text: `${actionVerb} ${resolvedLandmark.name}. Ground guidance beacon activated on your HUD.${promptEnterable}`,
+        text: `${actionVerb} ${resolvedLandmark.name}. Ground guidance beacon activated on your HUD.`,
         action: { type: actionType, param: resolvedLandmark.id },
       };
     }
@@ -547,12 +436,7 @@ export class AIAssistant {
 
     // 4. Exact World State Telemetry Queries
     if (q.includes('where am i') || q.includes('current location') || q.includes('coordinates') || q.includes('my position')) {
-      const { playerCoordinates, distanceFromCenter, district, isInsideInterior, interiorName, interiorFloor } = world;
-      if (isInsideInterior) {
-        return {
-          text: `You are currently inside ${interiorName} (${interiorFloor}) at local coordinates (${playerCoordinates.x}, ${playerCoordinates.z}). Outside district: ${district.name}.`,
-        };
-      }
+      const { playerCoordinates, distanceFromCenter, district } = world;
       return {
         text: `You are outdoors in ${district.name} (${district.subtitle}) at coordinates (${playerCoordinates.x}, ${playerCoordinates.z}), located ${distanceFromCenter}m from Central Plaza. District traits: ${district.description}`,
       };
@@ -581,7 +465,7 @@ export class AIAssistant {
 
     if (q.includes('nearby') || q.includes('closest') || q.includes('what is around')) {
       const list = world.nearbyLocations
-        .map((l) => `• ${l.name} (${l.distanceMeters}m ${l.direction}${l.isEnterable ? ' - Enterable' : ''})`)
+        .map((l) => `• ${l.name} (${l.distanceMeters}m ${l.direction})`)
         .join('\n');
       return {
         text: `Real verified locations in your vicinity:\n${list}\n\nSay "take me to <name>" to route a ground navigation path.`,
@@ -645,17 +529,17 @@ Try commands such as:
       id: l.id,
       name: l.name,
       category: l.category,
-      isEnterable: !!l.isEnterable,
       coordinates: `(${Math.round(l.position.x)}, ${Math.round(l.position.z)})`,
       description: l.description,
     }));
 
     const systemPrompt = `You are "NEXUS-AI", the sophisticated holographic urban assistant embedded in the cyberpunk open-world simulation "Nexus City".
 
+Nexus City is an expansive outdoor open-world cyberpunk exploration metropolis. There are no enterable interiors; all architectural exploration, NPC interactions, traffic observation, and navigation happen outdoors on city streets, plazas, parks, and boulevards.
+
 === LIVE WORLD TELEMETRY (GROUND TRUTH) ===
 - Player Coordinates: (${world.playerCoordinates.x}, ${world.playerCoordinates.y}, ${world.playerCoordinates.z})
 - Current District: ${world.district.name} (${world.district.subtitle}) - ${world.district.description}
-- Interior State: ${world.isInsideInterior ? `Inside ${world.interiorName} [${world.interiorFloor}]: ${world.interiorDescription}` : 'Outdoors on city streets'}
 - Time of Day: ${world.time.formattedTime} [${world.time.phase}] (Night lighting: ${world.time.isNight ? 'ON' : 'OFF'})
 - Weather: ${world.weather.current} (Wetness: ${world.weather.wetnessPercent}%, Fog Multiplier: ${world.weather.fogMultiplier}x)
 - Wind: ${world.wind.speedMps} m/s blowing ${world.wind.cardinalDirection} (Gust factor: ${world.wind.gustFactor}x)
@@ -667,7 +551,7 @@ You must ONLY refer to, navigate to, or recommend real registered locations in N
 ${JSON.stringify(landmarkList, null, 2)}
 
 === STRICT BEHAVIORAL CONSTRAINTS ===
-1. NO HALLUCINATIONS: Do NOT invent fictional shop names, fictional street names, or non-existent hospitals. Map user requests exclusively to the real locations above (e.g. food -> ramen_diner, chrome/medical -> ripperdoc_clinic, hacker -> netrunner_den, drinks -> cyber_lounge, nature/garden -> biosphere_greenhouse or central_park, luxury -> sky_penthouse, train -> metro_station, games -> cyber_arcade).
+1. NO HALLUCINATIONS: Do NOT invent fictional shop names or attempt to direct the player inside buildings. Refer exclusively to the registered outdoor city landmarks above.
 2. TONE: Sleek, highly intelligent, concise cyberpunk operative assistant.
 3. ACTIONS: If the user requests navigation, teleportation, weather modification, or time warping, you must return a valid action object.
    - For fast travel / warp: action type "teleport" with valid landmark id.

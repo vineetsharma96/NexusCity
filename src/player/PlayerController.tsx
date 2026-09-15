@@ -10,7 +10,6 @@ import { SaveSystem } from '../core/SaveSystem';
 import { DiscoverySystem } from '../world/DiscoverySystem';
 import { AudioManager } from '../audio/AudioManager';
 import { InteractionSystem } from '../interaction/InteractionSystem';
-import { InteriorManager } from '../world/InteriorManager';
 
 export interface PlayerControllerProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -35,7 +34,7 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
   // Spawns player from save or default in Central Plaza intersection & registers teleport
   useEffect(() => {
     const saved = SaveSystem.getInstance().getData().player;
-    if (saved && Array.isArray(saved.position) && saved.interiorId === 'NONE') {
+    if (saved && Array.isArray(saved.position) && saved.position.length === 3 && saved.position[1] >= 0) {
       controllerRef.current.position.set(saved.position[0], saved.position[1], saved.position[2]);
       controllerRef.current.rotationY = saved.rotationY || 0;
     } else {
@@ -118,9 +117,8 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
     const cinematic = CinematicManager.getInstance();
     const cinState = cinematic.getState();
     const isCinematic = cinState.phase !== 'GAMEPLAY';
-    const isInteriorTransition = InteriorManager.getInstance().isTransitioning;
 
-    if (isCinematic || isInteriorTransition) {
+    if (isCinematic) {
       controllerRef.current.velocity.set(0, 0, 0);
     }
 

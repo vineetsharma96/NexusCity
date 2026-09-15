@@ -206,9 +206,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
           >
             <div>
               <span style={{ color: 'var(--neon-cyan)', fontWeight: 600 }}>LOC: </span>
-              {worldState.isInsideInterior
-                ? `Inside ${worldState.interiorName} [${worldState.interiorFloor}]`
-                : `${worldState.district.name} (${worldState.playerCoordinates.x}, ${worldState.playerCoordinates.z})`}
+              {worldState.district.name} ({worldState.playerCoordinates.x}, {worldState.playerCoordinates.z})
             </div>
             <div>
               <span style={{ color: 'var(--neon-cyan)', fontWeight: 600 }}>ATMOSPHERE: </span>

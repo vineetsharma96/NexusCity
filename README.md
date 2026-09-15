@@ -15,31 +15,26 @@
 
 **NEXUS CITY** is a vast, fully explorable cyberpunk metropolis running natively in the browser. Unlike conventional WebGL experiences that download hundreds of megabytes of external 3D models (`.glb`/`.fbx`), image textures (`.png`/`.jpg`), and audio clips (`.mp3`/`.wav`), **every single atom of Nexus City is procedurally generated at runtime via code, shaders, mathematics, and the Web Audio API**:
 
-* 🏛️ **0 External 3D Models** — Every skyscraper, neon gantry, vehicle, cyber-armor operative, streetlamp, tree, bench, and interior laboratory is synthesized using Three.js procedural primitives and custom buffer geometries.
+* 🏛️ **0 External 3D Models** — Every skyscraper, neon gantry, vehicle, cyber-armor operative, streetlamp, tree, bench, and outdoor architectural facade is synthesized using Three.js procedural primitives and custom buffer geometries.
 * 🎨 **0 External Textures** — All asphalt roadways, concrete facade paneling, illuminated window matrices, holographic signage, and puddle surface maps are drawn on demand by HTML5 Canvas procedural texture generators.
-* 🔊 **0 External Audio Files** — District ambient drones, atmospheric rain patter, thunder cracks, Doppler hover-car flybys, elevator hums, UI clicks, footsteps, and discovery arpeggios are generated in real-time by an advanced Web Audio synthesizer engine.
+* 🔊 **0 External Audio Files** — District ambient drones, atmospheric rain patter, thunder cracks, Doppler hover-car flybys, UI clicks, footsteps, and discovery arpeggios are generated in real-time by an advanced Web Audio synthesizer engine.
 * 🎲 **100% Deterministic World** — Built upon a seeded Linear Congruential PRNG (`SeedRandom.ts`, Seed `#847291`), ensuring infinite reproducibility across every device and session.
 
 ---
 
-## ⚡ Master Architectural Rework (Phases A — H)
+## ⚡ Master Architectural Rework
 
-Nexus City recently underwent an extensive, end-to-end architectural rework ensuring 60+ FPS performance, zero memory leaks, and seamless state transitions:
+Nexus City operates on an expansive outdoor open-world architecture ensuring 60+ FPS performance, zero memory leaks, and continuous world streaming:
 
-* **Phase A — Diagnostic Audit**: Verified coordinate alignment across all 11 destinations, chunk LOD boundaries, and kinematic collider lifetimes.
-* **Phase B — Portal System**: Aligned all 11 interactive portals with exact matching coordinates between exterior entrance thresholds, interaction zones, and interior spawn positions.
-* **Phase C — World & Interior State Machine**: Separated `WORLD_ACTIVE` and `INTERIOR_ACTIVE` rendering modes via `InteriorManager.ts`. Exterior chunk streaming, vehicles, horizon silhouettes, and weather particles cleanly suspend during interior exploration.
-* **Phase D — Procedural Environment**: Integrated street furniture (kiosks, benches, bus shelters, trash receptacles, bollards) and district-specific biome props (storage tanks, steam pipes, server nodes, historical pillars) into deterministic chunk generation with scoped chunk colliders.
-* **Phase E — Lighting, Shadows & Volumetrics**: Implemented smooth point-light lerping across chunk boundaries, dynamic shadow camera frustum updates, and custom GLSL volumetric celestial god-rays with dust turbulence.
-* **Phase F — NPC & Vehicle Simulation**: Expanded crowd to 52 citizens with 6-phase traffic light awareness, vehicle-to-vehicle queuing headway, and mutual physical collision separation.
-* **Phase G — Interior Details & Multi-Floor Architecture**: Delivered bespoke 3D environments and interactive terminals for all 11 destination facilities, zero-leak chunk colliders, and high-altitude sky mezzanine / observation decks.
-* **Phase H — Performance & Mobile Optimization**: Zero-allocation simulation hot loops (0.108ms per NPC frame for 52 citizens), shared GPU unit geometry buffers, throttled React HUD telemetry, and quality-driven reflection and light budget scaling.
+* **Open-World Surface Streamer**: Infinite chunk generation (`ProceduralChunkGenerator.ts`) across 576 spatial chunks (~3,000m × 3,000m world bounds) with 4 distance-based LOD tiers and instanced distant silhouettes.
+* **Procedural Environment**: Integrated street furniture (kiosks, benches, bus shelters, trash receptacles, bollards) and district-specific biome props (storage tanks, steam pipes, server nodes, historical pillars) into deterministic chunk generation with scoped chunk colliders.
+* **Lighting, Shadows & Volumetrics**: Smooth point-light lerping across chunk boundaries, dynamic shadow camera frustum updates, and custom GLSL volumetric celestial god-rays with dust turbulence.
+* **NPC & Vehicle Simulation**: 50+ procedurally generated citizens walking sidewalks with 6-phase traffic light awareness, vehicle-to-vehicle queuing headway, and mutual physical collision separation.
+* **Performance & Mobile Optimization**: Zero-allocation simulation hot loops, shared GPU unit geometry buffers, throttled React HUD telemetry, and quality-driven reflection and light budget scaling.
 
 ---
 
-## 🗺️ 12-Phase Complete Engineering Architecture
-
-Nexus City was constructed across 12 comprehensive phases of systems architecture:
+## 🗺️ Engineering Architecture
 
 ### 1. Core Foundation & Procedural Geometry
 * **Protagonist Cyber-Armor**: Articulated 14-bone procedural humanoid model with helmet visor, glowing arc reactor chestplate, thruster boots, and dynamic IK locomotion.
@@ -64,48 +59,33 @@ Nexus City was constructed across 12 comprehensive phases of systems architectur
 ### 5. Audio Atmosphere & City Audio-Visual Immersion
 * **District Soundscapes**: Procedural sound engines tailored to individual districts (sub-bass hums in Industrial, high-tech synthesizers in Central Metropolis, organic crickets in Central Park).
 * **Spatial Audio Engine**: Distance-attenuated 3D audio for hover-cruisers, Doppler vehicle flybys, and neon gantry buzzing.
-* **Dynamic Audio Transitions**: Low-pass filter muffling when entering building interiors or riding elevators.
+* **Dynamic Weather Audio**: Real-time synthesized rain patter, rolling thunder claps, and atmospheric wind resonance.
 
 ### 6. Discovery, Mini-Map / Compass & Interactive UX Polish
-* **Dynamic Mini-Map & Radar Compass**: Real-time rotating HUD radar tracking operative heading, nearby landmarks, street networks, and building entrances.
-* **Holographic 3D Map Modal**: Fullscreen interactive city map with district boundaries, real-time player GPS dot, and instant teleportation nodes.
+* **Dynamic Mini-Map & Radar Compass**: Real-time rotating HUD radar tracking operative heading, nearby landmarks, street networks, and district zones.
+* **Holographic 3D Map Modal**: Fullscreen interactive city map with district boundaries, real-time player GPS dot, and instant fast-travel nodes.
 * **Operative HUD Telemetry**: Compass heading tape, speed indicators, weather/time fast toggles, and contextual interaction prompts.
 
-### 7. Interiors, Elevators & Multi-Level Exploration
-* **11 Unique Enterable Facilities**: Seamless transitions into fully detailed procedural interiors:
-  1. *Nexus Advanced Labs* — Quantum reactor core, scientific consoles, server mainframes.
-  2. *Neon Velocity Lounge* — Curved cyber bar counter, cocktail stools, VIP booths.
-  3. *Krom-Doc Augmentation Clinic* — Ripperdoc operating chair, surgical arm, cyber-prosthetics cases.
-  4. *Black-Ice Hacker Safehouse* — Server banks, green matrix terminal arrays, floor cable conduits.
-  5. *Tokyo-Neo Synth-Ramen* — L-shaped wooden ramen bar, broth vats, red paper lanterns.
-  6. *Aero-Cargo Drone Bay* — Quadcopter repair dock, hydraulic lift, industrial gantry crane.
-  7. *Apex Sky Suite Penthouse* — Floor-to-ceiling panoramic skyline glass, luxury couch, glass coffee table.
-  8. *Megacorp Secure Data Vault* — Hexagonal optical data core, rotating red security lasers.
-  9. *Biosphere Hydroponic Flora Lab* — Vertical growth racks, violet UV grow lights, nutrient tanks.
-  10. *Hyperloop Metro Transit Hub* — Subterranean train tracks, electrified 3rd rail, electronic schedule timetable.
-  11. *Cyber-Strike 2099 Retro Arcade* — CRT pixel art arcade cabinets, dance revolution flashing stage.
-* **Two-Story Working Elevators**: Elevators in multi-level structures allowing smooth transit between the ground floor and the high-altitude mezzanine / sky-observation deck.
-
-### 8. Dynamic Video Billboards & Metropolis Media
+### 7. Dynamic Video Billboards & Metropolis Media
 * **Multi-Channel Procedural Video Simulation**: High-altitude skyscraper billboards running procedural 60 FPS video animations:
   * *Channel 1 (Nexus 24 Live News)*: Live scrolling news ticker tape, animated 3D rotating wireframe globe, and pulsing audio spectrum equalizer bars.
   * *Channel 2 (Cyber-Corp Commercial Adverts)*: Cycling adverts ("NEO-COCA", "KROM-OPTICS", "VELOCITY-X") with glitch VHS scanlines, chromatic aberration, and flashing typography.
   * *Channel 3 (Metropolis Grid Surveillance)*: 360° sweeping radar beam with blips, digital matrix code rain, and live security camera HUD telemetry.
 
-### 9. Environmental Dynamics & Flora
+### 8. Environmental Dynamics & Flora
 * **Central Park Sanctuary**: 70m × 70m organic park landscape with granite retaining walls and neon accent trims.
 * **Procedural Rippling Water Pond**: Custom GLSL water shader with surface sine wave displacement, deep emerald refraction, caustics, and cyan rim highlights.
 * **Dynamic Global Wind System**: Real-time vector aerodynamics with micro-turbulence, wind gust surges, and avenue channel acceleration.
 * **Interactive Foliage & Particles**: Weeping willow cyber-trees, pink sakura cherry blossoms, swaying leaves, falling leaf particles, and urban street dust specks.
 * **Natural 3D Cloud Clusters**: Volumetric cloud banks drifting along high-altitude wind currents, dynamically tinted by celestial time with lightning flash backlighting.
 
-### 10. Grounded AI City Intelligence
+### 9. Grounded AI City Intelligence
 * **Google Gemini 2.5 Flash Integration**: Real-time natural language terminal communicating directly with the operative.
-* **Actual World State Telemetry**: AI understands operative position, active district, current weather, time of day, and all 11 building interior locations.
+* **Actual World State Telemetry**: AI understands operative position, active district, current weather, time of day, and all outdoor city landmarks.
 * **Zero Location Hallucinations**: Grounded strictly in the actual world coordinate system with deterministic fallback NLP when offline.
 * **Zero Dependency Core Gameplay**: The city remains 100% playable, responsive, and functional even without an API key or internet connection.
 
-### 11. Performance & Quality Scalability
+### 10. Performance & Quality Scalability
 * **Dynamic Chunk LOD System**: 576 spatial chunks (~3,000m × 3,000m world bounds) streamed dynamically with 4 distance-based LOD tiers and instanced distant silhouettes.
 * **Geometry & Draw Call Optimization**: Unit geometry instancing (`BoxGeometry(1, 1, 1)`) with matrix transforms for thousands of structural features in single draw calls.
 * **Crowd & Traffic Scaling**: Automatic entity throttling based on distance and device capabilities.
@@ -154,7 +134,7 @@ nexus-city/
 │   ├── player/           # Cyber-armor protagonist, kinematic controller, spring camera
 │   ├── rendering/        # Quality manager, presets, performance profiling monitor
 │   ├── ui/               # Cyberpunk HUD, mini-map, radar, terminal, codex modals
-│   └── world/            # Chunks, weather, wind, time of day, interior destinations
+│   └── world/            # Chunks, weather, wind, time of day, discovery systems
 ├── public/               # Minimal HTML entry point & favicon
 ├── dist/                 # Production-optimized WebGL bundle
 ├── package.json          # Vite + React 19 + Three.js + R3F dependencies

@@ -63,29 +63,6 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     WindSystem.getInstance().update(delta);
 
     const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
-    const isInterior = pPos.y < -50;
-
-    if (isInterior) {
-      if (scene.background instanceof THREE.Color) {
-        scene.background.set('#03050c');
-      }
-      if (fogRef.current) {
-        fogRef.current.near = 60;
-        fogRef.current.far = 180;
-        fogRef.current.color.set('#03050c');
-      }
-      if (dirLightRef.current) {
-        dirLightRef.current.intensity = 0.05;
-        dirLightRef.current.castShadow = false;
-      }
-      if (hemiLightRef.current) {
-        hemiLightRef.current.intensity = 0.4;
-      }
-      if (ambientLightRef.current) {
-        ambientLightRef.current.intensity = 0.6;
-      }
-      return;
-    }
 
     // 1. Calculate blended sky & fog colors
     const baseSky = new THREE.Color(lighting.skyColor);
@@ -186,7 +163,6 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
 
   // Calculate local streetlamp illumination points around player
   const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
-  const isInteriorActive = pPos.y < -50;
   const isNightTime = lighting.isNight || lighting.phase === 'DUSK' || lighting.phase === 'DAWN';
   const nightIntensity = lighting.isNight ? 2.4 : 1.4;
 
@@ -208,7 +184,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         position={[pPos.x + lighting.celestialPosition.x, lighting.celestialPosition.y, pPos.z + lighting.celestialPosition.z]}
         intensity={lighting.celestialIntensity}
         color={lighting.celestialColor}
-        castShadow={!isInteriorActive && quality.shadows}
+        castShadow={quality.shadows}
         shadow-mapSize-width={quality.shadowMapSize}
         shadow-mapSize-height={quality.shadowMapSize}
         shadow-camera-near={1.0}
@@ -221,7 +197,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       />
 
       {/* Night Streetlamp & Neon Ground Bounce Arrays (smoothly lerped group) */}
-      {!isInteriorActive && isNightTime && quality.nightLightsEnabled && quality.maxLights >= 4 && (
+      {isNightTime && quality.nightLightsEnabled && quality.maxLights >= 4 && (
         <group ref={nightLightsGroupRef}>
           {/* Central road wash light */}
           <pointLight
@@ -286,16 +262,15 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       )}
 
       {/* Realtime Visible Radiant Celestial Orb in Sky (Sun / Moon) */}
-      {!isInteriorActive && (
-        <group ref={celestialOrbRef}>
-          {/* Core Celestial Sphere */}
-          <mesh>
-            <sphereGeometry args={[lighting.isNight ? 16 : 24, 32, 32]} />
-            <meshBasicMaterial
-              color={lighting.isNight ? '#dbeafe' : '#fffdf0'}
-              fog={false}
-            />
-          </mesh>
+      <group ref={celestialOrbRef}>
+        {/* Core Celestial Sphere */}
+        <mesh>
+          <sphereGeometry args={[lighting.isNight ? 16 : 24, 32, 32]} />
+          <meshBasicMaterial
+            color={lighting.isNight ? '#dbeafe' : '#fffdf0'}
+            fog={false}
+          />
+        </mesh>
 
           {/* Inner Coronal Glow Aura */}
           <mesh>
@@ -321,7 +296,6 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
             />
           </mesh>
         </group>
-      )}
 
       {/* Ambient fill light */}
       <ambientLight ref={ambientLightRef} intensity={lighting.ambientIntensity} color="#182a4d" />

@@ -9,7 +9,7 @@ export const LoadingScreen: React.FC = () => {
   useEffect(() => {
     const steps = [
       { at: 15, text: 'SEED #847291 // METROPOLITAN GRID 3,000M' },
-      { at: 35, text: 'STREAMING 11 PROCEDURAL BUILDING INTERIORS...' },
+      { at: 35, text: 'STREAMING PROCEDURAL DISTRICT ARCHITECTURE...' },
       { at: 55, text: 'COMPILING REALTIME SHADERS & VIDEO BILLBOARDS...' },
       { at: 75, text: 'SYNCHRONIZING TRAFFIC Gantries & PEDESTRIAN PATHS...' },
       { at: 90, text: 'ATMOSPHERIC WIND & VOLUMETRIC CLOUDS ONLINE...' },

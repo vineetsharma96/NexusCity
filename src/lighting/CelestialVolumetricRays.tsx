@@ -98,8 +98,7 @@ export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = (
 
   useFrame((_, delta) => {
     const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
-    const isInterior = pPos.y < -50;
-    if (isInterior || !quality.volumetrics || !groupRef.current) return;
+    if (!quality.volumetrics || !groupRef.current) return;
 
     uniforms.uTime.value += delta;
 
@@ -143,11 +142,8 @@ export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = (
     );
   });
 
-  const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
-  const isInterior = pPos.y < -50;
-
-  // Only active when volumetrics is enabled in quality profile and in exterior world
-  if (!quality.volumetrics || isInterior) {
+  // Only active when volumetrics is enabled in quality profile
+  if (!quality.volumetrics) {
     return null;
   }
 

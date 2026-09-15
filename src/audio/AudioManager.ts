@@ -20,8 +20,6 @@ export class AudioManager {
   private weatherGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
 
-  private interiorFilter: BiquadFilterNode | null = null;
-
   // Ambient synth nodes
   private currentDistrictName: string = '';
   private ambientOsc1: OscillatorNode | null = null;
@@ -80,21 +78,15 @@ export class AudioManager {
       this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVolume, this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
 
-      // Interior Acoustic Muffle Filter (lowpass that cuts high frequencies when indoors)
-      this.interiorFilter = this.ctx.createBiquadFilter();
-      this.interiorFilter.type = 'lowpass';
-      this.interiorFilter.frequency.setValueAtTime(20000, this.ctx.currentTime);
-      this.interiorFilter.connect(this.masterGain);
-
       // Ambient Sub-bus
       this.ambientGain = this.ctx.createGain();
       this.ambientGain.gain.setValueAtTime(this.ambientVolume, this.ctx.currentTime);
-      this.ambientGain.connect(this.interiorFilter);
+      this.ambientGain.connect(this.masterGain);
 
       // Weather Sub-bus
       this.weatherGain = this.ctx.createGain();
       this.weatherGain.gain.setValueAtTime(0.7, this.ctx.currentTime);
-      this.weatherGain.connect(this.interiorFilter);
+      this.weatherGain.connect(this.masterGain);
 
       // SFX Sub-bus
       this.sfxGain = this.ctx.createGain();
@@ -117,11 +109,6 @@ export class AudioManager {
     }
   }
 
-  public setInteriorMode(isInside: boolean): void {
-    if (!this.ctx || !this.interiorFilter) return;
-    const targetFreq = isInside ? 360 : 20000;
-    this.interiorFilter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.15);
-  }
 
   public ensureContext(): void {
     if (!this.initialized) {

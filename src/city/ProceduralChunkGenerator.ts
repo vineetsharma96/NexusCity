@@ -112,7 +112,7 @@ export class ProceduralChunkGenerator {
     const parks: PocketParkDef[] = [];
     const collisionBoxes: CollisionBox[] = [];
 
-    // Skip the central core (cx, cz in [-1..1]) as it is handcrafted in CityDistrict.tsx & InteriorDestinations
+    // Skip the central core (cx, cz in [-1..1]) as it is handcrafted in CityDistrict.tsx
     if (Math.abs(cx) <= 1 && Math.abs(cz) <= 1) {
       const emptyChunk: StreamedChunkData = {
         key,

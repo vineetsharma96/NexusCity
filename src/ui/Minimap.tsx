@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { NavigationSystem, NavigationState, LandmarkDef } from '../map/NavigationSystem';
-import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
 import { DistrictGenerator } from '../city/DistrictGenerator';
 import { AudioManager } from '../audio/AudioManager';
 
@@ -105,30 +104,6 @@ export const Minimap: React.FC<MinimapProps> = ({ playerPosRef }) => {
     ? worldToRadar(navState.activeLandmark.position.x, navState.activeLandmark.position.z, true)
     : null;
 
-  // Interior portal blips within range
-  const interiorBlips = Object.entries(INTERIOR_DESTINATIONS)
-    .map(([id, dest]) => {
-      const pt = worldToRadar(dest.entrancePosition.x, dest.entrancePosition.z);
-      if (!pt) return null;
-      return {
-        id,
-        name: dest.name,
-        type: 'INTERIOR',
-        x: pt.x,
-        y: pt.y,
-        dist: pt.dist,
-        color: '#00ffaa',
-      };
-    })
-    .filter(Boolean) as Array<{
-      id: string;
-      name: string;
-      type: string;
-      x: number;
-      y: number;
-      dist: number;
-      color: string;
-    }>;
 
   // Landmark blips
   const landmarkBlips = NavigationSystem.getInstance()
@@ -363,22 +338,6 @@ export const Minimap: React.FC<MinimapProps> = ({ playerPosRef }) => {
             />
           ))}
 
-          {/* Interior Portal Diamond Blips */}
-          {interiorBlips.map((ib) => (
-            <rect
-              key={ib.id}
-              x={ib.x - 2.5}
-              y={ib.y - 2.5}
-              width="5"
-              height="5"
-              fill={ib.color}
-              transform={`rotate(45 ${ib.x} ${ib.y})`}
-              opacity="0.9"
-              style={{ cursor: 'pointer' }}
-              onMouseEnter={() => setHoveredBlip(`[PORTAL] ${ib.name} (${ib.dist}m)`)}
-              onMouseLeave={() => setHoveredBlip(null)}
-            />
-          ))}
 
           {/* Active Navigation Guideline & Target Blip */}
           {targetBlip && (

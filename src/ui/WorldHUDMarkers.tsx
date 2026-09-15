@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { NavigationSystem, NavigationState, LandmarkDef } from '../map/NavigationSystem';
-import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
 
 interface WorldHUDMarkersProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -44,13 +43,6 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         return;
       }
 
-      // Hide exterior markers when inside an interior room without triggering continuous empty re-renders
-      if (pPos.y < -50) {
-        setMarkers((prev) => (prev.length > 0 ? [] : prev));
-        animId = requestAnimationFrame(updateProjections);
-        return;
-      }
-
       cam.getWorldDirection(camDir);
       const width = window.innerWidth;
       const height = window.innerHeight;
@@ -87,42 +79,9 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         }
       }
 
-      // 2. Project Nearby Interior Portals (within 75m)
-      Object.entries(INTERIOR_DESTINATIONS).forEach(([id, dest]) => {
-        if (navState.activeLandmark?.id === id) return; // Skip if already active target
-        const dist = pPos.distanceTo(dest.entrancePosition);
-        if (dist > 75) return;
-
-        tempPos.copy(dest.entrancePosition);
-        tempPos.y += 2.5;
-        tempVec.subVectors(tempPos, cam.position);
-        if (tempVec.dot(camDir) > 0.25) {
-          tempVec.copy(tempPos).project(cam);
-          if (tempVec.z < 1.0 && Math.abs(tempVec.x) <= 1.05 && Math.abs(tempVec.y) <= 1.05) {
-            const sx = (tempVec.x * 0.5 + 0.5) * width;
-            const sy = (-(tempVec.y * 0.5) + 0.5) * height;
-            // Opacity falls off from 20m to 75m
-            const opacity = dist < 20 ? 0.95 : THREE.MathUtils.lerp(0.95, 0.0, (dist - 20) / 55);
-
-            projectedList.push({
-              id,
-              name: dest.name,
-              category: 'PORTAL',
-              x: sx,
-              y: sy,
-              dist: Math.round(dist),
-              isTarget: false,
-              color: '#00ffaa',
-              opacity,
-            });
-          }
-        }
-      });
-
-      // 3. Project Nearby District Landmarks (within 85m)
+      // 2. Project Nearby District Landmarks (within 85m)
       NavigationSystem.getInstance().landmarks.forEach((lm) => {
         if (navState.activeLandmark?.id === lm.id) return;
-        if (lm.category === 'INTERIOR' || lm.category === 'LAB' || lm.category === 'LOUNGE') return; // Handled by interiors
         const dist = pPos.distanceTo(lm.position);
         if (dist > 85) return;
 

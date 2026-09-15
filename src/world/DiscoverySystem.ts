@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { SaveSystem } from '../core/SaveSystem';
 import { AudioManager } from '../audio/AudioManager';
-import { INTERIOR_DESTINATIONS } from './InteriorDestinations';
 
 export interface LandmarkDiscoveryTrigger {
   id: string;
@@ -80,18 +79,6 @@ export class DiscoverySystem {
         radius: 35,
       }
     );
-
-    // 2. All 11 enterable building facilities
-    Object.entries(INTERIOR_DESTINATIONS).forEach(([id, dest]) => {
-      this.triggers.push({
-        id,
-        name: dest.name,
-        subtitle: dest.district.toUpperCase(),
-        district: dest.district,
-        position: dest.entrancePosition.clone(),
-        radius: 20,
-      });
-    });
   }
 
   public update(playerPos: THREE.Vector3): void {

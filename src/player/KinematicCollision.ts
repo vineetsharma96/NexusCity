@@ -98,16 +98,10 @@ export class KinematicCollisionSolver {
     const playerMinY = resolved.y;
     const playerMaxY = resolved.y + playerHeight;
 
-    // Check bounds: interior room space (-80m) vs full open-world metropolis (2.8km scale)
-    if (playerMinY < -50) {
-      resolved.x = THREE.MathUtils.clamp(resolved.x, -10.4, 10.4);
-      resolved.z = THREE.MathUtils.clamp(resolved.z, -8.5, 8.5);
-    } else {
-      // 24x24 chunks at 120m = 2880m expanse (-1440m to +1440m). Bound player safely within active world substrate.
-      const worldLimit = 1380;
-      resolved.x = THREE.MathUtils.clamp(resolved.x, -worldLimit, worldLimit);
-      resolved.z = THREE.MathUtils.clamp(resolved.z, -worldLimit, worldLimit);
-    }
+    // 24x24 chunks at 120m = 2880m expanse (-1440m to +1440m). Bound player safely within active world substrate.
+    const worldLimit = 1380;
+    resolved.x = THREE.MathUtils.clamp(resolved.x, -worldLimit, worldLimit);
+    resolved.z = THREE.MathUtils.clamp(resolved.z, -worldLimit, worldLimit);
 
     const checkHorizontalBox = (box: CollisionBox) => {
       // Check vertical overlap
@@ -159,7 +153,7 @@ export class KinematicCollisionSolver {
    * Evaluates ground height under player at given (x, z).
    */
   public static getGroundHeightAt(x: number, z: number, currentY: number): { height: number; onRamp: boolean } {
-    let groundHeight = currentY < -50 ? -80.0 : 0.0; // Interior floor at -80m vs plaza at 0m
+    let groundHeight = 0.0; // World surface baseline at 0.0m
     let onRamp = false;
 
     // Check ramps first

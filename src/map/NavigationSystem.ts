@@ -1,14 +1,11 @@
 import * as THREE from 'three';
 
-import { INTERIOR_DESTINATIONS } from '../world/InteriorDestinations';
-
 export interface LandmarkDef {
   id: string;
   name: string;
-  category: 'PLAZA' | 'LAB' | 'LOUNGE' | 'TOWER' | 'CROSSWAY' | 'INTERIOR' | 'SANCTUARY' | 'TRANSIT';
+  category: 'PLAZA' | 'TOWER' | 'CROSSWAY' | 'SANCTUARY' | 'TRANSIT';
   position: THREE.Vector3;
   description: string;
-  isEnterable?: boolean;
 }
 
 export interface NavigationState {
@@ -46,6 +43,13 @@ export class NavigationSystem {
       description: 'The tallest corporate skyscraper in the central district with panoramic spires.',
     },
     {
+      id: 'park_sanctuary',
+      name: 'Central Park Sanctuary',
+      category: 'SANCTUARY',
+      position: new THREE.Vector3(75, 0.2, 75),
+      description: 'Lush bioluminescent ecological sanctuary and natural pond oasis.',
+    },
+    {
       id: 'north_crossway',
       name: 'North Crossing Avenue',
       category: 'CROSSWAY',
@@ -59,15 +63,6 @@ export class NavigationSystem {
       position: new THREE.Vector3(0, 0.2, 75),
       description: 'Commercial crossing connecting avenue sidewalks to residential sectors.',
     },
-    // Dynamically include all 11 registered enterable interior destinations
-    ...Object.entries(INTERIOR_DESTINATIONS).map(([id, dest]) => ({
-      id,
-      name: dest.name,
-      category: (dest.interiorId === 'LAB' ? 'LAB' : dest.interiorId === 'LOUNGE' ? 'LOUNGE' : 'INTERIOR') as LandmarkDef['category'],
-      position: dest.interactionPosition.clone(),
-      description: dest.description,
-      isEnterable: true,
-    })),
   ];
 
   private activeLandmark: LandmarkDef | null = null;

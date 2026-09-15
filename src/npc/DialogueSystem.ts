@@ -186,7 +186,7 @@ export class DialogueSystem {
       },
     });
 
-    // 5. Senior Researcher Nova — Quantum Physicist (Nexus Labs Interior)
+    // 5. Senior Researcher Nova — Quantum Physicist (Nexus Labs Promenade)
     this.registerConversation({
       npcId: 'lab_researcher_nova',
       startNodeId: 'intro',
@@ -219,7 +219,7 @@ export class DialogueSystem {
       },
     });
 
-    // 6. Mixologist Unit K-9 — Cyber Bartender (Neon Velocity Lounge Interior)
+    // 6. Mixologist Unit K-9 — Cyber Bartender (Neon Velocity Boulevard)
     this.registerConversation({
       npcId: 'lounge_bartender_k9',
       startNodeId: 'intro',
@@ -252,7 +252,7 @@ export class DialogueSystem {
       },
     });
 
-    // 7. Doc Viktor Vance — Ripperdoc Surgeon (Krom-Doc Clinic Interior)
+    // 7. Doc Viktor Vance — Ripperdoc Surgeon (Krom-Doc Plaza)
     this.registerConversation({
       npcId: 'ripperdoc_viktor',
       startNodeId: 'intro',
@@ -285,7 +285,7 @@ export class DialogueSystem {
       },
     });
 
-    // 8. Netrunner Zero-Day — Rogue Hacker (Black-Ice Safehouse Interior)
+    // 8. Netrunner Zero-Day — Rogue Hacker (Black-Ice Safehouse Alley)
     this.registerConversation({
       npcId: 'netrunner_zeroday',
       startNodeId: 'intro',
@@ -318,7 +318,7 @@ export class DialogueSystem {
       },
     });
 
-    // 9. Master Chef Taro — Noodle Artisan (Tokyo-Neo Synth-Ramen Interior)
+    // 9. Master Chef Taro — Noodle Artisan (Tokyo-Neo Food Court)
     this.registerConversation({
       npcId: 'chef_taro',
       startNodeId: 'intro',
@@ -351,7 +351,7 @@ export class DialogueSystem {
       },
     });
 
-    // 10. Executive Vane — Corporate Tycoon (Apex Sky Suite Penthouse Interior)
+    // 10. Executive Vane — Corporate Tycoon (Apex Plaza Promenade)
     this.registerConversation({
       npcId: 'penthouse_executive_vane',
       startNodeId: 'intro',
