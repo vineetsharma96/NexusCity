@@ -14,8 +14,12 @@ export const InteriorDebugOverlay: React.FC<InteriorDebugOverlayProps> = ({
   playerPosRef,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [pos, setPos] = useState({ x: 0, y: 0, z: 0 });
+  const [playerCoords, setPlayerCoords] = useState({ x: 0, y: 0, z: 0 });
+  const [cameraCoords, setCameraCoords] = useState({ x: 0, y: 0, z: 0 });
   const [boxCount, setBoxCount] = useState(0);
+  const [interiorMounted, setInteriorMounted] = useState(false);
+  const [interiorChildrenCount, setInteriorChildrenCount] = useState(0);
+  const [activeLightsCount, setActiveLightsCount] = useState(0);
 
   useEffect(() => {
     const handleToggle = (e: KeyboardEvent) => {
@@ -32,12 +36,42 @@ export const InteriorDebugOverlay: React.FC<InteriorDebugOverlayProps> = ({
     if (!isOpen) return;
     const interval = setInterval(() => {
       if (playerPosRef.current) {
-        setPos({
+        setPlayerCoords({
           x: Math.round(playerPosRef.current.x * 10) / 10,
           y: Math.round(playerPosRef.current.y * 10) / 10,
           z: Math.round(playerPosRef.current.z * 10) / 10,
         });
       }
+
+      if (typeof window !== 'undefined') {
+        const cam = (window as any).__NEXUS_CAMERA__;
+        if (cam && cam.position) {
+          setCameraCoords({
+            x: Math.round(cam.position.x * 10) / 10,
+            y: Math.round(cam.position.y * 10) / 10,
+            z: Math.round(cam.position.z * 10) / 10,
+          });
+        }
+
+        const intRootRef = (window as any).__NEXUS_INTERIOR_ROOT__;
+        if (intRootRef && intRootRef.current) {
+          const intGroup = intRootRef.current as THREE.Group;
+          setInteriorMounted(intGroup.visible);
+          let childrenCount = 0;
+          let lights = 0;
+          intGroup.traverse((obj) => {
+            childrenCount++;
+            if ((obj as any).isLight) lights++;
+          });
+          setInteriorChildrenCount(childrenCount);
+          setActiveLightsCount(lights);
+        } else {
+          setInteriorMounted(false);
+          setInteriorChildrenCount(0);
+          setActiveLightsCount(0);
+        }
+      }
+
       setBoxCount(KinematicCollisionSolver.getAllBoxes().length);
     }, 200);
     return () => clearInterval(interval);
@@ -94,7 +128,7 @@ export const InteriorDebugOverlay: React.FC<InteriorDebugOverlayProps> = ({
             border: '1px solid rgba(0, 240, 255, 0.5)',
             borderRadius: 6,
             padding: '12px 16px',
-            width: 320,
+            width: 340,
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)',
             color: '#e0f2fe',
             lineHeight: 1.6,
@@ -112,7 +146,7 @@ export const InteriorDebugOverlay: React.FC<InteriorDebugOverlayProps> = ({
               color: '#00f0ff',
             }}
           >
-            <span>INTERIOR SYSTEM MONITOR</span>
+            <span>INTERIOR TELEMETRY MONITOR</span>
             <button
               onClick={() => setIsOpen(false)}
               style={{
@@ -127,39 +161,45 @@ export const InteriorDebugOverlay: React.FC<InteriorDebugOverlayProps> = ({
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '4px 8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '3px 8px' }}>
             <span style={{ opacity: 0.6 }}>WORLD MODE:</span>
             <strong style={{ color: modeColor }}>{interiorState.worldMode}</strong>
 
-            <span style={{ opacity: 0.6 }}>INTERIOR ID:</span>
-            <span>{interiorState.current}</span>
-
-            <span style={{ opacity: 0.6 }}>NAME:</span>
+            <span style={{ opacity: 0.6 }}>CURRENT INTERIOR:</span>
             <span style={{ color: '#fff' }}>{interiorState.name || 'None (Exterior)'}</span>
 
-            <span style={{ opacity: 0.6 }}>FLOOR:</span>
-            <span>{interiorState.currentFloor} / 2</span>
+            <span style={{ opacity: 0.6 }}>INTERIOR ROOT:</span>
+            <strong style={{ color: interiorMounted ? '#00ffaa' : '#ff0055' }}>
+              {interiorMounted ? 'MOUNTED' : 'UNMOUNTED'}
+            </strong>
 
-            <span style={{ opacity: 0.6 }}>PLAYER POS:</span>
-            <span>{pos.x}, {pos.y}, {pos.z}</span>
+            <span style={{ opacity: 0.6 }}>INTERIOR CHILDREN:</span>
+            <span>{interiorChildrenCount} nodes</span>
 
-            <span style={{ opacity: 0.6 }}>COLLIDERS:</span>
-            <span>{boxCount} active</span>
+            <span style={{ opacity: 0.6 }}>PLAYER:</span>
+            <span>{playerCoords.x} / {playerCoords.y} / {playerCoords.z}</span>
+
+            <span style={{ opacity: 0.6 }}>CAMERA:</span>
+            <span>{cameraCoords.x} / {cameraCoords.y} / {cameraCoords.z}</span>
+
+            <span style={{ opacity: 0.6 }}>LIGHTS:</span>
+            <span>{activeLightsCount} active</span>
+
+            <span style={{ opacity: 0.6 }}>COLLISION:</span>
+            <strong style={{ color: '#00ffaa' }}>ACTIVE ({boxCount} boxes)</strong>
 
             <span style={{ opacity: 0.6 }}>MINIMAP:</span>
-            <span style={{ color: interiorState.worldMode === 'WORLD_ACTIVE' ? '#00ffaa' : '#ff0055' }}>
-              {interiorState.worldMode === 'WORLD_ACTIVE' ? 'ACTIVE' : 'HIDDEN'}
+            <span style={{ color: interiorState.worldMode === 'WORLD_ACTIVE' ? '#00ffaa' : '#ffaa00' }}>
+              {interiorState.worldMode === 'WORLD_ACTIVE' ? 'VISIBLE' : 'HIDDEN'}
             </span>
 
-            <span style={{ opacity: 0.6 }}>EXTERIOR GRID:</span>
-            <span style={{ color: interiorState.worldMode === 'WORLD_ACTIVE' ? '#00ffaa' : '#ffaa00' }}>
-              {interiorState.worldMode === 'WORLD_ACTIVE' ? 'STREAMING' : 'SUSPENDED'}
-            </span>
+            <span style={{ opacity: 0.6 }}>RENDERER:</span>
+            <span style={{ color: '#00ffaa' }}>RUNNING</span>
           </div>
 
           {/* Quick Teleport Tester */}
           <div style={{ marginTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: 8 }}>
-            <div style={{ fontSize: '0.68rem', opacity: 0.6, marginBottom: 4 }}>TEST TELEPORT:</div>
+            <div style={{ fontSize: '0.68rem', opacity: 0.6, marginBottom: 4 }}>WARP FACILITY:</div>
             <select
               style={{
                 width: '100%',
@@ -189,7 +229,7 @@ export const InteriorDebugOverlay: React.FC<InteriorDebugOverlayProps> = ({
               }}
               value=""
             >
-              <option value="" disabled>-- Warp to Facility --</option>
+              <option value="" disabled>-- Select Facility to Test --</option>
               {destinationList.map(([key, dest]: [string, InteriorDestination]) => (
                 <option key={key} value={key}>
                   {dest.name} ({dest.district})

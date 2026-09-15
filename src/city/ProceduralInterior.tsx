@@ -177,6 +177,8 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
         addBox(origin.clone().add(new THREE.Vector3(0, 1.8, 0)), new THREE.Vector3(4.5, 3.6, 4.5));
         addBox(origin.clone().add(new THREE.Vector3(-6, 0.8, -4)), new THREE.Vector3(3.5, 1.6, 2));
         addBox(origin.clone().add(new THREE.Vector3(6, 0.8, -4)), new THREE.Vector3(3.5, 1.6, 2));
+        // Server Racks collider along North wall
+        addBox(origin.clone().add(new THREE.Vector3(0, 1.9, -7.8)), new THREE.Vector3(12.0, 3.8, 1.2));
 
         // NPC Nova
         InteractionSystem.getInstance().register({
@@ -589,24 +591,25 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
           color={floor === 2 ? '#0b1324' : currentTheme.floor}
           roughness={0.25}
           metalness={0.7}
+          side={THREE.DoubleSide}
         />
       </mesh>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 4.5, 0]}>
         <planeGeometry args={[22, 18]} />
-        <meshStandardMaterial color="#070c18" roughness={0.7} />
+        <meshStandardMaterial color="#070c18" roughness={0.7} side={THREE.DoubleSide} />
       </mesh>
 
       {/* North Wall (Back) — On Floor 2, becomes a stunning panoramic observation window! */}
       {floor === 1 ? (
         <mesh position={[0, 2.25, -9]} receiveShadow>
           <boxGeometry args={[22, 4.5, 0.2]} />
-          <meshStandardMaterial color={currentTheme.wall} roughness={0.5} metalness={0.5} />
+          <meshStandardMaterial color={currentTheme.wall} roughness={0.5} metalness={0.5} side={THREE.DoubleSide} />
         </mesh>
       ) : (
         <group position={[0, 2.25, -9]}>
           <mesh receiveShadow>
             <boxGeometry args={[22, 4.5, 0.2]} />
-            <meshStandardMaterial color="#020617" roughness={0.3} metalness={0.9} />
+            <meshStandardMaterial color="#020617" roughness={0.3} metalness={0.9} side={THREE.DoubleSide} />
           </mesh>
           {/* Panoramic Skyline Window Glass */}
           <mesh position={[0, 0.2, 0.05]}>
@@ -617,11 +620,12 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
               opacity={0.35}
               roughness={0.05}
               metalness={0.95}
+              side={THREE.DoubleSide}
             />
           </mesh>
           <mesh position={[0, -1.5, 0.15]}>
             <boxGeometry args={[18.2, 0.15, 0.2]} />
-            <meshBasicMaterial color="#00f0ff" />
+            <meshBasicMaterial color="#00f0ff" side={THREE.DoubleSide} />
           </mesh>
         </group>
       )}
@@ -629,64 +633,88 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
       {/* South Wall */}
       <mesh position={[0, 2.25, 9]} receiveShadow>
         <boxGeometry args={[22, 4.5, 0.2]} />
-        <meshStandardMaterial color={currentTheme.wall} roughness={0.5} metalness={0.5} />
+        <meshStandardMaterial color={currentTheme.wall} roughness={0.5} metalness={0.5} side={THREE.DoubleSide} />
       </mesh>
       {/* West Wall */}
       <mesh position={[-11, 2.25, 0]} receiveShadow>
         <boxGeometry args={[0.2, 4.5, 18]} />
-        <meshStandardMaterial color={currentTheme.wall} roughness={0.5} metalness={0.5} />
+        <meshStandardMaterial color={currentTheme.wall} roughness={0.5} metalness={0.5} side={THREE.DoubleSide} />
       </mesh>
       {/* East Wall */}
       <mesh position={[11, 2.25, 0]} receiveShadow>
         <boxGeometry args={[0.2, 4.5, 18]} />
-        <meshStandardMaterial color={currentTheme.wall} roughness={0.5} metalness={0.5} />
+        <meshStandardMaterial color={currentTheme.wall} roughness={0.5} metalness={0.5} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Ceiling Neon Recessed Channels */}
       <mesh position={[0, 4.48, -4]}>
         <boxGeometry args={[18, 0.05, 0.3]} />
-        <meshBasicMaterial color={floor === 2 ? '#00f0ff' : currentTheme.accent} />
+        <meshBasicMaterial color={floor === 2 ? '#00f0ff' : currentTheme.accent} side={THREE.DoubleSide} />
       </mesh>
       <mesh position={[0, 4.48, 4]}>
         <boxGeometry args={[18, 0.05, 0.3]} />
-        <meshBasicMaterial color={floor === 2 ? '#00f0ff' : currentTheme.accent} />
+        <meshBasicMaterial color={floor === 2 ? '#00f0ff' : currentTheme.accent} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Dedicated High-Visibility Interior Lighting Rig */}
-      <ambientLight intensity={1.15} color="#e0f2fe" />
+      <ambientLight intensity={1.25} color="#e0f2fe" />
+      <directionalLight position={[0, 4.4, 0]} intensity={1.0} color="#ffffff" />
       <pointLight
         position={[0, 4.0, 0]}
         color={floor === 2 ? '#38bdf8' : currentTheme.light}
         distance={26}
-        intensity={3.5}
+        intensity={3.8}
         decay={1.8}
       />
       <pointLight
         position={[-6, 3.8, -4]}
         color={floor === 2 ? '#00f0ff' : currentTheme.accent}
         distance={18}
-        intensity={2.2}
+        intensity={2.5}
         decay={2}
       />
       <pointLight
         position={[6, 3.8, -4]}
         color={floor === 2 ? '#00f0ff' : currentTheme.accent}
         distance={18}
-        intensity={2.2}
+        intensity={2.5}
         decay={2}
       />
-      <pointLight position={[0, 3.2, 7.5]} color="#ffffff" distance={12} intensity={2.0} decay={2} />
+      <pointLight position={[0, 3.2, 7.5]} color="#ffffff" distance={14} intensity={2.5} decay={2} />
 
-      {/* Exit Doorway Frame & Glowing Indicator (Floor 1 Only) */}
+      {/* Spawn Arrival Marker Beacon on Floor */}
+      <group position={[0, 0.02, 5.5]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.45, 0.65, 32]} />
+          <meshBasicMaterial color="#00f0ff" side={THREE.DoubleSide} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.12, 16]} />
+          <meshBasicMaterial color="#00ffaa" side={THREE.DoubleSide} />
+        </mesh>
+      </group>
+
+      {/* Exit Doorway Frame, Neon Sign & Glowing Indicator (Floor 1 Only) */}
       {floor === 1 && (
         <group position={[0, 0, 0]}>
           <mesh position={[0, 1.8, 8.85]}>
-            <boxGeometry args={[3.2, 3.6, 0.2]} />
+            <boxGeometry args={[3.4, 3.6, 0.2]} />
             <meshStandardMaterial color="#020617" metalness={0.9} />
           </mesh>
-          <mesh position={[0, 3.65, 8.88]}>
-            <boxGeometry args={[2.8, 0.4, 0.05]} />
+          {/* Glowing Green Door Border */}
+          <mesh position={[0, 1.8, 8.88]}>
+            <boxGeometry args={[3.2, 3.4, 0.05]} />
+            <meshBasicMaterial color="#00ffaa" wireframe />
+          </mesh>
+          {/* Neon Header Sign */}
+          <mesh position={[0, 3.7, 8.88]}>
+            <boxGeometry args={[2.8, 0.4, 0.08]} />
             <meshBasicMaterial color="#00ffaa" />
+          </mesh>
+          {/* Floor Exit Guide Strip */}
+          <mesh position={[0, 0.02, 7.2]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[1.2, 2.8]} />
+            <meshBasicMaterial color="#00ffaa" transparent opacity={0.35} side={THREE.DoubleSide} />
           </mesh>
         </group>
       )}
@@ -712,8 +740,8 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
         <pointLight
           position={[-1.0, 2.5, 0]}
           color={floor === 1 ? '#00f0ff' : '#ffaa00'}
-          distance={4}
-          intensity={2.0}
+          distance={5}
+          intensity={2.5}
         />
       </group>
 
@@ -722,37 +750,100 @@ export const ProceduralInterior: React.FC<ProceduralInteriorProps> = ({ type, on
           ========================================================= */}
       {floor === 1 && (
         <>
-          {/* 1. LAB: Quantum Reactor Core & Nova */}
+          {/* 1. LAB: Quantum Reactor Core, Server Racks, Workstations & Nova */}
           {type === 'LAB' && (
             <group position={[0, 0, 0]}>
+              {/* Central Quantum Reactor Core Base */}
               <mesh position={[0, 0.25, 0]} receiveShadow>
                 <cylinderGeometry args={[2.4, 2.6, 0.5, 16]} />
                 <meshStandardMaterial color="#0b1324" metalness={0.9} />
               </mesh>
+              {/* Stepped Perimeter Ring */}
+              <mesh position={[0, 0.1, 0]}>
+                <cylinderGeometry args={[3.2, 3.4, 0.2, 16]} />
+                <meshStandardMaterial color="#070d18" metalness={0.95} />
+              </mesh>
+              {/* Glowing Reactor Core */}
               <mesh ref={coreRef} position={[0, 1.8, 0]}>
                 <octahedronGeometry args={[1.1, 0]} />
                 <meshBasicMaterial color="#00f0ff" wireframe />
               </mesh>
+              {/* Reactor Core Intense Light Source */}
+              <pointLight position={[0, 1.8, 0]} color="#00f0ff" intensity={35} distance={16} decay={1.5} />
+              {/* Dual Rotating Containment Rings */}
               <group ref={ringRef} position={[0, 1.8, 0]}>
                 <mesh>
                   <torusGeometry args={[1.8, 0.08, 8, 24]} />
                   <meshBasicMaterial color="#ff00aa" />
                 </mesh>
+                <mesh rotation={[Math.PI / 2, 0, 0]}>
+                  <torusGeometry args={[1.4, 0.06, 8, 24]} />
+                  <meshBasicMaterial color="#00ffaa" />
+                </mesh>
               </group>
-              {/* Workstations */}
-              <mesh position={[-6, 0.8, -4]}>
-                <boxGeometry args={[3.5, 1.6, 2]} />
-                <meshStandardMaterial color="#1e293b" />
-              </mesh>
-              <mesh position={[6, 0.8, -4]}>
-                <boxGeometry args={[3.5, 1.6, 2]} />
-                <meshStandardMaterial color="#1e293b" />
-              </mesh>
-              {/* Terminal Hologram */}
-              <mesh position={[5, 1.8, -3.8]}>
-                <boxGeometry args={[1.2, 0.8, 0.05]} />
-                <meshBasicMaterial color="#00f0ff" />
-              </mesh>
+
+              {/* 4 Mainframe Server Racks along North Wall */}
+              {[-4.5, -1.5, 1.5, 4.5].map((xOffset, idx) => (
+                <group key={idx} position={[xOffset, 0, -7.8]}>
+                  <mesh position={[0, 1.9, 0]} castShadow receiveShadow>
+                    <boxGeometry args={[1.5, 3.8, 0.8]} />
+                    <meshStandardMaterial color="#0a0f1d" metalness={0.85} roughness={0.3} />
+                  </mesh>
+                  <mesh position={[0, 1.9, 0.42]}>
+                    <boxGeometry args={[1.3, 3.5, 0.04]} />
+                    <meshStandardMaterial color="#030712" metalness={0.9} roughness={0.1} />
+                  </mesh>
+                  {[-1.2, -0.6, 0, 0.6, 1.2].map((yOffset, ledIdx) => (
+                    <mesh key={ledIdx} position={[0, 1.9 + yOffset, 0.45]}>
+                      <boxGeometry args={[1.1, 0.06, 0.02]} />
+                      <meshBasicMaterial color={ledIdx % 2 === 0 ? '#00ffaa' : '#00f0ff'} />
+                    </mesh>
+                  ))}
+                </group>
+              ))}
+
+              {/* Workstations with Dual Holographic Displays */}
+              <group position={[-6, 0, -4]}>
+                <mesh position={[0, 0.8, 0]}>
+                  <boxGeometry args={[3.5, 1.6, 2]} />
+                  <meshStandardMaterial color="#1e293b" metalness={0.6} roughness={0.4} />
+                </mesh>
+                <mesh position={[-0.8, 1.8, 0.2]} rotation={[0, 0.25, 0]}>
+                  <boxGeometry args={[1.2, 0.8, 0.05]} />
+                  <meshBasicMaterial color="#00f0ff" />
+                </mesh>
+                <mesh position={[0.8, 1.8, 0.2]} rotation={[0, -0.25, 0]}>
+                  <boxGeometry args={[1.2, 0.8, 0.05]} />
+                  <meshBasicMaterial color="#38bdf8" />
+                </mesh>
+              </group>
+              <group position={[6, 0, -4]}>
+                <mesh position={[0, 0.8, 0]}>
+                  <boxGeometry args={[3.5, 1.6, 2]} />
+                  <meshStandardMaterial color="#1e293b" metalness={0.6} roughness={0.4} />
+                </mesh>
+                <mesh position={[-0.5, 1.8, 0.2]}>
+                  <boxGeometry args={[1.3, 0.8, 0.05]} />
+                  <meshBasicMaterial color="#00f0ff" />
+                </mesh>
+                <mesh position={[0.9, 1.8, 0.2]} rotation={[0, -0.2, 0]}>
+                  <boxGeometry args={[1.0, 0.7, 0.05]} />
+                  <meshBasicMaterial color="#ff00aa" />
+                </mesh>
+              </group>
+
+              {/* Quantum Telemetry Terminal with Glowing Screen */}
+              <group position={[5, 0, -3]}>
+                <mesh position={[0, 1.0, 0]}>
+                  <cylinderGeometry args={[0.3, 0.35, 2.0, 8]} />
+                  <meshStandardMaterial color="#0f172a" metalness={0.9} />
+                </mesh>
+                <mesh position={[0, 2.1, 0]} rotation={[-0.3, 0, 0]}>
+                  <boxGeometry args={[0.8, 0.5, 0.05]} />
+                  <meshBasicMaterial color="#00ffaa" />
+                </mesh>
+              </group>
+
               {/* NPC Dr. Nova */}
               <InteriorHumanoid
                 position={[-5, 0, -3]}

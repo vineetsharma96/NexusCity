@@ -221,8 +221,43 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       {/* Interior Development Debug Overlay */}
       <InteriorDebugOverlay interiorState={interiorState} playerPosRef={playerPosRef} />
 
-      {/* 360° Horizontal Compass Tape */}
-      <CompassTape playerPosRef={playerPosRef} />
+      {/* 360° Horizontal Compass Tape (Exterior Only) */}
+      {interiorState.worldMode === 'WORLD_ACTIVE' && (
+        <CompassTape playerPosRef={playerPosRef} />
+      )}
+
+      {/* Active Interior Sector Telemetry Badge */}
+      {interiorState.worldMode !== 'WORLD_ACTIVE' && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 14,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 85,
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 16px',
+            background: 'rgba(5, 12, 24, 0.85)',
+            border: '1px solid rgba(0, 240, 255, 0.4)',
+            borderRadius: 4,
+            boxShadow: '0 0 15px rgba(0, 240, 255, 0.2)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.75rem',
+            letterSpacing: '2px',
+          }}
+        >
+          <span style={{ color: '#00f0ff', fontWeight: 900 }}>INTERIOR //</span>
+          <span style={{ color: '#ffffff', fontWeight: 700 }}>
+            {interiorState.name || 'FACILITY'}
+          </span>
+          <span style={{ color: 'var(--neon-amber)', fontSize: '0.68rem' }}>
+            [LVL {interiorState.currentFloor || 1}]
+          </span>
+        </div>
+      )}
 
       {/* District Discovery Notification Banner */}
       {chunkState.recentDiscovery && (

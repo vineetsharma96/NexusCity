@@ -120,6 +120,10 @@ export class InteriorManager {
     this.isTransitioning = true;
     this.lastError = null;
     this.savedExteriorBuildingId = dest.buildingId || destinationId;
+    this.currentInterior = dest.interiorId;
+    this.currentDestinationId = destinationId;
+    this.activeDestination = dest;
+    this.currentFloor = 1;
     AudioManager.getInstance().duck(1.5, 0.2);
 
     // Save exterior return point (using destination's specified exitPosition if available)
@@ -135,12 +139,8 @@ export class InteriorManager {
     // Trigger visual fade transition and minimap hide
     this.notify();
 
-    // Step 2: Under cover of fade, switch scene and teleport player
+    // Step 2: Under cover of fade, activate interior scene and teleport player
     setTimeout(() => {
-      this.currentInterior = dest.interiorId;
-      this.currentDestinationId = destinationId;
-      this.activeDestination = dest;
-      this.currentFloor = 1;
       this.worldMode = 'INTERIOR_ACTIVE';
 
       SaveSystem.getInstance().updateInterior(dest.interiorId, 1);

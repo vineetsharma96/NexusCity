@@ -95,7 +95,12 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
     if (currentFocus.current.distanceToSquared(targetFocus) > 225) {
       // Teleport focus point immediately to prevent 80m subterranean ground lerp
       currentFocus.current.copy(targetFocus);
-      currentRadius.current = isIndoor ? 3.0 : 8.0;
+      currentRadius.current = isIndoor ? 2.8 : 8.0;
+      if (isIndoor) {
+        // Face North into the interior facility towards reactor/consoles
+        spherical.current.theta = Math.PI;
+        spherical.current.phi = 1.35;
+      }
     } else {
       currentFocus.current.lerp(targetFocus, THREE.MathUtils.clamp(delta * 10, 0, 1));
     }

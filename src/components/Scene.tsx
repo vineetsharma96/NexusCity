@@ -73,8 +73,18 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
     InteriorManager.getInstance().exit(handleTeleport);
   };
 
-  const isWorldMode = interiorState.worldMode === 'WORLD_ACTIVE' || interiorState.worldMode === 'INTERIOR_TRANSITION_IN';
-  const isInteriorMode = interiorState.worldMode === 'INTERIOR_ACTIVE' || interiorState.worldMode === 'INTERIOR_TRANSITION_OUT';
+  const worldRootRef = useRef<THREE.Group>(null);
+  const interiorRootRef = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__NEXUS_INTERIOR_ROOT__ = interiorRootRef;
+      (window as any).__NEXUS_WORLD_ROOT__ = worldRootRef;
+    }
+  }, []);
+
+  const isWorldVisible = interiorState.worldMode === 'WORLD_ACTIVE' || interiorState.worldMode === 'INTERIOR_TRANSITION_IN';
+  const isInteriorVisible = interiorState.worldMode !== 'WORLD_ACTIVE';
 
   return (
     <Canvas
@@ -98,8 +108,8 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       {/* ========================================================
           WORLD ROOT: Exterior Metropolis Infrastructure & Simulation
           ======================================================== */}
-      <group name="worldRoot" visible={interiorState.worldMode !== 'INTERIOR_ACTIVE'}>
-        {(isWorldMode || interiorState.worldMode === 'INTERIOR_TRANSITION_OUT') && (
+      <group ref={worldRootRef} name="worldRoot" visible={isWorldVisible}>
+        {(isWorldVisible || interiorState.worldMode === 'INTERIOR_TRANSITION_OUT') && (
           <>
             <CityDistrict seed={847291} />
             <NavigationRibbon />
@@ -135,7 +145,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       {/* ========================================================
           INTERIOR ROOT: Procedural Interior Facilities & Dedicated Rig
           ======================================================== */}
-      <group name="interiorRoot" visible={isInteriorMode}>
+      <group ref={interiorRootRef} name="interiorRoot" visible={isInteriorVisible}>
         {interiorState.current !== 'NONE' && (
           <ProceduralInterior
             type={interiorState.current}
