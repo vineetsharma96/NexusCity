@@ -65,8 +65,8 @@ export class KinematicController {
     const targetVelX = isMoving ? worldDir.x * maxSpeed : 0;
     const targetVelZ = isMoving ? worldDir.z * maxSpeed : 0;
 
-    // 2. Horizontal Acceleration / Deceleration (tighter, more responsive damping)
-    const accelRate = isMoving ? this.acceleration : this.friction;
+    // 2. Horizontal Acceleration / Deceleration (smooth momentum curves)
+    const accelRate = isMoving ? (input.sprint ? 42.0 : 34.0) : 26.0;
     this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, accelRate, dt);
     this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, accelRate, dt);
 
@@ -95,12 +95,18 @@ export class KinematicController {
     );
 
     const onFloor = this.position.y <= groundInfo.height + 0.08;
+    const wasGrounded = this.isGrounded;
 
     if (onFloor && this.velocity.y <= 0.1) {
       this.isGrounded = true;
       this.coyoteTimer = this.coyoteTime;
       this.position.y = groundInfo.height;
       this.velocity.y = 0;
+
+      // Detect landing impact after airborne phase
+      if (!wasGrounded) {
+        AudioManager.getInstance().playLand(groundInfo.surface);
+      }
     } else {
       this.coyoteTimer = Math.max(0, this.coyoteTimer - dt);
       this.isGrounded = false;
@@ -117,16 +123,16 @@ export class KinematicController {
       AudioManager.getInstance().playJump();
     }
 
-    // 5b. Procedural Footstep Audio
+    // 5b. Surface-Aware Procedural Footstep Audio
     if (this.isGrounded && horizontalSpeed > 0.8) {
-      const strideTime = input.sprint ? 0.32 : 0.52;
+      const strideTime = input.sprint ? 0.30 : 0.48;
       this.footstepTimer += dt;
       if (this.footstepTimer >= strideTime) {
         this.footstepTimer = 0;
-        AudioManager.getInstance().playFootstep(input.sprint);
+        AudioManager.getInstance().playFootstep(groundInfo.surface, input.sprint);
       }
     } else {
-      this.footstepTimer = 0.24;
+      this.footstepTimer = 0.22;
     }
 
     // 6. Apply Movement & Horizontal Collision Resolution

@@ -1,5 +1,13 @@
 import * as THREE from 'three';
 
+export type SurfaceType = 'ROAD' | 'CONCRETE' | 'GRASS' | 'METAL';
+
+export interface GroundInfo {
+  height: number;
+  onRamp: boolean;
+  surface: SurfaceType;
+}
+
 export interface CollisionBox {
   min: THREE.Vector3;
   max: THREE.Vector3;
@@ -152,7 +160,7 @@ export class KinematicCollisionSolver {
   /**
    * Evaluates ground height under player at given (x, z).
    */
-  public static getGroundHeightAt(x: number, z: number, currentY: number): { height: number; onRamp: boolean } {
+  public static getGroundHeightAt(x: number, z: number, currentY: number): GroundInfo {
     let groundHeight = 0.0; // World surface baseline at 0.0m
     let onRamp = false;
 
@@ -198,6 +206,24 @@ export class KinematicCollisionSolver {
       }
     }
 
-    return { height: groundHeight, onRamp };
+    // Determine surface type
+    let surface: SurfaceType = 'CONCRETE';
+    if (onRamp || groundHeight > 1.8) {
+      surface = 'METAL';
+    } else if (x >= 45 && x <= 105 && z >= 45 && z <= 105) {
+      // Park Sanctuary grounds
+      surface = 'GRASS';
+    } else {
+      // Check if on road surface
+      const isCentralAvenue = Math.abs(x) <= 8.5;
+      const isCrossStreet = Math.abs(z) <= 7.5 || Math.abs(z - 75) <= 7.0 || Math.abs(z + 75) <= 7.0;
+      if (isCentralAvenue || isCrossStreet) {
+        surface = 'ROAD';
+      } else {
+        surface = 'CONCRETE';
+      }
+    }
+
+    return { height: groundHeight, onRamp, surface };
   }
 }

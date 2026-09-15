@@ -16,6 +16,8 @@ export interface PlayerControllerProps {
   registerTeleport?: (teleportFn: (pos: THREE.Vector3) => void) => void;
 }
 
+import { ContactShadowDecal } from './ContactShadowDecal';
+
 export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef, registerTeleport }) => {
   // Controller instance
   const controllerRef = useRef<KinematicController>(new KinematicController());
@@ -142,8 +144,11 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
     }
   });
 
+  const posRef = playerPosRef || { current: kinematicState.position };
+
   return (
     <>
+      <ContactShadowDecal playerPosRef={posRef as React.MutableRefObject<THREE.Vector3>} isGrounded={kinematicState.isGrounded} />
       <ProceduralProtagonist state={kinematicState} />
       <PlayerCamera
         targetPos={kinematicState.position}

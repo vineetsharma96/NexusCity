@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type TimeOfDayPhase = 'DAWN' | 'DAY' | 'SUNSET' | 'DUSK' | 'NIGHT';
+export type TimeOfDayPhase = 'DAWN' | 'DAY' | 'GOLDEN_HOUR' | 'SUNSET' | 'BLUE_HOUR' | 'DUSK' | 'NIGHT';
 
 export interface TimeLightingState {
   hour: number;
@@ -40,7 +40,7 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
     celestialColor: '#93c5fd',
     hemiSkyColor: '#101726',
     hemiGroundColor: '#060912',
-    celestialIntensity: 0.8,
+    celestialIntensity: 0.85,
     ambientIntensity: 0.24,
     nightFactor: 1.0,
   },
@@ -59,20 +59,20 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
   {
     hour: 5.75,
     phase: 'DAWN',
-    skyColor: '#121428',
-    fogColor: '#14172c',
+    skyColor: '#14142b',
+    fogColor: '#181732',
     celestialColor: '#fb923c',
     hemiSkyColor: '#f59e0b',
     hemiGroundColor: '#0e1626',
-    celestialIntensity: 1.6,
+    celestialIntensity: 1.7,
     ambientIntensity: 0.35,
     nightFactor: 0.5,
   },
   {
     hour: 6.75,
     phase: 'DAWN',
-    skyColor: '#1c1c38',
-    fogColor: '#222040',
+    skyColor: '#1c1c3c',
+    fogColor: '#222046',
     celestialColor: '#fed7aa',
     hemiSkyColor: '#f97316',
     hemiGroundColor: '#172033',
@@ -105,52 +105,64 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
     nightFactor: 0.0,
   },
   {
-    hour: 16.5,
+    hour: 16.25,
     phase: 'DAY',
-    skyColor: '#15223e',
-    fogColor: '#15223e',
+    skyColor: '#172545',
+    fogColor: '#172545',
     celestialColor: '#fef3c7',
     hemiSkyColor: '#6ba6e8',
     hemiGroundColor: '#1e283a',
-    celestialIntensity: 2.4,
+    celestialIntensity: 2.45,
     ambientIntensity: 0.47,
     nightFactor: 0.05,
   },
   {
-    hour: 17.75,
+    hour: 17.25,
+    phase: 'GOLDEN_HOUR',
+    skyColor: '#2c182c',
+    fogColor: '#361a32',
+    celestialColor: '#ffa834',
+    hemiSkyColor: '#fb923c',
+    hemiGroundColor: '#c2410c',
+    celestialIntensity: 2.35,
+    ambientIntensity: 0.44,
+    nightFactor: 0.22,
+  },
+  {
+    hour: 18.25,
     phase: 'SUNSET',
-    skyColor: '#2a1426',
-    fogColor: '#33162c',
-    celestialColor: '#ff7700',
-    hemiSkyColor: '#c084fc',
-    hemiGroundColor: '#ea580c',
-    celestialIntensity: 2.3,
-    ambientIntensity: 0.43,
-    nightFactor: 0.35,
+    skyColor: '#241026',
+    fogColor: '#2e122d',
+    celestialColor: '#ff5500',
+    hemiSkyColor: '#d946ef',
+    hemiGroundColor: '#991b1b',
+    celestialIntensity: 2.15,
+    ambientIntensity: 0.40,
+    nightFactor: 0.45,
   },
   {
-    hour: 19.25,
+    hour: 19.15,
+    phase: 'BLUE_HOUR',
+    skyColor: '#141838',
+    fogColor: '#141838',
+    celestialColor: '#6366f1',
+    hemiSkyColor: '#3b82f6',
+    hemiGroundColor: '#1e1b4b',
+    celestialIntensity: 1.6,
+    ambientIntensity: 0.35,
+    nightFactor: 0.72,
+  },
+  {
+    hour: 20.25,
     phase: 'DUSK',
-    skyColor: '#160e22',
-    fogColor: '#1a1028',
-    celestialColor: '#818cf8',
-    hemiSkyColor: '#7c3aed',
-    hemiGroundColor: '#7c2d12',
-    celestialIntensity: 1.5,
-    ambientIntensity: 0.34,
-    nightFactor: 0.7,
-  },
-  {
-    hour: 20.75,
-    phase: 'NIGHT',
-    skyColor: '#080a18',
-    fogColor: '#080a18',
+    skyColor: '#0b0e22',
+    fogColor: '#0b0e22',
     celestialColor: '#60a5fa',
-    hemiSkyColor: '#1e293b',
-    hemiGroundColor: '#0c1322',
-    celestialIntensity: 1.0,
-    ambientIntensity: 0.28,
-    nightFactor: 0.95,
+    hemiSkyColor: '#253350',
+    hemiGroundColor: '#0f172a',
+    celestialIntensity: 1.2,
+    ambientIntensity: 0.30,
+    nightFactor: 0.88,
   },
   {
     hour: 24.0,
@@ -160,7 +172,7 @@ const TIME_KEYFRAMES: TimeKeyframe[] = [
     celestialColor: '#93c5fd',
     hemiSkyColor: '#101726',
     hemiGroundColor: '#060912',
-    celestialIntensity: 0.8,
+    celestialIntensity: 0.85,
     ambientIntensity: 0.24,
     nightFactor: 1.0,
   },
@@ -245,10 +257,12 @@ export class TimeSystem {
 
     // Determine descriptive phase from current hour
     let phase: TimeOfDayPhase = 'DAY';
-    if (h >= 5.0 && h < 7.5) phase = 'DAWN';
-    else if (h >= 7.5 && h < 17.0) phase = 'DAY';
-    else if (h >= 17.0 && h < 19.0) phase = 'SUNSET';
-    else if (h >= 19.0 && h < 20.75) phase = 'DUSK';
+    if (h >= 5.0 && h < 7.25) phase = 'DAWN';
+    else if (h >= 7.25 && h < 16.75) phase = 'DAY';
+    else if (h >= 16.75 && h < 17.75) phase = 'GOLDEN_HOUR';
+    else if (h >= 17.75 && h < 18.75) phase = 'SUNSET';
+    else if (h >= 18.75 && h < 19.75) phase = 'BLUE_HOUR';
+    else if (h >= 19.75 && h < 21.0) phase = 'DUSK';
     else phase = 'NIGHT';
 
     // Format HH:MM

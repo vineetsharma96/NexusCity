@@ -422,49 +422,6 @@ export class AudioManager {
   // PROCEDURAL SOUND EFFECTS (SFX)
   // ==========================================
 
-  public playFootstep(isSprinting: boolean = false): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    const baseFreq = isSprinting ? 80 : 65;
-    osc.frequency.setValueAtTime(baseFreq, now);
-    osc.frequency.exponentialRampToValueAtTime(30, now + 0.06);
-
-    gain.gain.setValueAtTime(isSprinting ? 0.22 : 0.14, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start(now);
-    osc.stop(now + 0.07);
-  }
-
-  public playJump(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(140, now);
-    osc.frequency.exponentialRampToValueAtTime(280, now + 0.16);
-
-    gain.gain.setValueAtTime(0.2, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start(now);
-    osc.stop(now + 0.19);
-  }
-
   public playDoor(): void {
     if (!this.ctx || !this.sfxGain || this.isMuted) return;
 
@@ -724,6 +681,119 @@ export class AudioManager {
 
     osc.start(now);
     osc.stop(now + 0.13);
+  }
+
+  public playFootstep(surface: 'ROAD' | 'CONCRETE' | 'GRASS' | 'METAL' = 'CONCRETE', isSprint: boolean = false): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    const volScale = isSprint ? 1.25 : 1.0;
+
+    if (surface === 'CONCRETE') {
+      // Crisp synthetic boot impact on concrete
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.exponentialRampToValueAtTime(45, now + 0.05);
+
+      gain.gain.setValueAtTime(0.045 * volScale, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.065);
+    } else if (surface === 'ROAD') {
+      // Denser asphalt thud
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(110, now);
+      osc.frequency.exponentialRampToValueAtTime(38, now + 0.07);
+
+      gain.gain.setValueAtTime(0.055 * volScale, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.085);
+    } else if (surface === 'GRASS') {
+      // Soft muffled turf friction
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.createNoiseBuffer(0.08);
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(320, now);
+      filter.Q.setValueAtTime(1.5, now);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.035 * volScale, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxGain);
+      noise.start(now);
+      noise.stop(now + 0.075);
+    } else {
+      // Metallic catwalk clink
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(480, now);
+      osc.frequency.exponentialRampToValueAtTime(180, now + 0.06);
+
+      gain.gain.setValueAtTime(0.03 * volScale, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.065);
+    }
+  }
+
+  public playJump(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(160, now);
+    osc.frequency.exponentialRampToValueAtTime(340, now + 0.16);
+
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.19);
+  }
+
+  public playLand(surface: 'ROAD' | 'CONCRETE' | 'GRASS' | 'METAL' = 'CONCRETE'): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(95, now);
+    osc.frequency.exponentialRampToValueAtTime(30, now + 0.12);
+
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.15);
+
+    // Play surface resonance shortly after impact
+    this.playFootstep(surface, true);
   }
 
   public playSaveSound(): void {

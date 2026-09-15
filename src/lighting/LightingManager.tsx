@@ -163,8 +163,8 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
 
   // Calculate local streetlamp illumination points around player
   const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
-  const isNightTime = lighting.isNight || lighting.phase === 'DUSK' || lighting.phase === 'DAWN';
-  const nightIntensity = lighting.isNight ? 2.4 : 1.4;
+  const isNightTime = lighting.isNight || lighting.phase === 'DUSK' || lighting.phase === 'BLUE_HOUR' || lighting.phase === 'SUNSET' || lighting.phase === 'DAWN';
+  const nightIntensity = lighting.isNight ? 2.5 : lighting.phase === 'BLUE_HOUR' ? 2.0 : lighting.phase === 'DUSK' ? 2.2 : 1.4;
 
   return (
     <>
@@ -178,7 +178,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         args={[lighting.hemiSkyColor, lighting.hemiGroundColor, 1.2]}
       />
 
-      {/* Primary directional celestial light (Sun or Moon) with Realtime Dynamic Shadows */}
+      {/* Primary directional celestial light (Sun or Moon) with Realtime Dynamic Soft Shadows */}
       <directionalLight
         ref={dirLightRef}
         position={[pPos.x + lighting.celestialPosition.x, lighting.celestialPosition.y, pPos.z + lighting.celestialPosition.z]}
@@ -193,7 +193,8 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         shadow-camera-right={sDist}
         shadow-camera-top={sDist}
         shadow-camera-bottom={-sDist}
-        shadow-bias={-0.0004}
+        shadow-bias={-0.0003}
+        shadow-normalBias={0.035}
       />
 
       {/* Night Streetlamp & Neon Ground Bounce Arrays (smoothly lerped group) */}

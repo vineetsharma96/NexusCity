@@ -16,6 +16,8 @@ interface VehicleSim {
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   rotationY: number;
+  pitch: number;
+  lastSpeed: number;
   speed: number;
   cruisingSpeed: number;
   isBraking: boolean;
@@ -47,6 +49,7 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
   // Meshes for instanced rendering
   const groundBodyMesh = useRef<THREE.InstancedMesh>(null);
+  const groundShadowMesh = useRef<THREE.InstancedMesh>(null);
   const groundGlassMesh = useRef<THREE.InstancedMesh>(null);
   const groundHeadlightMesh = useRef<THREE.InstancedMesh>(null);
   const groundTaillightMesh = useRef<THREE.InstancedMesh>(null);
@@ -75,6 +78,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           position: new THREE.Vector3(laneX, 0.45, zStart),
           velocity: new THREE.Vector3(0, 0, laneDirection * speed),
           rotationY: laneDirection === 1 ? 0 : Math.PI,
+          pitch: 0,
+          lastSpeed: speed,
           speed,
           cruisingSpeed: speed,
           isBraking: false,
@@ -92,6 +97,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           position: new THREE.Vector3(xStart, 0.45, laneZ),
           velocity: new THREE.Vector3(laneDirection * speed, 0, 0),
           rotationY: laneDirection === 1 ? Math.PI / 2 : -Math.PI / 2,
+          pitch: 0,
+          lastSpeed: speed,
           speed,
           cruisingSpeed: speed,
           isBraking: false,
@@ -119,6 +126,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           position: new THREE.Vector3(xStart, altitude, offsetLane),
           velocity: new THREE.Vector3(laneDirection * speed, 0, 0),
           rotationY: laneDirection === 1 ? Math.PI / 2 : -Math.PI / 2,
+          pitch: 0,
+          lastSpeed: speed,
           speed,
           cruisingSpeed: speed,
           isBraking: false,
@@ -135,6 +144,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           position: new THREE.Vector3(offsetLane, altitude, zStart),
           velocity: new THREE.Vector3(0, 0, laneDirection * speed),
           rotationY: laneDirection === 1 ? 0 : Math.PI,
+          pitch: 0,
+          lastSpeed: speed,
           speed,
           cruisingSpeed: speed,
           isBraking: false,
@@ -153,6 +164,7 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
   // Shared Base Geometries
   const groundBodyGeo = useMemo(() => new THREE.BoxGeometry(1.8, 0.65, 4.2), []);
+  const groundShadowGeo = useMemo(() => new THREE.PlaneGeometry(2.2, 4.5), []);
   const groundGlassGeo = useMemo(() => new THREE.BoxGeometry(1.4, 0.45, 1.8), []);
   const headlightGeo = useMemo(() => new THREE.BoxGeometry(0.35, 0.12, 0.08), []);
   const taillightGeo = useMemo(() => new THREE.BoxGeometry(1.6, 0.12, 0.08), []);
@@ -285,9 +297,18 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           }
         }
 
-        // Smooth acceleration/braking transition
+        // Smooth acceleration/braking transition with suspension pitch response
         const accelRate = targetSpeed === 0 ? 5.5 : 2.2;
+        const prevSpeed = v.speed;
         v.speed = THREE.MathUtils.lerp(v.speed, targetSpeed, delta * accelRate);
+        const accelDelta = (v.speed - prevSpeed) / Math.max(0.001, delta);
+        v.lastSpeed = v.speed;
+
+        // Suspension pitch: dips on braking, lifts on acceleration, gentle idle hover bobbing
+        const hoverBob = Math.sin(now * 0.003 + i * 1.3) * 0.012;
+        const targetPitch = v.isBraking ? -0.065 : accelDelta > 1.0 ? 0.032 : hoverBob;
+        v.pitch = THREE.MathUtils.damp(v.pitch, targetPitch, 7.5, delta);
+
         if (v.axis === 'z') {
           v.velocity.z = v.direction * v.speed;
         } else {
@@ -335,9 +356,18 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
       const cosY = Math.cos(v.rotationY);
 
       if (v.type === 'GROUND' && groundBodyMesh.current) {
-        // Ground Cruiser Chassis
+        // Ground Contact Shadow on road
+        if (groundShadowMesh.current) {
+          dummy.position.set(v.position.x, 0.018, v.position.z);
+          dummy.rotation.set(-Math.PI / 2, 0, v.rotationY);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          groundShadowMesh.current.setMatrixAt(groundIdx, dummy.matrix);
+        }
+
+        // Ground Cruiser Chassis with Suspension Pitch
         dummy.position.copy(v.position);
-        dummy.rotation.set(0, v.rotationY, 0);
+        dummy.rotation.set(v.pitch, v.rotationY, 0);
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         groundBodyMesh.current.setMatrixAt(groundIdx, dummy.matrix);
@@ -345,6 +375,7 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
         // Canopy Cabin
         if (groundGlassMesh.current) {
           dummy.position.set(v.position.x, v.position.y + 0.45, v.position.z);
+          dummy.rotation.set(v.pitch, v.rotationY, 0);
           dummy.updateMatrix();
           groundGlassMesh.current.setMatrixAt(groundIdx, dummy.matrix);
         }
@@ -396,6 +427,10 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
       }
     }
 
+    if (groundShadowMesh.current) {
+      groundShadowMesh.current.count = groundIdx;
+      groundShadowMesh.current.instanceMatrix.needsUpdate = true;
+    }
     if (groundBodyMesh.current) {
       groundBodyMesh.current.count = groundIdx;
       groundBodyMesh.current.instanceMatrix.needsUpdate = true;
@@ -427,6 +462,14 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
   return (
     <group name="TrafficSystemLayer">
+      {/* 0. Ground Cruiser Contact Occlusion Shadow */}
+      <instancedMesh
+        ref={groundShadowMesh}
+        args={[groundShadowGeo, undefined, GROUND_COUNT]}
+      >
+        <meshBasicMaterial color="#000000" transparent opacity={0.62} depthWrite={false} />
+      </instancedMesh>
+
       {/* 1. Ground Cruiser Chassis */}
       <instancedMesh
         ref={groundBodyMesh}

@@ -566,7 +566,7 @@ const StreamedChunkView: React.FC<{
             ))}
             {/* Park Trees */}
             {park.trees.map((t) => (
-              <ProceduralTree key={t.id} tree={t} />
+              <ProceduralTree key={t.id} tree={t} registerGlobalCollider={true} />
             ))}
             {/* Park Bushes */}
             {park.bushes.map((b) => (
@@ -592,7 +592,7 @@ const StreamedChunkView: React.FC<{
       {/* 5. Sidewalk Trees & Avenue Planters (HIGH LOD only) */}
       {chunkInfo.lod === 'HIGH' &&
         data.trees.map((tree) => (
-          <ProceduralTree key={tree.id} tree={tree} />
+          <ProceduralTree key={tree.id} tree={tree} registerGlobalCollider={true} />
         ))}
 
       {/* 6. Sidewalk Bushes & Hedges (HIGH LOD only) */}

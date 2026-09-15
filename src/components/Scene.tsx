@@ -18,6 +18,8 @@ import { InputManager } from '../player/InputManager';
 import { NaturalClouds } from '../environment/NaturalClouds';
 import { DirtParticles } from '../city/DirtParticles';
 import { AtmosphericDetails } from '../city/AtmosphericDetails';
+import { PostProcessingManager } from '../rendering/PostProcessingManager';
+import { TimeSystem } from '../world/TimeSystem';
 
 // Inner component to hook into R3F render loop for telemetry and dynamic updates
 const SceneFrameLoop: React.FC = () => {
@@ -27,6 +29,11 @@ const SceneFrameLoop: React.FC = () => {
   useFrame(() => {
     perf.update(gl);
     (window as any).__NEXUS_CAMERA__ = camera;
+
+    // Dynamic Tone Mapping Exposure based on diurnal phase
+    const timeState = TimeSystem.getInstance().getState();
+    const targetExposure = timeState.isNight ? 1.35 : timeState.phase === 'SUNSET' ? 1.25 : 1.08;
+    gl.toneMappingExposure = THREE.MathUtils.lerp(gl.toneMappingExposure, targetExposure, 0.05);
   });
 
   return null;
@@ -59,14 +66,17 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
         antialias: quality.name !== 'LITE',
         powerPreference: 'high-performance',
         toneMapping: THREE.ACESFilmicToneMapping,
-        toneMappingExposure: 1.1,
+        toneMappingExposure: 1.12,
       }}
       onCreated={({ gl }) => {
+        gl.outputColorSpace = THREE.SRGBColorSpace;
+        gl.shadowMap.type = THREE.PCFSoftShadowMap;
         InputManager.init(gl.domElement);
       }}
       style={{ width: '100vw', height: '100vh' }}
     >
       <SceneFrameLoop />
+      <PostProcessingManager quality={quality} />
       <LightingManager quality={quality} playerPosRef={playerPosRef} />
 
       {/* ========================================================

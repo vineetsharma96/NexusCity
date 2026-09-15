@@ -138,7 +138,8 @@ export class WeatherSystem {
 
     // 3. Smooth interpolation (lerp)
     const lerpRate = Math.min(1.0, delta * 1.5);
-    const wetnessLerpRate = Math.min(1.0, delta * (targetWetness > this.wetnessFactor ? 0.8 : 0.25)); // Dry slowly, wet quickly
+    // Dynamic drying hysteresis: wet up quickly during rainfall, evaporate gradually over 45-60s post-rain
+    const wetnessLerpRate = Math.min(1.0, delta * (targetWetness > this.wetnessFactor ? 0.6 : 0.05));
 
     this.rainIntensity = THREE.MathUtils.lerp(this.rainIntensity, targetRain, lerpRate);
     this.wetnessFactor = THREE.MathUtils.lerp(this.wetnessFactor, targetWetness, wetnessLerpRate);
