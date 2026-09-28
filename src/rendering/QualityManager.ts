@@ -1,3 +1,5 @@
+import { WebGLCapabilities, WebGLDiagnosticInfo } from './WebGLCapabilities';
+
 export type QualityPreset = 'AUTO' | 'ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE' | 'CUSTOM';
 
 export interface QualitySettings {
@@ -15,8 +17,10 @@ export interface QualitySettings {
   NPCDensity: number;
   vehicleDensity: number;
   drawDistance: number;
+  maxActiveChunks: number;
   LODQuality: 'LOW' | 'MEDIUM' | 'HIGH';
   postProcessing: boolean;
+  bloom: boolean;
   volumetrics: boolean;
   antiAliasing: boolean;
   textureQuality: 'LOW' | 'MEDIUM' | 'HIGH';
@@ -31,26 +35,28 @@ export interface QualitySettings {
 export const QUALITY_PROFILES: Record<Exclude<QualityPreset, 'CUSTOM' | 'AUTO'>, QualitySettings> = {
   ULTRA: {
     name: 'ULTRA',
-    renderScale: 1.5,
-    dpr: [1, 2],
+    renderScale: 1.25,
+    dpr: [1, 1.75],
     shadows: true,
     shadowQuality: 'ULTRA',
     shadowMapSize: 2048,
-    shadowDistance: 250,
+    shadowDistance: 220,
     GIQuality: 'HIGH',
     reflectionQuality: 'HIGH',
     particleDensity: 1.0,
     vegetationDensity: 1.0,
     NPCDensity: 1.0,
     vehicleDensity: 1.0,
-    drawDistance: 2600,
+    drawDistance: 2000,
+    maxActiveChunks: 120,
     LODQuality: 'HIGH',
     postProcessing: true,
+    bloom: true,
     volumetrics: true,
     antiAliasing: true,
     textureQuality: 'HIGH',
     anisotropy: 8,
-    maxLights: 24,
+    maxLights: 20,
     particlesDensity: 1.0,
     cloudsEnabled: true,
     windParticlesEnabled: true,
@@ -58,107 +64,115 @@ export const QUALITY_PROFILES: Record<Exclude<QualityPreset, 'CUSTOM' | 'AUTO'>,
   },
   HIGH: {
     name: 'HIGH',
-    renderScale: 1.25,
-    dpr: [1, 1.75],
+    renderScale: 1.0,
+    dpr: [1, 1.25],
     shadows: true,
     shadowQuality: 'HIGH',
     shadowMapSize: 1024,
-    shadowDistance: 180,
+    shadowDistance: 150,
     GIQuality: 'MEDIUM',
     reflectionQuality: 'MEDIUM',
-    particleDensity: 0.8,
-    vegetationDensity: 0.9,
-    NPCDensity: 0.9,
-    vehicleDensity: 0.85,
-    drawDistance: 1800,
+    particleDensity: 0.75,
+    vegetationDensity: 0.8,
+    NPCDensity: 0.8,
+    vehicleDensity: 0.8,
+    drawDistance: 1400,
+    maxActiveChunks: 75,
     LODQuality: 'HIGH',
     postProcessing: true,
+    bloom: true,
     volumetrics: true,
     antiAliasing: true,
     textureQuality: 'HIGH',
     anisotropy: 4,
-    maxLights: 16,
-    particlesDensity: 0.8,
+    maxLights: 12,
+    particlesDensity: 0.75,
     cloudsEnabled: true,
     windParticlesEnabled: true,
     nightLightsEnabled: true,
   },
   MEDIUM: {
     name: 'MEDIUM',
-    renderScale: 1.0,
-    dpr: [1, 1.25],
+    renderScale: 0.9,
+    dpr: [0.9, 1.1],
     shadows: true,
     shadowQuality: 'MEDIUM',
     shadowMapSize: 512,
-    shadowDistance: 120,
+    shadowDistance: 90,
     GIQuality: 'LOW',
     reflectionQuality: 'LOW',
-    particleDensity: 0.5,
-    vegetationDensity: 0.7,
-    NPCDensity: 0.7,
-    vehicleDensity: 0.7,
-    drawDistance: 1200,
+    particleDensity: 0.45,
+    vegetationDensity: 0.6,
+    NPCDensity: 0.6,
+    vehicleDensity: 0.6,
+    drawDistance: 900,
+    maxActiveChunks: 45,
     LODQuality: 'MEDIUM',
     postProcessing: false,
+    bloom: false,
     volumetrics: false,
-    antiAliasing: true,
+    antiAliasing: false,
     textureQuality: 'MEDIUM',
     anisotropy: 2,
-    maxLights: 10,
-    particlesDensity: 0.5,
+    maxLights: 8,
+    particlesDensity: 0.45,
     cloudsEnabled: true,
     windParticlesEnabled: true,
     nightLightsEnabled: true,
   },
   LOW: {
     name: 'LOW',
-    renderScale: 0.85,
-    dpr: [0.85, 1],
+    renderScale: 0.8,
+    dpr: [0.8, 1.0],
     shadows: false,
     shadowQuality: 'OFF',
     shadowMapSize: 256,
-    shadowDistance: 80,
+    shadowDistance: 60,
     GIQuality: 'OFF',
     reflectionQuality: 'OFF',
     particleDensity: 0.25,
-    vegetationDensity: 0.5,
-    NPCDensity: 0.5,
-    vehicleDensity: 0.5,
-    drawDistance: 800,
+    vegetationDensity: 0.4,
+    NPCDensity: 0.4,
+    vehicleDensity: 0.4,
+    drawDistance: 650,
+    maxActiveChunks: 25,
     LODQuality: 'LOW',
     postProcessing: false,
-    volumetrics: false,
-    antiAliasing: false,
-    textureQuality: 'LOW',
-    anisotropy: 1,
-    maxLights: 6,
-    particlesDensity: 0.25,
-    cloudsEnabled: false,
-    windParticlesEnabled: false,
-    nightLightsEnabled: true,
-  },
-  LITE: {
-    name: 'LITE',
-    renderScale: 0.75,
-    dpr: [0.75, 1],
-    shadows: false,
-    shadowQuality: 'OFF',
-    shadowMapSize: 256,
-    shadowDistance: 50,
-    GIQuality: 'OFF',
-    reflectionQuality: 'OFF',
-    particleDensity: 0.1,
-    vegetationDensity: 0.3,
-    NPCDensity: 0.3,
-    vehicleDensity: 0.3,
-    drawDistance: 500,
-    LODQuality: 'LOW',
-    postProcessing: false,
+    bloom: false,
     volumetrics: false,
     antiAliasing: false,
     textureQuality: 'LOW',
     anisotropy: 1,
     maxLights: 4,
+    particlesDensity: 0.25,
+    cloudsEnabled: false,
+    windParticlesEnabled: false,
+    nightLightsEnabled: false,
+  },
+  LITE: {
+    name: 'LITE',
+    renderScale: 0.7,
+    dpr: [0.75, 0.9],
+    shadows: false,
+    shadowQuality: 'OFF',
+    shadowMapSize: 128,
+    shadowDistance: 40,
+    GIQuality: 'OFF',
+    reflectionQuality: 'OFF',
+    particleDensity: 0.1,
+    vegetationDensity: 0.2,
+    NPCDensity: 0.25,
+    vehicleDensity: 0.25,
+    drawDistance: 450,
+    maxActiveChunks: 16,
+    LODQuality: 'LOW',
+    postProcessing: false,
+    bloom: false,
+    volumetrics: false,
+    antiAliasing: false,
+    textureQuality: 'LOW',
+    anisotropy: 1,
+    maxLights: 2,
     particlesDensity: 0.1,
     cloudsEnabled: false,
     windParticlesEnabled: false,
@@ -166,34 +180,33 @@ export const QUALITY_PROFILES: Record<Exclude<QualityPreset, 'CUSTOM' | 'AUTO'>,
   },
 };
 
-const STORAGE_KEY = 'nexus_city_graphics_settings_v2';
+const STORAGE_KEY = 'nexus_city_graphics_settings_v3';
 
 type QualityChangeListener = (settings: QualitySettings) => void;
 
 class QualityManagerClass {
   private currentPreset: QualityPreset = 'AUTO';
-  private autoBasePreset: 'ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE' = 'HIGH';
+  private autoBasePreset: 'ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE' = 'MEDIUM';
   private customSettings: QualitySettings = {
-    ...QUALITY_PROFILES.HIGH,
+    ...QUALITY_PROFILES.MEDIUM,
     name: 'CUSTOM',
   };
   private listeners: Set<QualityChangeListener> = new Set();
+  private capabilities: WebGLDiagnosticInfo;
 
   constructor() {
+    this.capabilities = WebGLCapabilities.detect();
     this.init();
   }
 
   private init(): void {
-    // 1. Detect base tier for AUTO mode
+    // 1. Detect base tier for AUTO mode based on hardware and WebGL capabilities
     if (typeof window !== 'undefined') {
-      const isMobileUA = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
-        navigator.userAgent
-      );
-      const isSmallScreen = window.innerWidth < 768;
-      const isLowCores = typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4;
+      const caps = this.capabilities;
 
-      if (isMobileUA || (isSmallScreen && ('ontouchstart' in window || navigator.maxTouchPoints > 0))) {
-        this.autoBasePreset = isLowCores ? 'LOW' : 'MEDIUM';
+      if (caps.isVirGL || caps.isMobile || caps.isConstrained) {
+        // Safe, fluid baseline on VirGL / mobile Linux / PRoot
+        this.autoBasePreset = 'MEDIUM';
       } else {
         this.autoBasePreset = 'HIGH';
       }
@@ -210,7 +223,7 @@ class QualityManagerClass {
           }
           if (parsed.customSettings) {
             this.customSettings = {
-              ...QUALITY_PROFILES.HIGH,
+              ...QUALITY_PROFILES[this.autoBasePreset],
               ...parsed.customSettings,
               name: 'CUSTOM',
             };
@@ -238,12 +251,11 @@ class QualityManagerClass {
   }
 
   public get isMobileDevice(): boolean {
-    if (typeof window === 'undefined') return false;
-    const isMobileUA = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent
-    );
-    const isSmallScreen = window.innerWidth < 768;
-    return isMobileUA || (isSmallScreen && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
+    return this.capabilities.isMobile || this.capabilities.isVirGL;
+  }
+
+  public get isVirGLEnvironment(): boolean {
+    return this.capabilities.isVirGL;
   }
 
   public get current(): QualitySettings {
@@ -259,13 +271,18 @@ class QualityManagerClass {
       settings = QUALITY_PROFILES[this.currentPreset];
     }
 
-    // On mobile devices, clamp DPR to prevent severe GPU memory and fill-rate bottlenecks
-    if (this.isMobileDevice) {
+    // On mobile / VirGL environments, strictly cap DPR to prevent multi-million-pixel framebuffer crashes
+    if (this.isMobileDevice || this.isVirGLEnvironment) {
+      const maxAllowedDpr = this.capabilities.recommendedDpr;
       return {
         ...settings,
-        dpr: [Math.min(settings.dpr[0], 0.85), Math.min(settings.dpr[1], 1.25)],
+        dpr: [Math.min(settings.dpr[0], 0.85), Math.min(settings.dpr[1], maxAllowedDpr)],
+        // Guard bloom if float render targets are not supported
+        bloom: settings.bloom && this.capabilities.supportsHalfFloatRenderTarget,
+        postProcessing: settings.postProcessing && this.capabilities.supportsHalfFloatRenderTarget,
       };
     }
+
     return settings;
   }
 
@@ -278,7 +295,6 @@ class QualityManagerClass {
     this.currentPreset = preset;
 
     if (preset !== 'CUSTOM' && preset !== 'AUTO') {
-      // Sync custom baseline with selected profile
       this.customSettings = {
         ...QUALITY_PROFILES[preset],
         name: 'CUSTOM',
@@ -298,7 +314,7 @@ class QualityManagerClass {
       name: 'CUSTOM',
     };
     this.save();
-    const settings = this.customSettings;
+    const settings = this.current;
     this.listeners.forEach((listener) => listener(settings));
   }
 
@@ -315,7 +331,6 @@ class QualityManagerClass {
    */
   public throttleDown(): boolean {
     if (this.currentPreset !== 'AUTO') {
-      // Never overwrite or degrade CUSTOM or explicit user presets
       return false;
     }
 
@@ -332,5 +347,3 @@ class QualityManagerClass {
 }
 
 export const QualityManager = new QualityManagerClass();
-
-

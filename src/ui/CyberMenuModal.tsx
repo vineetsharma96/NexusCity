@@ -640,22 +640,41 @@ export const CyberMenuModal: React.FC<CyberMenuModalProps> = ({
                     {QualityManager.current.windParticlesEnabled ? '💨 PARTICLES: ON' : '💨 PARTICLES: OFF'}
                   </button>
 
-                  {/* Night Streetlights */}
+                  {/* Post-Processing Bloom */}
                   <button
                     onClick={() =>
                       QualityManager.updateCustomSettings({
-                        nightLightsEnabled: !QualityManager.current.nightLightsEnabled,
+                        bloom: !QualityManager.current.bloom,
+                        postProcessing: !QualityManager.current.bloom || QualityManager.current.volumetrics,
                       })
                     }
                     className="cyber-btn"
                     style={{
                       padding: '8px 10px',
                       fontSize: '0.75rem',
-                      color: QualityManager.current.nightLightsEnabled ? '#ec4899' : '#94a3b8',
-                      borderColor: QualityManager.current.nightLightsEnabled ? '#ec4899' : '#334155',
+                      color: QualityManager.current.bloom ? '#a855f7' : '#94a3b8',
+                      borderColor: QualityManager.current.bloom ? '#a855f7' : '#334155',
                     }}
                   >
-                    {QualityManager.current.nightLightsEnabled ? '💡 NIGHT LIGHTS: ON' : '💡 NIGHT LIGHTS: OFF'}
+                    {QualityManager.current.bloom ? '✨ BLOOM: ON' : '✨ BLOOM: OFF'}
+                  </button>
+
+                  {/* Volumetric Rays */}
+                  <button
+                    onClick={() =>
+                      QualityManager.updateCustomSettings({
+                        volumetrics: !QualityManager.current.volumetrics,
+                      })
+                    }
+                    className="cyber-btn"
+                    style={{
+                      padding: '8px 10px',
+                      fontSize: '0.75rem',
+                      color: QualityManager.current.volumetrics ? '#06b6d4' : '#94a3b8',
+                      borderColor: QualityManager.current.volumetrics ? '#06b6d4' : '#334155',
+                    }}
+                  >
+                    {QualityManager.current.volumetrics ? '⚡ VOLUMETRICS: ON' : '⚡ VOLUMETRICS: OFF'}
                   </button>
                 </div>
               </div>

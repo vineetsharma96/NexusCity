@@ -45,6 +45,7 @@ export interface SceneProps {
 
 export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) => {
   const [quality, setQuality] = useState<QualitySettings>(QualityManager.current);
+  const [isContextLost, setIsContextLost] = useState(false);
 
   const internalPosRef = useRef(new THREE.Vector3(0, 0.2, 10));
   const playerPosRef = externalPosRef || internalPosRef;
@@ -58,49 +59,104 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
   }, []);
 
   return (
-    <Canvas
-      shadows={quality.shadows}
-      dpr={quality.dpr}
-      camera={{ position: [0, 8, 16], fov: 60, near: 0.1, far: Math.max(3500, quality.drawDistance * 1.5) }}
-      gl={{
-        antialias: quality.name !== 'LITE',
-        powerPreference: 'high-performance',
-        toneMapping: THREE.ACESFilmicToneMapping,
-        toneMappingExposure: 1.12,
-      }}
-      onCreated={({ gl }) => {
-        gl.outputColorSpace = THREE.SRGBColorSpace;
-        gl.shadowMap.type = THREE.PCFSoftShadowMap;
-        InputManager.init(gl.domElement);
-      }}
-      style={{ width: '100vw', height: '100vh' }}
-    >
-      <SceneFrameLoop />
-      <PostProcessingManager quality={quality} />
-      <LightingManager quality={quality} playerPosRef={playerPosRef} />
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      {/* Context Lost Visual Guard Banner */}
+      {isContextLost && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: 'rgba(4, 7, 20, 0.85)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            color: '#00f0ff',
+            fontFamily: 'monospace',
+            letterSpacing: '1px',
+            backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem', fontWeight: 800 }}>
+            ⚠️ WEBGL CONTEXT INTERRUPTED
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+            Re-acquiring GPU hardware pipeline...
+          </div>
+        </div>
+      )}
 
-      {/* ========================================================
-          CONTINUOUS OUTDOOR METROPOLIS EXPLORATION
-          ======================================================== */}
-      <CityDistrict seed={847291} />
-      <NavigationRibbon />
-      <WorldManager playerPosRef={playerPosRef} />
-      <TrafficSystem playerPosRef={playerPosRef} />
-      <TrafficLightGantry position={[0, 0, 0]} />
-      <CrosswalkMarkings position={[0, 0, 0]} />
-      <ParkSanctuary position={[75, 0, 75]} />
-      <RainParticles playerPosRef={playerPosRef} />
-      {quality.cloudsEnabled && <NaturalClouds />}
-      {quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
-      <AtmosphericDetails playerPosRef={playerPosRef} />
-      <NPCCrowd playerPosRef={playerPosRef} />
-
-      <PlayerController
-        playerPosRef={playerPosRef}
-        registerTeleport={(fn) => {
-          teleportFnRef.current = fn;
+      <Canvas
+        shadows={quality.shadows}
+        dpr={quality.dpr}
+        camera={{
+          position: [0, 8, 16],
+          fov: 60,
+          near: 0.1,
+          far: Math.min(2500, Math.max(1000, quality.drawDistance * 1.3)),
         }}
-      />
-    </Canvas>
+        gl={{
+          antialias: quality.antiAliasing,
+          powerPreference: 'high-performance',
+          stencil: false,
+          depth: true,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.12,
+        }}
+        onCreated={({ gl }) => {
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          if (quality.shadows) {
+            gl.shadowMap.type = THREE.PCFSoftShadowMap;
+          }
+
+          const handleLost = (event: Event) => {
+            event.preventDefault();
+            console.warn('[Scene] WebGL context lost event captured; standing by for restoration');
+            setIsContextLost(true);
+          };
+
+          const handleRestored = () => {
+            console.info('[Scene] WebGL context restored successfully.');
+            setIsContextLost(false);
+          };
+
+          gl.domElement.addEventListener('webglcontextlost', handleLost, false);
+          gl.domElement.addEventListener('webglcontextrestored', handleRestored, false);
+
+          InputManager.init(gl.domElement);
+        }}
+        style={{ width: '100%', height: '100%' }}
+      >
+        <SceneFrameLoop />
+        <PostProcessingManager quality={quality} />
+        <LightingManager quality={quality} playerPosRef={playerPosRef} />
+
+        {/* ========================================================
+            CONTINUOUS OUTDOOR METROPOLIS EXPLORATION
+            ======================================================== */}
+        <CityDistrict seed={847291} />
+        <NavigationRibbon />
+        <WorldManager playerPosRef={playerPosRef} />
+        <TrafficSystem playerPosRef={playerPosRef} />
+        <TrafficLightGantry position={[0, 0, 0]} />
+        <CrosswalkMarkings position={[0, 0, 0]} />
+        <ParkSanctuary position={[75, 0, 75]} />
+        {quality.particleDensity > 0.05 && <RainParticles playerPosRef={playerPosRef} />}
+        {quality.cloudsEnabled && <NaturalClouds />}
+        {quality.windParticlesEnabled && quality.particleDensity > 0.05 && (
+          <DirtParticles playerPosRef={playerPosRef} />
+        )}
+        <AtmosphericDetails playerPosRef={playerPosRef} />
+        <NPCCrowd playerPosRef={playerPosRef} />
+
+        <PlayerController
+          playerPosRef={playerPosRef}
+          registerTeleport={(fn) => {
+            teleportFnRef.current = fn;
+          }}
+        />
+      </Canvas>
+    </div>
   );
 };

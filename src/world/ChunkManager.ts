@@ -142,10 +142,12 @@ export class ChunkManager {
 
     // 2. Evaluate Distance, Discovery & LOD for Each Chunk using active Quality Preset
     const quality = QualityManager.current;
-    const maxDrawDist = quality.drawDistance || 1200;
-    const highCutoff = quality.LODQuality === 'HIGH' ? 220 : quality.LODQuality === 'MEDIUM' ? 165 : 120;
-    const medCutoff = quality.LODQuality === 'HIGH' ? 440 : quality.LODQuality === 'MEDIUM' ? 330 : 240;
-    const lowCutoff = Math.min(maxDrawDist, quality.LODQuality === 'HIGH' ? 1800 : quality.LODQuality === 'MEDIUM' ? 1100 : 650);
+    const maxDrawDist = quality.drawDistance || 900;
+    const highCutoff = quality.LODQuality === 'HIGH' ? 200 : quality.LODQuality === 'MEDIUM' ? 140 : 100;
+    const medCutoff = quality.LODQuality === 'HIGH' ? 380 : quality.LODQuality === 'MEDIUM' ? 260 : 180;
+    const lowCutoff = Math.min(maxDrawDist, quality.LODQuality === 'HIGH' ? 1200 : quality.LODQuality === 'MEDIUM' ? 800 : 500);
+
+    const candidateChunks: { chunk: ChunkInfo; dist: number; lod: ChunkLOD }[] = [];
 
     this.chunks.forEach((chunk) => {
       const dist = playerPos.distanceTo(chunk.center);
@@ -158,19 +160,34 @@ export class ChunkManager {
         this.saveExploredChunks();
       }
 
-      let newLod: ChunkLOD = 'UNLOADED';
-      if (dist < highCutoff) {
-        newLod = 'HIGH';
-      } else if (dist < medCutoff) {
-        newLod = 'MEDIUM';
-      } else if (dist < lowCutoff) {
-        newLod = 'LOW';
+      if (dist < lowCutoff) {
+        let newLod: ChunkLOD = 'LOW';
+        if (dist < highCutoff) {
+          newLod = 'HIGH';
+        } else if (dist < medCutoff) {
+          newLod = 'MEDIUM';
+        }
+        candidateChunks.push({ chunk, dist, lod: newLod });
       } else {
-        newLod = 'UNLOADED';
+        if (chunk.lod !== 'UNLOADED') {
+          chunk.lod = 'UNLOADED';
+          stateChanged = true;
+        }
       }
+    });
 
-      if (chunk.lod !== newLod) {
-        chunk.lod = newLod;
+    // Enforce hard cap on active chunks to protect mobile / PRoot memory limits
+    const maxActive = quality.maxActiveChunks || 45;
+    if (candidateChunks.length > maxActive) {
+      candidateChunks.sort((a, b) => a.dist - b.dist);
+      for (let i = maxActive; i < candidateChunks.length; i++) {
+        candidateChunks[i].lod = 'UNLOADED';
+      }
+    }
+
+    candidateChunks.forEach(({ chunk, lod }) => {
+      if (chunk.lod !== lod) {
+        chunk.lod = lod;
         stateChanged = true;
       }
     });
