@@ -79,26 +79,26 @@ export class CityGenerator {
     const skybridges: SkybridgeDef[] = [];
     const streetProps: CentralStreetPropDef[] = [];
 
-    // Primary Arterial Avenues
+    // Primary Arterial Avenues (oriented along travel direction so lane textures never squash or Z-fight)
     avenues.push({
       position: new THREE.Vector3(0, 0.02, 0),
-      size: new THREE.Vector3(14, 0.05, 360),
+      size: new THREE.Vector3(14, 0.04, 360),
       rotationY: 0,
     });
     avenues.push({
-      position: new THREE.Vector3(0, 0.025, 0),
-      size: new THREE.Vector3(360, 0.05, 14),
-      rotationY: 0,
+      position: new THREE.Vector3(0, 0.018, 0),
+      size: new THREE.Vector3(14, 0.04, 360),
+      rotationY: Math.PI / 2,
     });
     avenues.push({
-      position: new THREE.Vector3(0, 0.025, -75),
-      size: new THREE.Vector3(360, 0.05, 12),
-      rotationY: 0,
+      position: new THREE.Vector3(0, 0.018, -75),
+      size: new THREE.Vector3(12, 0.04, 360),
+      rotationY: Math.PI / 2,
     });
     avenues.push({
-      position: new THREE.Vector3(0, 0.025, 75),
-      size: new THREE.Vector3(360, 0.05, 12),
-      rotationY: 0,
+      position: new THREE.Vector3(0, 0.018, 75),
+      size: new THREE.Vector3(12, 0.04, 360),
+      rotationY: Math.PI / 2,
     });
 
     const blockCenters: { x: number; z: number; w: number; d: number; name: string; minH: number; maxH: number }[] = [

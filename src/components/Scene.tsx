@@ -168,7 +168,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
         <WorldManager playerPosRef={playerPosRef} />
         {quality.trafficEnabled && <TrafficSystem playerPosRef={playerPosRef} />}
         <RideableTransitLayer playerPosRef={playerPosRef} />
-        {quality.trafficEnabled && <TrafficLightGantry position={[0, 0, 0]} />}
+        <TrafficLightGantry position={[0, 0, 0]} />
         <ParkSanctuary position={[75, 0, 75]} />
         {quality.particlesDensity > 0.02 &&
           (quality.rainParticlesEnabled || quality.windParticlesEnabled) && (

@@ -103,9 +103,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         <meshStandardMaterial color="#05080f" roughness={roadRoughness + 0.18} metalness={0.38} />
       </mesh>
 
-      {/* Central Civic Plaza */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} receiveShadow={quality.shadows}>
-        <planeGeometry args={[28, 28]} />
+      {/* Central Intersection & Civic Plaza Pad (top at y=0.048, cleanly above avenue tops 0.040 and inside ±15.2m crosswalks) */}
+      <mesh position={[0, 0.038, 0]} receiveShadow={quality.shadows}>
+        <boxGeometry args={[26.4, 0.02, 26.4]} />
         <meshStandardMaterial
           map={plazaTex}
           normalMap={quality.normalMapsEnabled ? asphaltNormal : undefined}
@@ -113,12 +113,29 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
           roughness={sidewalkRoughness * 0.75}
           metalness={sidewalkMetalness}
           envMapIntensity={envScale}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
         />
       </mesh>
 
+      {/* Secondary Avenue Junction Pads at z = -75 and z = +75 so N-S and E-W lane lines do not Z-fight */}
+      {([-75, 75] as const).map((jz) => (
+        <mesh key={`junc-${jz}`} position={[0, 0.036, jz]} receiveShadow={quality.shadows}>
+          <boxGeometry args={[14.2, 0.018, 12.2]} />
+          <meshStandardMaterial
+            color="#090d16"
+            normalMap={quality.normalMapsEnabled ? asphaltNormal : undefined}
+            roughness={roadRoughness}
+            metalness={roadMetalness}
+            envMapIntensity={envScale * 0.7}
+          />
+        </mesh>
+      ))}
+
       {/* Central Plaza Sunken Reflective Meridian Ring & Overhead Astrolabe */}
       <group name="CentralPlazaPavilion">
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.052, 0]}>
           <ringGeometry args={[5.4, 8.2, 48]} />
           <meshStandardMaterial
             color="#042f2e"
@@ -127,24 +144,27 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
             roughness={0.05}
             metalness={0.95}
             envMapIntensity={envScale * 1.4}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
           />
         </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.045, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.055, 0]}>
           <ringGeometry args={[5.2, 5.4, 48]} />
           <meshBasicMaterial color="#f59e0b" />
         </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.045, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.055, 0]}>
           <ringGeometry args={[8.2, 8.4, 48]} />
           <meshBasicMaterial color="#38bdf8" />
         </mesh>
 
-        {/* 4 Corner Architectural Light Pylons at Plaza Perimeter */}
+        {/* 4 Corner Architectural Light Pylons at Plaza Perimeter (outside crosswalks & traffic lanes) */}
         {(
           [
-            [-10.8, -10.8],
-            [10.8, -10.8],
-            [-10.8, 10.8],
-            [10.8, 10.8],
+            [-11.2, -11.2],
+            [11.2, -11.2],
+            [-11.2, 11.2],
+            [11.2, 11.2],
           ] as const
         ).map(([px, pz], idx) => (
           <group key={`pylon-${idx}`} position={[px, 0, pz]}>

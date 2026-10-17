@@ -131,13 +131,13 @@ export class ProceduralChunkGenerator {
     const roadWidth = 14;
     roads.push({
       position: new THREE.Vector3(centerX, 0.02, centerZ),
-      size: new THREE.Vector3(roadWidth, 0.05, size),
+      size: new THREE.Vector3(roadWidth, 0.04, size),
       rotationY: 0,
     });
     roads.push({
-      position: new THREE.Vector3(centerX, 0.025, centerZ),
-      size: new THREE.Vector3(size, 0.05, 12),
-      rotationY: 0,
+      position: new THREE.Vector3(centerX, 0.018, centerZ),
+      size: new THREE.Vector3(12, 0.04, size),
+      rotationY: Math.PI / 2,
     });
 
     const half = size / 2;
