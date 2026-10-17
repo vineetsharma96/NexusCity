@@ -235,6 +235,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
               />
               {/* Encrypted Sector Hex Icon */}
               <text
+                aria-hidden="true"
                 x={tileX + CHUNK_SVG_SIZE / 2}
                 y={tileY + CHUNK_SVG_SIZE / 2 + 3}
                 fill="rgba(255, 255, 255, 0.12)"
@@ -340,6 +341,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 className="cyber-btn"
                 style={{ padding: '3px 9px', fontSize: '0.8rem' }}
                 title="Zoom In"
+                aria-label="Zoom in"
               >
                 +
               </button>
@@ -348,6 +350,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 className="cyber-btn"
                 style={{ padding: '3px 9px', fontSize: '0.8rem' }}
                 title="Zoom Out"
+                aria-label="Zoom out"
               >
                 -
               </button>

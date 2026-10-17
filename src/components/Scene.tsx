@@ -26,13 +26,32 @@ import { LivingCityEventDisplay } from '../world/LivingCityEventDisplay';
 import { InteractiveTerminals } from '../world/InteractiveTerminals';
 import { NavigationRibbon } from '../map/NavigationRibbon';
 
-const InputLifecycle: React.FC = () => {
+const InputLifecycle: React.FC<{ onContextChange: (lost: boolean) => void }> = ({ onContextChange }) => {
   const { gl } = useThree();
 
   useEffect(() => {
     InputManager.init(gl.domElement);
-    return () => InputManager.dispose();
-  }, [gl]);
+    let wasBlocked = false;
+    const lost = (event: Event) => {
+      event.preventDefault();
+      wasBlocked = InputManager.isUIBlocked();
+      InputManager.setUIBlocking(true);
+      onContextChange(true);
+      window.dispatchEvent(new CustomEvent('nexus:webgl-context', { detail: { lost: true } }));
+    };
+    const restored = () => {
+      InputManager.setUIBlocking(wasBlocked);
+      onContextChange(false);
+      window.dispatchEvent(new CustomEvent('nexus:webgl-context', { detail: { lost: false } }));
+    };
+    gl.domElement.addEventListener('webglcontextlost', lost);
+    gl.domElement.addEventListener('webglcontextrestored', restored);
+    return () => {
+      InputManager.dispose();
+      gl.domElement.removeEventListener('webglcontextlost', lost);
+      gl.domElement.removeEventListener('webglcontextrestored', restored);
+    };
+  }, [gl, onContextChange]);
 
   return null;
 };
@@ -83,6 +102,7 @@ export interface SceneProps {
 
 export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) => {
   const [quality, setQuality] = useState<QualitySettings>(QualityManager.current);
+  const [isContextLost, setIsContextLost] = useState(false);
 
   const internalPosRef = useRef(new THREE.Vector3(0, 0.2, 10));
   const playerPosRef = externalPosRef || internalPosRef;
@@ -96,13 +116,21 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
   }, []);
 
   return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    {isContextLost && <div role="alert" style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'grid', placeContent: 'center', gap: 16, padding: 24, background: 'rgba(5, 8, 17, 0.96)', textAlign: 'center' }}>
+      <h2>Graphics session interrupted</h2>
+      <p>Waiting for the browser to restore the graphics connection.</p>
+      <button className="cyber-btn" onClick={() => { QualityManager.setPreset('LITE'); window.location.reload(); }}>Restart in Lite mode</button>
+    </div>}
     <Canvas
       shadows={quality.shadows}
       dpr={quality.dpr}
-      camera={{ position: [0, 8, 16], fov: 60, near: 0.1, far: Math.max(3500, quality.drawDistance * 1.5) }}
+      camera={{ position: [0, 8, 16], fov: 60, near: 0.1, far: Math.min(3500, Math.max(1000, quality.drawDistance * 1.3)) }}
       gl={{
         antialias: quality.antiAliasing,
         powerPreference: 'high-performance',
+        stencil: false,
+        depth: true,
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: 1.12,
       }}
@@ -112,7 +140,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       }}
       style={{ width: '100%', height: '100%' }}
     >
-      <InputLifecycle />
+      <InputLifecycle onContextChange={setIsContextLost} />
       <SceneFrameLoop />
       <PostProcessingManager quality={quality} />
       <LightingManager quality={quality} playerPosRef={playerPosRef} />
@@ -132,7 +160,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       <TrafficLightGantry position={[0, 0, 0]} />
       <CrosswalkMarkings position={[0, 0, 0]} />
       <ParkSanctuary position={[75, 0, 75]} />
-      <RainParticles playerPosRef={playerPosRef} />
+      {quality.particlesDensity > 0.05 && <RainParticles playerPosRef={playerPosRef} />}
       {quality.cloudsEnabled && <NaturalClouds />}
       {quality.windParticlesEnabled && <DirtParticles playerPosRef={playerPosRef} />}
       <AtmosphericDetails playerPosRef={playerPosRef} />
@@ -145,5 +173,6 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
         }}
       />
     </Canvas>
+    </div>
   );
 };

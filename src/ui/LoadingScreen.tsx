@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CinematicManager } from '../cinematics/CinematicManager';
+import { QualityManager } from '../rendering/QualityManager';
 
 export const LoadingScreen: React.FC = () => {
   const [isReady, setIsReady] = useState(false);
@@ -30,7 +31,7 @@ export const LoadingScreen: React.FC = () => {
         <div className="loading-track" aria-hidden="true"><span /></div>
         <span className="loading-caption">{isTakingLonger ? 'Preparing graphics…' : 'Architecture · streets · atmosphere'}</span>
         {isTakingLonger && <button className="cyber-btn" onClick={() => {
-          try { localStorage.setItem('nexus_city_graphics_settings_v2', JSON.stringify({ preset: 'LITE' })); } catch { /* Storage may be unavailable. */ }
+          QualityManager.setPreset('LITE');
           window.location.reload();
         }}>Restart in Lite mode</button>}
       </div>

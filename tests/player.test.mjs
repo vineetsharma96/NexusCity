@@ -206,3 +206,18 @@ test('published chunk snapshots retain their LOD and provide new memoized view p
     }
   }
 });
+
+test('chunk count budget changes apply while stationary and keep the nearest chunks', () => {
+  reset(); QualityManager.setPreset('HIGH');
+  QualityManager.updateCustomSettings({ maxActiveChunks: 75 });
+  const manager = new ChunkManager(); const position = new Vector3(0, 0, 0);
+  manager.updatePlayerPosition(position);
+  assert.equal(manager.getActiveChunks().length, 75);
+  QualityManager.updateCustomSettings({ maxActiveChunks: 20.9 });
+  manager.updatePlayerPosition(position);
+  const active = manager.getActiveChunks();
+  assert.equal(active.length, 20);
+  const furthestActive = Math.max(...active.map((chunk) => chunk.distanceToPlayer));
+  const nearestUnloaded = Math.min(...manager.getState().chunks.filter((chunk) => chunk.lod === 'UNLOADED').map((chunk) => chunk.distanceToPlayer));
+  assert.ok(furthestActive <= nearestUnloaded);
+});

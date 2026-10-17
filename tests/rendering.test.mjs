@@ -2,14 +2,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 
-async function graphics(saved = null) {
+async function graphics(saved = null, overrides = {}, legacy = null) {
   globalThis.window = { innerWidth: 1280 };
-  globalThis.localStorage = { getItem: () => saved === null ? null : JSON.stringify(saved), setItem() {} };
+  const writes = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => {
+      const data = key === 'nexus_city_graphics_settings_v3' ? saved : legacy;
+      return data === null ? null : JSON.stringify(data);
+    },
+    setItem: (key, value) => writes.set(key, value),
+  };
+  const capabilities = {
+    isMobile: false, isVirGL: false, isConstrained: false,
+    supportsHalfFloatRenderTarget: true, recommendedDpr: 1.5,
+    recommendedPreset: 'HIGH', ...overrides,
+  };
   const bundle = await build({
     stdin: { resolveDir: process.cwd(), contents: `export { QualityManager, QUALITY_PROFILES } from './src/rendering/QualityManager'; export { PerformanceMonitor } from './src/rendering/PerformanceMonitor';` },
     bundle: true, platform: 'node', format: 'esm', write: false,
+    plugins: [{ name: 'graphics-capability-fixture', setup(plugin) {
+      plugin.onResolve({ filter: /WebGLCapabilities$/ }, () => ({ path: 'capabilities', namespace: 'fixture' }));
+      plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: `export const WebGLCapabilities = { detect: () => (${JSON.stringify(capabilities)}) };` }));
+    } }],
   });
-  return import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}#${Math.random()}`);
+  const exports = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}#${Math.random()}`);
+  return { ...exports, writes };
 }
 
 test('invalid saved graphics preset recovers to AUTO', async () => {
@@ -20,10 +37,42 @@ test('invalid saved graphics preset recovers to AUTO', async () => {
 
 test('malformed custom graphics cannot break renderer dimensions', async () => {
   const { QualityManager } = await graphics({ preset: 'CUSTOM', customSettings: { dpr: null, drawDistance: 999999, shadows: 'yes', maxLights: -10 } });
-  assert.deepEqual(QualityManager.current.dpr, [1, 1.75]);
-  assert.equal(QualityManager.current.drawDistance, 2600);
+  assert.deepEqual(QualityManager.current.dpr, [0.9, 1.1]);
+  assert.equal(QualityManager.current.drawDistance, 2000);
   assert.equal(QualityManager.current.shadows, true);
   assert.ok(QualityManager.current.maxLights >= 0);
+});
+
+test('capability guards preserve manual profiles and chunk budgets while disabling unsupported targets', async () => {
+  const { QualityManager } = await graphics({ preset: 'ULTRA' }, {
+    isMobile: true, isConstrained: true, recommendedDpr: 0.75,
+    supportsHalfFloatRenderTarget: false,
+  });
+  assert.equal(QualityManager.preset, 'ULTRA');
+  assert.equal(QualityManager.current.maxActiveChunks, 120);
+  assert.deepEqual(QualityManager.current.dpr, [0.75, 0.75]);
+  assert.equal(QualityManager.current.postProcessing, false);
+  assert.equal(QualityManager.current.bloom, false);
+  assert.equal(QualityManager.throttleDown(), false);
+  QualityManager.updateCustomSettings({ maxActiveChunks: 20.9 });
+  assert.equal(QualityManager.current.maxActiveChunks, 20);
+  assert.deepEqual(QualityManager.current.dpr, [0.75, 0.75]);
+});
+
+test('desktop GPUs also disable postprocessing when half-float targets are unsupported', async () => {
+  const { QualityManager } = await graphics({ preset: 'HIGH' }, { supportsHalfFloatRenderTarget: false });
+  assert.equal(QualityManager.current.postProcessing, false);
+  assert.equal(QualityManager.current.bloom, false);
+  assert.equal(QualityManager.current.maxActiveChunks, 75);
+});
+
+test('software GPU LOW recommendation and v2 saved settings both survive restoration', async () => {
+  const fallback = await graphics(null, { recommendedPreset: 'LOW' });
+  assert.equal(fallback.QualityManager.current.drawDistance, fallback.QUALITY_PROFILES.LOW.drawDistance);
+  const migrated = await graphics(null, {}, { preset: 'LITE' });
+  assert.equal(migrated.QualityManager.preset, 'LITE');
+  migrated.QualityManager.setPreset('LOW');
+  assert.equal(JSON.parse(migrated.writes.get('nexus_city_graphics_settings_v3')).preset, 'LOW');
 });
 
 test('toggling a setting preserves the active AUTO graphics budget', async () => {
@@ -58,4 +107,53 @@ test('performance samples notify with new immutable snapshots', async () => {
     assert.equal(snapshots[2].fps, 2);
     unsubscribe();
   } finally { globalThis.performance = original; }
+});
+
+test('GPU framebuffer probe uses complete texture filters and cleans allocations on failure', async () => {
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  const bundle = await build({
+    stdin: { resolveDir: process.cwd(), contents: `export { WebGLCapabilities } from './src/rendering/WebGLCapabilities';` },
+    bundle: true, platform: 'node', format: 'esm', write: false,
+  });
+  try {
+    for (const failProbe of [false, true]) {
+      const filters = new Map();
+      let deletedTextures = 0; let deletedFramebuffers = 0;
+      let boundTexture; let boundFramebuffer;
+      const gl = {
+        VENDOR: 'vendor', RENDERER: 'renderer', MAX_TEXTURE_SIZE: 'maxTexture',
+        MAX_RENDERBUFFER_SIZE: 'maxRenderbuffer', MAX_VIEWPORT_DIMS: 'viewport',
+        MAX_VERTEX_TEXTURE_IMAGE_UNITS: 'vertexTextures', TEXTURE_2D: 'texture',
+        TEXTURE_MIN_FILTER: 'min', TEXTURE_MAG_FILTER: 'mag', NEAREST: 'nearest',
+        TEXTURE_WRAP_S: 'wrapS', TEXTURE_WRAP_T: 'wrapT', CLAMP_TO_EDGE: 'clamp',
+        FRAMEBUFFER: 'framebuffer', FRAMEBUFFER_COMPLETE: 'complete',
+        getParameter: (key) => ({ vendor: 'Intel', renderer: 'Intel HD', maxTexture: 16384, maxRenderbuffer: 16384, viewport: [16384, 16384], vertexTextures: 16 })[key],
+        getExtension: (name) => name === 'EXT_color_buffer_float' ? {} : null,
+        getSupportedExtensions: () => ['EXT_color_buffer_float'],
+        createFramebuffer: () => ({}), createTexture: () => ({}),
+        bindTexture: (_, texture) => { boundTexture = texture; },
+        bindFramebuffer: (_, framebuffer) => { boundFramebuffer = framebuffer; },
+        texParameteri: (_, key, value) => filters.set(key, value),
+        texImage2D: () => { if (failProbe) throw new Error('Rejected allocation'); },
+        framebufferTexture2D() {},
+        checkFramebufferStatus: () => filters.get('min') === 'nearest' && filters.get('mag') === 'nearest' ? 'complete' : 'incomplete',
+        deleteTexture: () => { deletedTextures++; },
+        deleteFramebuffer: () => { deletedFramebuffers++; },
+      };
+      globalThis.window = { innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1 };
+      globalThis.document = { createElement: () => ({ getContext: () => gl }) };
+      const { WebGLCapabilities } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}#${Math.random()}`);
+      const capabilities = WebGLCapabilities.detect();
+      assert.equal(capabilities.supportsHalfFloatRenderTarget, !failProbe);
+      assert.equal(deletedTextures, 1);
+      assert.equal(deletedFramebuffers, 1);
+      assert.equal(boundTexture, null);
+      assert.equal(boundFramebuffer, null);
+    }
+  } finally {
+    globalThis.window = previousWindow;
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
 });

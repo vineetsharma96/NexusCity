@@ -7,6 +7,7 @@ import { WeatherSystem } from '../world/WeatherSystem';
 import { WindSystem } from '../world/WindSystem';
 import { CelestialVolumetricRays } from './CelestialVolumetricRays';
 import { LivingCityEventSystem } from '../world/LivingCityEventSystem';
+import { WebGLCapabilities } from '../rendering/WebGLCapabilities';
 
 interface LightingManagerProps {
   quality: QualitySettings;
@@ -30,6 +31,8 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const origin = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(() => {
+    const caps = WebGLCapabilities.detect();
+    if (!caps.supportsHalfFloatRenderTarget || caps.isVirGL || caps.isConstrained) return;
     // Metallic surfaces need reflected sky light as well as direct lamps.
     // A tiny procedural sky cube keeps roads and facades readable without assets.
     const faces = ['#8ba5bf', '#8ba5bf', '#c4d6e8', '#303d50', '#8ba5bf', '#8ba5bf'].map((color) => {

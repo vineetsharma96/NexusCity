@@ -376,7 +376,7 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
 
       {/* 6. Bioluminescent Floating Fireflies / Spores Points */}
       <points ref={firefliesRef}>
-        <bufferGeometry {...fireflyData} />
+        <primitive object={fireflyData} attach="geometry" />
         <pointsMaterial
           size={0.35}
           vertexColors
