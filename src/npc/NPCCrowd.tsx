@@ -27,6 +27,11 @@ export const NPCCrowd: React.FC<NPCCrowdProps> = ({ playerPosRef }) => {
   const [activeEntity, setActiveEntity] = useState<InteractiveEntity | null>(null);
 
   useEffect(() => {
+    npcManager.current.setRenderedNpcs(activeNpcs);
+    return () => npcManager.current.setRenderedNpcs([]);
+  }, [activeNpcs]);
+
+  useEffect(() => {
     const unsubInteraction = InteractionSystem.getInstance().subscribe(setActiveEntity);
     const unsubQuality = QualityManager.subscribe((settings) => {
       setActiveNpcs(getFilteredNpcs(settings.NPCDensity));

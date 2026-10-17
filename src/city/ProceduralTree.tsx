@@ -10,7 +10,7 @@ interface ProceduralTreeProps {
   registerGlobalCollider?: boolean;
 }
 
-export const ProceduralTree: React.FC<ProceduralTreeProps> = ({
+export const ProceduralTree: React.FC<ProceduralTreeProps> = React.memo(({
   tree,
   registerGlobalCollider = false,
 }) => {
@@ -142,4 +142,4 @@ export const ProceduralTree: React.FC<ProceduralTreeProps> = ({
       </group>
     </group>
   );
-};
+});

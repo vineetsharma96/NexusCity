@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { ChunkManager, ChunkInfo, ChunkLOD } from '../world/ChunkManager';
 import {
@@ -19,6 +19,32 @@ const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 6);
 const SHARED_BEACON_SPHERE = new THREE.SphereGeometry(0.7, 8, 8);
 const SHARED_SMALL_SPHERE = new THREE.SphereGeometry(0.2, 6, 6);
+
+// Distant massing shares one draw call instead of one mesh and material per tower.
+const LowDetailChunks: React.FC<{ chunks: ChunkInfo[] }> = React.memo(({ chunks }) => {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const buildings = useMemo(() => chunks.flatMap((chunk) => ProceduralChunkGenerator.getChunkData(chunk.cx, chunk.cz).buildings), [chunks]);
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color();
+    buildings.forEach((building, index) => {
+      dummy.position.set(building.position.x, building.size.y / 2, building.position.z);
+      dummy.scale.copy(building.size);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+      mesh.setColorAt(index, color.set(building.color));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [buildings]);
+  if (buildings.length === 0) return null;
+  return <instancedMesh ref={meshRef} args={[SHARED_UNIT_BOX, undefined, buildings.length]}>
+    <meshStandardMaterial color="#ffffff" roughness={0.8} metalness={0.3} />
+  </instancedMesh>;
+});
 
 // Sub-component for individual building rendering by LOD
 const StreamedBuilding: React.FC<{
@@ -566,7 +592,9 @@ const StreamedChunkView: React.FC<{
             ))}
             {/* Park Trees */}
             {park.trees.map((t) => (
-              <ProceduralTree key={t.id} tree={t} registerGlobalCollider={true} />
+              <group key={t.id} position={[-park.position.x, -park.position.y, -park.position.z]}>
+                <ProceduralTree tree={t} />
+              </group>
             ))}
             {/* Park Bushes */}
             {park.bushes.map((b) => (
@@ -592,7 +620,7 @@ const StreamedChunkView: React.FC<{
       {/* 5. Sidewalk Trees & Avenue Planters (HIGH LOD only) */}
       {chunkInfo.lod === 'HIGH' &&
         data.trees.map((tree) => (
-          <ProceduralTree key={tree.id} tree={tree} registerGlobalCollider={true} />
+          <ProceduralTree key={tree.id} tree={tree} />
         ))}
 
       {/* 6. Sidewalk Bushes & Hedges (HIGH LOD only) */}
@@ -646,9 +674,19 @@ export const StreamedCityChunks: React.FC = () => {
   const claddingNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
 
   const prevKeysRef = useRef<string>('');
+  const lowChunks = useMemo(() => activeChunks.filter((chunk) => chunk.lod === 'LOW'), [activeChunks]);
+  const detailedChunks = useMemo(() => activeChunks.filter((chunk) => chunk.lod !== 'LOW'), [activeChunks]);
 
   useEffect(() => {
-    const unsubWeather = WeatherSystem.getInstance().subscribe(setWeatherState);
+    let lastWeatherUpdate = -Infinity;
+    let lastWetness = -1;
+    const unsubWeather = WeatherSystem.getInstance().subscribe((state) => {
+      const now = performance.now();
+      if (now - lastWeatherUpdate < 250 || Math.abs(state.wetnessFactor - lastWetness) < 0.01) return;
+      lastWeatherUpdate = now;
+      lastWetness = state.wetnessFactor;
+      setWeatherState(state);
+    });
     const unsubQuality = QualityManager.subscribe(setQuality);
     const unsubChunks = ChunkManager.getInstance().subscribe((state) => {
       // Filter out central 3x3 core (handled by CityDistrict) and unloaded chunks
@@ -678,7 +716,8 @@ export const StreamedCityChunks: React.FC = () => {
 
   return (
     <group name="StreamedCityChunksLayer">
-      {activeChunks.map((chunk) => (
+      <LowDetailChunks chunks={lowChunks} />
+      {detailedChunks.map((chunk) => (
         <StreamedChunkView
           key={chunk.key}
           chunkInfo={chunk}

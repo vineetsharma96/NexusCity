@@ -10,7 +10,7 @@ interface ParkSanctuaryProps {
 }
 
 export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0, 75] }) => {
-  const parkOrigin = useMemo(() => new THREE.Vector3(...position), [position]);
+  const parkOrigin = useMemo(() => new THREE.Vector3(...position), [position[0], position[1], position[2]]);
   const waterMeshRef = useRef<THREE.Mesh>(null);
   const waterMatRef = useRef<THREE.ShaderMaterial>(null);
   const foliageGroupRef = useRef<THREE.Group>(null);
@@ -18,41 +18,22 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
 
   const windSystem = WindSystem.getInstance();
 
-  // Register physical collisions for park amenities and bridge
-  useEffect(() => {
-    // 1. Arching Bridge Collider across pond (center at relative [0, 1.2, 0])
-    KinematicCollisionSolver.addBox(
-      parkOrigin.clone().add(new THREE.Vector3(-10, 0.4, 0)),
-      new THREE.Vector3(4, 0.8, 5)
-    );
-    KinematicCollisionSolver.addBox(
-      parkOrigin.clone().add(new THREE.Vector3(0, 1.1, 0)),
-      new THREE.Vector3(16, 0.5, 4.5)
-    );
-    KinematicCollisionSolver.addBox(
-      parkOrigin.clone().add(new THREE.Vector3(10, 0.4, 0)),
-      new THREE.Vector3(4, 0.8, 5)
-    );
+  const walls = useMemo(() => [
+    { position: [0, 0.6, -35], size: [70, 1.2, 1.2] },
+    { position: [0, 0.6, 35], size: [70, 1.2, 1.2] },
+    ...[-35, 35].flatMap((x) => [-19.5, 19.5].map((z) => ({ position: [x, 0.6, z], size: [1.2, 1.2, 31] }))),
+  ], []);
 
-    // 2. Park Perimeter Stone Retaining Wall Colliders (Four corners)
-    const wallH = 1.2;
-    KinematicCollisionSolver.addBox(
-      parkOrigin.clone().add(new THREE.Vector3(0, wallH / 2, -35)),
-      new THREE.Vector3(70, wallH, 1.5)
-    );
-    KinematicCollisionSolver.addBox(
-      parkOrigin.clone().add(new THREE.Vector3(0, wallH / 2, 35)),
-      new THREE.Vector3(70, wallH, 1.5)
-    );
-    KinematicCollisionSolver.addBox(
-      parkOrigin.clone().add(new THREE.Vector3(-35, wallH / 2, 0)),
-      new THREE.Vector3(1.5, wallH, 70)
-    );
-    KinematicCollisionSolver.addBox(
-      parkOrigin.clone().add(new THREE.Vector3(35, wallH / 2, 0)),
-      new THREE.Vector3(1.5, wallH, 70)
-    );
-  }, [parkOrigin]);
+  useEffect(() => {
+    const colliders = [
+      { position: [-10.5, 0.4, 0], size: [3, 0.7, 4.4] },
+      { position: [0, 0.85, 0], size: [22, 0.35, 4.2] },
+      { position: [10.5, 0.4, 0], size: [3, 0.7, 4.4] },
+      ...walls,
+    ].map((box) => ({ center: parkOrigin.clone().add(new THREE.Vector3(...box.position as [number, number, number])), size: new THREE.Vector3(...box.size as [number, number, number]) }));
+    colliders.forEach(({ center, size }) => KinematicCollisionSolver.addBox(center, size));
+    return () => colliders.forEach(({ center }) => KinematicCollisionSolver.removeBox(center));
+  }, [parkOrigin, walls]);
 
   // Water Shader Uniforms with wind coupling
   const waterUniforms = useMemo(
@@ -207,42 +188,17 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
         <meshStandardMaterial color="#062e1a" roughness={0.7} metalness={0.1} />
       </mesh>
 
-      {/* Perimeter Granite Retaining Wall with Neon Accent Trim */}
-      <mesh position={[0, 0.6, -35]} castShadow receiveShadow>
-        <boxGeometry args={[70, 1.2, 1.2]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.3} metalness={0.8} />
-      </mesh>
-      <mesh position={[0, 1.22, -35]}>
-        <boxGeometry args={[70, 0.05, 0.2]} />
-        <meshBasicMaterial color="#00ffaa" />
-      </mesh>
-
-      <mesh position={[0, 0.6, 35]} castShadow receiveShadow>
-        <boxGeometry args={[70, 1.2, 1.2]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.3} metalness={0.8} />
-      </mesh>
-      <mesh position={[0, 1.22, 35]}>
-        <boxGeometry args={[70, 0.05, 0.2]} />
-        <meshBasicMaterial color="#00ffaa" />
-      </mesh>
-
-      <mesh position={[-35, 0.6, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.2, 1.2, 70]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.3} metalness={0.8} />
-      </mesh>
-      <mesh position={[-35, 1.22, 0]}>
-        <boxGeometry args={[0.2, 0.05, 70]} />
-        <meshBasicMaterial color="#00ffaa" />
-      </mesh>
-
-      <mesh position={[35, 0.6, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.2, 1.2, 70]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.3} metalness={0.8} />
-      </mesh>
-      <mesh position={[35, 1.22, 0]}>
-        <boxGeometry args={[0.2, 0.05, 70]} />
-        <meshBasicMaterial color="#00ffaa" />
-      </mesh>
+      {/* East and west entrances connect the park to the cross avenue. */}
+      {walls.map((wall, index) => <group key={index} position={wall.position as [number, number, number]}>
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={wall.size as [number, number, number]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.3} metalness={0.8} />
+        </mesh>
+        <mesh position={[0, 0.62, 0]}>
+          <boxGeometry args={[wall.size[0], 0.05, wall.size[2]]} />
+          <meshBasicMaterial color="#00ffaa" />
+        </mesh>
+      </group>)}
 
       {/* 2. Recessed Water Pond Basin & Bed */}
       <mesh position={[0, -0.4, 0]} receiveShadow>
@@ -253,7 +209,7 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
       {/* Water Surface Plane with Animated Rippling Caustics Shader */}
       <mesh
         ref={waterMeshRef}
-        position={[0, 0.08, 0]}
+        position={[0, 0.28, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
         <planeGeometry args={[32, 26, 48, 48]} />
@@ -331,7 +287,7 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
         [-2, 6],
         [3, -7],
       ].map(([lx, lz], lIdx) => (
-        <group key={`lotus-${lIdx}`} position={[lx, 0.14, lz]}>
+        <group key={`lotus-${lIdx}`} position={[lx, 0.3, lz]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]}>
             <circleGeometry args={[0.85, 12]} />
             <meshStandardMaterial color="#059669" roughness={0.4} />

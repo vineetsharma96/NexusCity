@@ -5,7 +5,6 @@ import { LightingManager } from '../lighting/LightingManager';
 import { CityDistrict } from '../city/CityDistrict';
 import { PlayerController } from '../player/PlayerController';
 import { NPCCrowd } from '../npc/NPCCrowd';
-import { NavigationRibbon } from '../map/NavigationRibbon';
 import { WorldManager } from '../world/WorldManager';
 import { RainParticles } from '../city/RainParticles';
 import { TrafficSystem } from '../city/TrafficSystem';
@@ -20,20 +19,59 @@ import { DirtParticles } from '../city/DirtParticles';
 import { AtmosphericDetails } from '../city/AtmosphericDetails';
 import { PostProcessingManager } from '../rendering/PostProcessingManager';
 import { TimeSystem } from '../world/TimeSystem';
+import { RideableTransitLayer } from '../vehicle/RideableTransitLayer';
+import { VehicleRepairStations } from '../vehicle/VehicleRepairStations';
+import { RooftopShortcutSystem } from '../world/RooftopShortcutSystem';
+import { LivingCityEventDisplay } from '../world/LivingCityEventDisplay';
+import { InteractiveTerminals } from '../world/InteractiveTerminals';
+import { NavigationRibbon } from '../map/NavigationRibbon';
+
+const InputLifecycle: React.FC = () => {
+  const { gl } = useThree();
+
+  useEffect(() => {
+    InputManager.init(gl.domElement);
+    return () => InputManager.dispose();
+  }, [gl]);
+
+  return null;
+};
 
 // Inner component to hook into R3F render loop for telemetry and dynamic updates
 const SceneFrameLoop: React.FC = () => {
   const { gl, camera } = useThree();
   const perf = PerformanceMonitor.getInstance();
+  const readyFrame = useRef<number | null>(null);
+  const firstFrame = useRef(false);
 
-  useFrame(() => {
-    perf.update(gl);
+  useEffect(() => {
+    const autoReset = gl.info.autoReset;
+    gl.info.autoReset = false;
     (window as any).__NEXUS_CAMERA__ = camera;
+    return () => {
+      gl.info.autoReset = autoReset;
+      if (readyFrame.current !== null) cancelAnimationFrame(readyFrame.current);
+      firstFrame.current = false;
+      (window as any).__NEXUS_WORLD_READY__ = false;
+      delete (window as any).__NEXUS_CAMERA__;
+    };
+  }, [camera, gl]);
+
+  useFrame((_, delta) => {
+    perf.update(gl);
+    gl.info.reset();
+    if (!firstFrame.current) {
+      firstFrame.current = true;
+      readyFrame.current = requestAnimationFrame(() => {
+        (window as any).__NEXUS_WORLD_READY__ = true;
+        window.dispatchEvent(new Event('nexus:world-ready'));
+      });
+    }
 
     // Dynamic Tone Mapping Exposure based on diurnal phase
     const timeState = TimeSystem.getInstance().getState();
     const targetExposure = timeState.isNight ? 1.35 : timeState.phase === 'SUNSET' ? 1.25 : 1.08;
-    gl.toneMappingExposure = THREE.MathUtils.lerp(gl.toneMappingExposure, targetExposure, 0.05);
+    gl.toneMappingExposure = THREE.MathUtils.lerp(gl.toneMappingExposure, targetExposure, 1 - Math.exp(-3 * delta));
   });
 
   return null;
@@ -63,7 +101,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       dpr={quality.dpr}
       camera={{ position: [0, 8, 16], fov: 60, near: 0.1, far: Math.max(3500, quality.drawDistance * 1.5) }}
       gl={{
-        antialias: quality.name !== 'LITE',
+        antialias: quality.antiAliasing,
         powerPreference: 'high-performance',
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: 1.12,
@@ -71,10 +109,10 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       onCreated={({ gl }) => {
         gl.outputColorSpace = THREE.SRGBColorSpace;
         gl.shadowMap.type = THREE.PCFSoftShadowMap;
-        InputManager.init(gl.domElement);
       }}
-      style={{ width: '100vw', height: '100vh' }}
+      style={{ width: '100%', height: '100%' }}
     >
+      <InputLifecycle />
       <SceneFrameLoop />
       <PostProcessingManager quality={quality} />
       <LightingManager quality={quality} playerPosRef={playerPosRef} />
@@ -83,9 +121,14 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
           CONTINUOUS OUTDOOR METROPOLIS EXPLORATION
           ======================================================== */}
       <CityDistrict seed={847291} />
+      <LivingCityEventDisplay />
+      <InteractiveTerminals />
       <NavigationRibbon />
       <WorldManager playerPosRef={playerPosRef} />
       <TrafficSystem playerPosRef={playerPosRef} />
+      <RideableTransitLayer playerPosRef={playerPosRef} />
+      <VehicleRepairStations />
+      <RooftopShortcutSystem teleportRef={teleportFnRef} />
       <TrafficLightGantry position={[0, 0, 0]} />
       <CrosswalkMarkings position={[0, 0, 0]} />
       <ParkSanctuary position={[75, 0, 75]} />

@@ -167,12 +167,37 @@ export const QUALITY_PROFILES: Record<Exclude<QualityPreset, 'CUSTOM' | 'AUTO'>,
 };
 
 const STORAGE_KEY = 'nexus_city_graphics_settings_v2';
+const isPreset = (value: unknown): value is QualityPreset =>
+  typeof value === 'string' && ['AUTO', 'CUSTOM', ...Object.keys(QUALITY_PROFILES)].includes(value);
+
+function restoreCustom(value: unknown): QualitySettings {
+  const settings = { ...QUALITY_PROFILES.HIGH, name: 'CUSTOM' as const };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return settings;
+  const input = value as Record<string, unknown>;
+  const output = settings as unknown as Record<string, unknown>;
+  for (const [key, fallback] of Object.entries(settings)) {
+    const candidate = input[key];
+    if (typeof fallback === 'boolean' && typeof candidate === 'boolean') output[key] = candidate;
+    if (typeof fallback === 'number' && typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0) {
+      const values = Object.values(QUALITY_PROFILES).map((profile) => (profile as unknown as Record<string, number>)[key]);
+      output[key] = Math.max(Math.min(...values), Math.min(Math.max(...values), candidate));
+    }
+    if (typeof fallback === 'string' && key !== 'name' && Object.values(QUALITY_PROFILES).some((profile) => (profile as unknown as Record<string, unknown>)[key] === candidate)) output[key] = candidate;
+  }
+  if (Array.isArray(input.dpr) && input.dpr.length === 2 && input.dpr.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0.5 && n <= 2) && input.dpr[0] <= input.dpr[1]) {
+    settings.dpr = [input.dpr[0], input.dpr[1]];
+  }
+  return settings;
+}
 
 type QualityChangeListener = (settings: QualitySettings) => void;
 
 class QualityManagerClass {
   private currentPreset: QualityPreset = 'AUTO';
-  private autoBasePreset: 'ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE' = 'HIGH';
+  // Start AUTO at MEDIUM so a cold load does not immediately activate the
+  // highest draw distance and post-processing budget. Users can still opt
+  // into HIGH/ULTRA explicitly, while AUTO remains usable on more hardware.
+  private autoBasePreset: 'ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE' = 'MEDIUM';
   private customSettings: QualitySettings = {
     ...QUALITY_PROFILES.HIGH,
     name: 'CUSTOM',
@@ -195,7 +220,7 @@ class QualityManagerClass {
       if (isMobileUA || (isSmallScreen && ('ontouchstart' in window || navigator.maxTouchPoints > 0))) {
         this.autoBasePreset = isLowCores ? 'LOW' : 'MEDIUM';
       } else {
-        this.autoBasePreset = 'HIGH';
+        this.autoBasePreset = 'MEDIUM';
       }
     }
 
@@ -205,16 +230,10 @@ class QualityManagerClass {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed.preset) {
+          if (isPreset(parsed?.preset)) {
             this.currentPreset = parsed.preset;
           }
-          if (parsed.customSettings) {
-            this.customSettings = {
-              ...QUALITY_PROFILES.HIGH,
-              ...parsed.customSettings,
-              name: 'CUSTOM',
-            };
-          }
+          this.customSettings = restoreCustom(parsed?.customSettings);
         }
       } catch (e) {
         console.warn('[QualityManager] Failed to load saved graphics settings:', e);
@@ -274,6 +293,7 @@ class QualityManagerClass {
   }
 
   public setPreset(preset: QualityPreset): void {
+    if (!isPreset(preset)) return;
     if (this.currentPreset === preset) return;
     this.currentPreset = preset;
 
@@ -291,14 +311,12 @@ class QualityManagerClass {
   }
 
   public updateCustomSettings(partial: Partial<QualitySettings>): void {
+    // Start edits from the effective profile, including the adaptive AUTO tier.
+    const baseline = this.current;
     this.currentPreset = 'CUSTOM';
-    this.customSettings = {
-      ...this.customSettings,
-      ...partial,
-      name: 'CUSTOM',
-    };
+    this.customSettings = restoreCustom({ ...baseline, ...partial });
     this.save();
-    const settings = this.customSettings;
+    const settings = this.current;
     this.listeners.forEach((listener) => listener(settings));
   }
 

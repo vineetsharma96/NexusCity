@@ -1,8 +1,12 @@
 import * as THREE from 'three';
-import { InteractionSystem } from '../interaction/InteractionSystem';
+import { InteractionSystem, InteractiveEntity } from '../interaction/InteractionSystem';
 import { DialogueSystem } from './DialogueSystem';
 import { TimeSystem } from '../world/TimeSystem';
 import { TrafficLightSystem } from '../city/TrafficLightSystem';
+import { DistrictGenerator } from '../city/DistrictGenerator';
+import { WeatherSystem } from '../world/WeatherSystem';
+import { LivingCitySystem } from './LivingCitySystem';
+import { MissionSystem } from '../gameplay/MissionSystem';
 
 export interface NPCDef {
   id: string;
@@ -18,11 +22,20 @@ export interface NPCDef {
   isTalking: boolean;
   walkSpeed: number;
   pauseTimer: number;
+  scheduleActivity?: string;
+  weatherResponse?: string;
 }
 
 export class NPCManager {
   private static instance: NPCManager;
   public npcs: NPCDef[] = [];
+  private avoidanceFrame = 0;
+  private latestPlayerPosition = new THREE.Vector3();
+  private livingCity = LivingCitySystem.getInstance();
+  private scheduleFrame = 0;
+  private scheduleSpeed = new Map<string, number>();
+  private interactionEntities = new Map<string, InteractiveEntity>();
+  private renderedNpcIds: Set<string> | null = null;
 
   constructor() {
     this.initNPCs();
@@ -276,7 +289,7 @@ export class NPCManager {
 
     // Register all 52 NPCs in InteractionSystem
     this.npcs.forEach((npc) => {
-      InteractionSystem.getInstance().register({
+      const entity: InteractiveEntity = {
         id: npc.id,
         name: npc.name,
         actionText: `TALK TO ${npc.name.toUpperCase()} // ${npc.role.toUpperCase()}`,
@@ -284,9 +297,20 @@ export class NPCManager {
         radius: 2.8,
         onInteract: () => {
           npc.isTalking = true;
-          DialogueSystem.getInstance().startDialogue(npc.id, npc.name, npc.role);
+          MissionSystem.getInstance().recordInteraction();
+          const district = DistrictGenerator.getDistrictAt(this.latestPlayerPosition.x, this.latestPlayerPosition.z);
+          const time = TimeSystem.getInstance().getState();
+          const weather = WeatherSystem.getInstance().getState();
+          DialogueSystem.getInstance().startDialogue(npc.id, npc.name, npc.role, {
+            playerPosition: this.latestPlayerPosition,
+            district: district.name,
+            timePhase: time.phase,
+            weather: weather.currentWeather,
+          });
         },
-      });
+      };
+      this.interactionEntities.set(npc.id, entity);
+      InteractionSystem.getInstance().register(entity);
     });
 
     DialogueSystem.getInstance().subscribe((node) => {
@@ -302,12 +326,42 @@ export class NPCManager {
   private static readonly _pushDir = new THREE.Vector3();
   private static readonly _avoidNpc = new THREE.Vector3();
 
+  public setRenderedNpcs(npcs: readonly NPCDef[]): void {
+    const rendered = new Set(npcs.map((npc) => npc.id));
+    this.renderedNpcIds = rendered;
+    const interactions = InteractionSystem.getInstance();
+    this.interactionEntities.forEach((entity, id) => {
+      if (rendered.has(id)) interactions.register(entity);
+      else interactions.unregister(id);
+    });
+  }
+
+  public getRenderedNpcs(): NPCDef[] {
+    return this.renderedNpcIds ? this.npcs.filter((npc) => this.renderedNpcIds!.has(npc.id)) : this.npcs;
+  }
+
   public update(delta: number, playerPos: THREE.Vector3): void {
+    delta = Math.max(0, Math.min(delta, 0.1));
+    this.latestPlayerPosition.copy(playerPos);
     const hour = TimeSystem.getInstance().getHour();
     const isLateNight = hour > 1.0 && hour < 5.0;
+    // Mutual avoidance does not need to run at render frequency. Updating it
+    // every second frame keeps pedestrian motion smooth while cutting the
+    // quadratic neighbour scan roughly in half.
+    const runNpcAvoidance = (this.avoidanceFrame++ & 1) === 0;
+    const refreshSchedules = (this.scheduleFrame++ & 15) === 0;
 
     for (let i = 0; i < this.npcs.length; i++) {
       const npc = this.npcs[i];
+      if (this.renderedNpcIds && !this.renderedNpcIds.has(npc.id)) continue;
+
+      if (refreshSchedules) {
+        const schedule = this.livingCity.getSnapshot(npc.id, npc.role);
+        npc.scheduleActivity = schedule.activity;
+        npc.weatherResponse = schedule.weatherResponse;
+        this.scheduleSpeed.set(npc.id, schedule.speedMultiplier);
+        if (!schedule.shouldWalk) npc.pauseTimer = Math.max(npc.pauseTimer, 0.35);
+      }
 
       // Distance culling for performance optimization
       const distToPlayerSq = npc.position.distanceToSquared(playerPos);
@@ -395,35 +449,37 @@ export class NPCManager {
 
       // 2. Dynamic NPC-to-NPC Mutual Steering Avoidance with Fast Manhattan Pre-Rejection
       let yielded = false;
-      for (let j = 0; j < this.npcs.length; j++) {
-        if (i === j) continue;
-        const other = this.npcs[j];
-        // Fast AABB Manhattan rejection (avoids sqrt and distanceToSquared for >95% of pairs)
-        const dx = npc.position.x - other.position.x;
-        if (dx > 2.8 || dx < -2.8) continue;
-        const dz = npc.position.z - other.position.z;
-        if (dz > 2.8 || dz < -2.8) continue;
+      if (runNpcAvoidance) {
+        for (let j = 0; j < this.npcs.length; j++) {
+          if (i === j) continue;
+          const other = this.npcs[j];
+          // Fast AABB Manhattan rejection (avoids sqrt and distanceToSquared for >95% of pairs)
+          const dx = npc.position.x - other.position.x;
+          if (dx > 2.8 || dx < -2.8) continue;
+          const dz = npc.position.z - other.position.z;
+          if (dz > 2.8 || dz < -2.8) continue;
 
-        const npcDistSq = dx * dx + dz * dz;
-        if (npcDistSq < 2.8 * 2.8) {
-          const npcDist = Math.sqrt(npcDistSq);
-          if (npcDist < 0.85) {
-            // Close proximity: junior NPC halts to give way
-            if (i > j) {
-              npc.isWalking = false;
-              yielded = true;
-              break;
+          const npcDistSq = dx * dx + dz * dz;
+          if (npcDistSq < 2.8 * 2.8) {
+            const npcDist = Math.sqrt(npcDistSq);
+            if (npcDist < 0.85) {
+              // Close proximity: junior NPC halts to give way
+              if (i > j) {
+                npc.isWalking = false;
+                yielded = true;
+                break;
+              }
             }
+            const avoidNpc = NPCManager._avoidNpc.set(dx, 0, dz);
+            dir.addScaledVector(avoidNpc.normalize(), (2.8 - npcDist) * 0.9).normalize();
           }
-          const avoidNpc = NPCManager._avoidNpc.set(dx, 0, dz);
-          dir.addScaledVector(avoidNpc.normalize(), (2.8 - npcDist) * 0.9).normalize();
         }
       }
 
       if (yielded) continue;
 
       // Integrate position along steered trajectory
-      npc.position.addScaledVector(dir, npc.walkSpeed * delta);
+      npc.position.addScaledVector(dir, npc.walkSpeed * (this.scheduleSpeed.get(npc.id) || 1) * delta);
       npc.facingYaw = Math.atan2(dir.x, dir.z);
 
       // Keep registered position updated for interaction

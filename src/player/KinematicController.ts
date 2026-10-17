@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { InputManager } from './InputManager';
 import { KinematicCollisionSolver } from './KinematicCollision';
 import { AudioManager } from '../audio/AudioManager';
+import { VehicleInteractionSystem } from '../vehicle/VehicleInteractionSystem';
 
 export type MovementGait = 'IDLE' | 'WALK' | 'RUN' | 'JUMP_UP' | 'FALL' | 'LAND';
 
@@ -25,8 +26,6 @@ export class KinematicController {
   // Movement physics constants (snappy, responsive cyber-locomotion)
   public readonly walkSpeed = 6.8;
   public readonly sprintSpeed = 14.2;
-  public readonly acceleration = 52.0;
-  public readonly friction = 38.0;
   public readonly gravity = -25.0;
   public readonly jumpImpulse = 10.5;
   public readonly playerRadius = 0.45;
@@ -36,15 +35,29 @@ export class KinematicController {
   public isGrounded: boolean = true;
   private coyoteTimer: number = 0;
   private readonly coyoteTime = 0.18; // seconds
-  private jumpCooldown: number = 0;
+  private jumpBuffer: number = 0;
+  private jumpWasDown = false;
   private footstepTimer: number = 0;
+  private readonly inputDirection = new THREE.Vector3();
+  private readonly worldDirection = new THREE.Vector3();
+  private readonly candidatePosition = new THREE.Vector3();
+  private readonly upAxis = new THREE.Vector3(0, 1, 0);
 
   public gait: MovementGait = 'IDLE';
   public isMoving: boolean = false;
 
+  public resetMotion(): void {
+    this.velocity.set(0, 0, 0);
+    this.bankAngle = 0;
+    this.isMoving = false;
+    this.jumpBuffer = 0;
+    this.jumpWasDown = InputManager.getState().jump;
+    this.footstepTimer = 0.22;
+  }
+
   public update(delta: number, cameraYaw: number): KinematicState {
     const input = InputManager.getState();
-    const dt = Math.min(delta, 0.05); // Prevent tunneling on frame hitch
+    const dt = Math.max(0, Math.min(delta, 0.05));
 
     // 1. Calculate Camera-Relative Movement Vector
     const moveX = input.moveX;
@@ -52,16 +65,17 @@ export class KinematicController {
     const isMoving = Math.abs(moveX) > 0.05 || Math.abs(moveZ) > 0.05;
     this.isMoving = isMoving;
 
-    const inputDir = new THREE.Vector3(moveX, 0, moveZ);
+    const inputDir = this.inputDirection.set(moveX, 0, moveZ);
     if (inputDir.lengthSq() > 1) {
       inputDir.normalize();
     }
 
     // Rotate input direction by camera yaw
-    const worldDir = inputDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
+    const worldDir = this.worldDirection.copy(inputDir).applyAxisAngle(this.upAxis, cameraYaw);
 
     // Target speed based on sprint input
-    const maxSpeed = input.sprint ? this.sprintSpeed : this.walkSpeed;
+    const vehicleMultiplier = VehicleInteractionSystem.getInstance().getMovementMultiplier();
+    const maxSpeed = (input.sprint ? this.sprintSpeed : this.walkSpeed) * vehicleMultiplier;
     const targetVelX = isMoving ? worldDir.x * maxSpeed : 0;
     const targetVelZ = isMoving ? worldDir.z * maxSpeed : 0;
 
@@ -70,7 +84,7 @@ export class KinematicController {
     this.velocity.x = THREE.MathUtils.damp(this.velocity.x, targetVelX, accelRate, dt);
     this.velocity.z = THREE.MathUtils.damp(this.velocity.z, targetVelZ, accelRate, dt);
 
-    const horizontalSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z);
+    let horizontalSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z);
 
     // 3. Smooth Facing Direction & Dynamic Lean / Bank Angle on Turns
     let turnRate = 0;
@@ -80,7 +94,8 @@ export class KinematicController {
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
       turnRate = angleDiff;
-      this.rotationY += angleDiff * Math.min(1.0, dt * 18.0);
+      const handlingMultiplier = VehicleInteractionSystem.getInstance().getState().upgrades.handling && vehicleMultiplier > 1 ? 1.25 : 1;
+      this.rotationY += angleDiff * Math.min(1.0, dt * 18.0 * handlingMultiplier);
     }
 
     // Compute bank / lean angle into turns proportional to turn rate and speed
@@ -114,48 +129,77 @@ export class KinematicController {
     }
 
     // 5. Jump Impulse
-    this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
-    if (input.jump && this.coyoteTimer > 0 && this.jumpCooldown <= 0) {
+    this.jumpBuffer = input.jump && !this.jumpWasDown ? 0.12 : Math.max(0, this.jumpBuffer - dt);
+    this.jumpWasDown = input.jump;
+    if (this.jumpBuffer > 0 && this.coyoteTimer > 0) {
       this.velocity.y = this.jumpImpulse;
       this.coyoteTimer = 0;
       this.isGrounded = false;
-      this.jumpCooldown = 0.25;
+      this.jumpBuffer = 0;
       AudioManager.getInstance().playJump();
     }
 
-    // 5b. Surface-Aware Procedural Footstep Audio
-    if (this.isGrounded && horizontalSpeed > 0.8) {
-      const strideTime = input.sprint ? 0.30 : 0.48;
-      this.footstepTimer += dt;
-      if (this.footstepTimer >= strideTime) {
-        this.footstepTimer = 0;
-        AudioManager.getInstance().playFootstep(groundInfo.surface, input.sprint);
-      }
-    } else {
-      this.footstepTimer = 0.22;
-    }
-
     // 6. Apply Movement & Horizontal Collision Resolution
-    const candidatePos = this.position.clone();
+    const candidatePos = this.candidatePosition.copy(this.position);
     candidatePos.x += this.velocity.x * dt;
     candidatePos.z += this.velocity.z * dt;
     candidatePos.y += this.velocity.y * dt;
+
+    // Evaluate the destination floor before walls so low curbs and ramps can be stepped onto.
+    const destinationGround = KinematicCollisionSolver.getGroundHeightAt(candidatePos.x, candidatePos.z, this.position.y);
+    if (this.isGrounded && destinationGround.height > candidatePos.y && destinationGround.height - this.position.y <= 0.6) {
+      candidatePos.y = destinationGround.height;
+    }
+
+    // Stop an ascending capsule at the underside of a platform rather than ejecting it sideways.
+    if (this.velocity.y > 0) {
+      for (const box of KinematicCollisionSolver.getAllBoxes()) {
+        if (candidatePos.x + this.playerRadius <= box.min.x || candidatePos.x - this.playerRadius >= box.max.x ||
+            candidatePos.z + this.playerRadius <= box.min.z || candidatePos.z - this.playerRadius >= box.max.z) continue;
+        if (this.position.y + this.playerHeight <= box.min.y && candidatePos.y + this.playerHeight > box.min.y) {
+          candidatePos.y = box.min.y - this.playerHeight;
+          this.velocity.y = 0;
+        }
+      }
+    }
 
     // Resolve against obstacles
     const resolvedPos = KinematicCollisionSolver.resolveHorizontal(
       candidatePos,
       this.playerRadius,
-      this.playerHeight
+      this.playerHeight,
+      this.position
     );
 
-    // Prevent sinking below ground
-    if (resolvedPos.y < groundInfo.height) {
-      resolvedPos.y = groundInfo.height;
+    // Sample after horizontal resolution; the old floor may be a ledge we have just left.
+    const resolvedGround = KinematicCollisionSolver.getGroundHeightAt(resolvedPos.x, resolvedPos.z, Math.max(this.position.y, resolvedPos.y));
+    if (resolvedPos.y <= resolvedGround.height + 0.001 && this.velocity.y <= 0) {
+      if (!this.isGrounded) AudioManager.getInstance().playLand(resolvedGround.surface);
+      resolvedPos.y = resolvedGround.height;
       this.velocity.y = 0;
       this.isGrounded = true;
+    } else if (resolvedPos.y > resolvedGround.height + 0.08) {
+      this.isGrounded = false;
     }
 
+    if (dt > 0) {
+      this.velocity.x = (resolvedPos.x - this.position.x) / dt;
+      this.velocity.z = (resolvedPos.z - this.position.z) / dt;
+      horizontalSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+    }
     this.position.copy(resolvedPos);
+
+    // Use actual movement so pushing into a wall does not animate or sound like walking.
+    if (this.isGrounded && horizontalSpeed > 0.8) {
+      const strideTime = input.sprint ? 0.30 : 0.48;
+      this.footstepTimer += dt;
+      if (this.footstepTimer >= strideTime) {
+        this.footstepTimer = 0;
+        AudioManager.getInstance().playFootstep(resolvedGround.surface, input.sprint);
+      }
+    } else {
+      this.footstepTimer = 0.22;
+    }
 
     // 7. Determine Current Animation Gait
     if (!this.isGrounded) {

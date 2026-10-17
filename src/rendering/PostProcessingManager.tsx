@@ -1,74 +1,64 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { QualitySettings } from './QualityManager';
+import { createNeonGradePass } from './NeonGradePass';
 
-interface PostProcessingManagerProps {
-  quality: QualitySettings;
-}
+export const PostProcessingManager: React.FC<{ quality: QualitySettings }> = ({ quality }) => {
+  const { gl, scene, camera, size, viewport } = useThree();
+  const composerRef = useRef<EffectComposer | null>(null);
+  const bloomRef = useRef<UnrealBloomPass | null>(null);
+  const gradeRef = useRef<ShaderPass | null>(null);
+  const enabled = quality.postProcessing;
 
-export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({ quality }) => {
-  const { gl, scene, camera, size } = useThree();
-
-  const isPostEnabled = quality.postProcessing && (quality.name === 'HIGH' || quality.name === 'ULTRA');
-
-  const composer = useMemo(() => {
-    if (!isPostEnabled) return null;
-
-    const comp = new EffectComposer(gl);
-    comp.setSize(size.width, size.height);
-
-    // 1. Base Scene Render Pass
-    const renderPass = new RenderPass(scene, camera);
-    comp.addPass(renderPass);
-
-    // 2. Selective Controlled Bloom Pass
-    // Threshold 0.82 ensures only bright neon, car headlights, emissive billboards, and streetlamps bloom
-    const bloomStrength = quality.name === 'ULTRA' ? 0.42 : 0.28;
-    const bloomRadius = 0.38;
-    const bloomThreshold = 0.82;
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(size.width, size.height),
-      bloomStrength,
-      bloomRadius,
-      bloomThreshold
-    );
-    comp.addPass(bloomPass);
-
-    // 3. Output Pass with Tone Mapping & sRGB Color Space Handling
-    const outputPass = new OutputPass();
-    comp.addPass(outputPass);
-
-    return comp;
-  }, [gl, scene, camera, isPostEnabled, quality.name, size.width, size.height]);
-
+  // Allocate GPU resources in the effect so StrictMode and profile changes can
+  // dispose every render target, including the composer's full-size buffers.
   useEffect(() => {
-    if (!composer) return;
-    composer.setSize(size.width, size.height);
-  }, [composer, size]);
-
-  useEffect(() => {
+    if (!enabled) return;
+    const composer = new EffectComposer(gl);
+    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.28, 0.38, 0.82);
+    const grade = createNeonGradePass();
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(bloom);
+    composer.addPass(grade);
+    composer.addPass(new OutputPass());
+    composerRef.current = composer;
+    bloomRef.current = bloom;
+    gradeRef.current = grade;
     return () => {
-      if (composer) {
-        composer.passes.forEach((pass) => {
-          if ('dispose' in pass && typeof (pass as any).dispose === 'function') {
-            (pass as any).dispose();
-          }
-        });
-      }
+      composerRef.current = null;
+      bloomRef.current = null;
+      gradeRef.current = null;
+      composer.passes.forEach((pass) => pass.dispose());
+      composer.dispose();
     };
-  }, [composer]);
+  }, [gl, scene, camera, enabled]);
 
-  // Hook into R3F render loop with priority 1 to take over canvas rendering when postprocessing is active
-  useFrame((_, delta) => {
-    if (composer && isPostEnabled) {
-      composer.render(delta);
+  useEffect(() => {
+    const composer = composerRef.current;
+    if (!composer) return;
+    composer.setPixelRatio(gl.getPixelRatio());
+    composer.setSize(size.width, size.height);
+    if (bloomRef.current) {
+      const ultra = quality.name === 'ULTRA';
+      bloomRef.current.strength = ultra ? 0.42 : 0.28;
+      // Resize the actual bloom targets; changing resolution alone has no effect.
+      const scale = ultra ? 1 : 0.5;
+      bloomRef.current.setSize(size.width * gl.getPixelRatio() * scale, size.height * gl.getPixelRatio() * scale);
     }
-  }, isPostEnabled ? 1 : 0);
+  }, [gl, enabled, quality.name, size.width, size.height, viewport.dpr]);
+
+  useFrame((_, delta) => {
+    if (!enabled) return;
+    if (gradeRef.current) gradeRef.current.uniforms.uTime.value += delta;
+    if (composerRef.current) composerRef.current.render(delta);
+    else gl.render(scene, camera);
+  }, enabled ? 1 : 0);
 
   return null;
 };

@@ -25,22 +25,27 @@ export interface CollisionRamp {
 }
 
 export class KinematicCollisionSolver {
+  private static readonly WORLD_LIMIT = 1380;
   private static boxes: CollisionBox[] = [];
   private static chunkBoxes: Map<string, CollisionBox[]> = new Map();
   private static ramps: CollisionRamp[] = [];
+  private static allBoxesCache: CollisionBox[] | null = null;
 
   public static clear(): void {
     this.boxes = [];
     this.chunkBoxes.clear();
     this.ramps = [];
+    this.allBoxesCache = null;
   }
 
   public static setChunkBoxes(chunkKey: string, boxes: CollisionBox[]): void {
     this.chunkBoxes.set(chunkKey, boxes);
+    this.allBoxesCache = null;
   }
 
   public static removeChunkBoxes(chunkKey: string): void {
     this.chunkBoxes.delete(chunkKey);
+    this.allBoxesCache = null;
   }
 
   public static addBox(center: THREE.Vector3, size: THREE.Vector3): void {
@@ -49,6 +54,7 @@ export class KinematicCollisionSolver {
       min: center.clone().sub(half),
       max: center.clone().add(half),
     });
+    this.allBoxesCache = null;
   }
 
   public static removeBox(center: THREE.Vector3, tolerance: number = 0.5): void {
@@ -56,6 +62,7 @@ export class KinematicCollisionSolver {
       const boxCenter = b.min.clone().add(b.max).multiplyScalar(0.5);
       return boxCenter.distanceTo(center) > tolerance;
     });
+    this.allBoxesCache = null;
   }
 
   public static addRamp(
@@ -87,11 +94,51 @@ export class KinematicCollisionSolver {
   }
 
   public static getAllBoxes(): CollisionBox[] {
+    if (this.allBoxesCache) return this.allBoxesCache;
     const all = [...this.boxes];
     for (const cBoxes of this.chunkBoxes.values()) {
       all.push(...cBoxes);
     }
+    this.allBoxesCache = all;
     return all;
+  }
+
+  public static isPositionClear(position: THREE.Vector3, radius: number, height: number): boolean {
+    const minY = position.y;
+    const maxY = position.y + height;
+    return this.getAllBoxes().every((box) =>
+      maxY <= box.min.y || minY >= box.max.y ||
+      position.x + radius <= box.min.x || position.x - radius >= box.max.x ||
+      position.z + radius <= box.min.z || position.z - radius >= box.max.z
+    );
+  }
+
+  public static findSafePosition(origin: THREE.Vector3, radius: number, height: number): THREE.Vector3 {
+    const boundedOrigin = origin.clone();
+    boundedOrigin.x = THREE.MathUtils.clamp(boundedOrigin.x, -this.WORLD_LIMIT + radius, this.WORLD_LIMIT - radius);
+    boundedOrigin.z = THREE.MathUtils.clamp(boundedOrigin.z, -this.WORLD_LIMIT + radius, this.WORLD_LIMIT - radius);
+    const offsets = [
+      new THREE.Vector3(0, 0, 0), new THREE.Vector3(2.2, 0, 0), new THREE.Vector3(-2.2, 0, 0),
+      new THREE.Vector3(0, 0, 2.2), new THREE.Vector3(0, 0, -2.2), new THREE.Vector3(1.6, 0, 1.6),
+      new THREE.Vector3(-1.6, 0, 1.6), new THREE.Vector3(1.6, 0, -1.6), new THREE.Vector3(-1.6, 0, -1.6),
+    ];
+    // Saved positions and travel destinations can be inside a newly streamed building.
+    // Search beyond the immediate footstep offsets before falling back to wall resolution.
+    for (let distance = 4.4; distance <= 35.2; distance += 4.4) {
+      for (let direction = 0; direction < 16; direction++) {
+        const angle = direction * Math.PI / 8;
+        offsets.push(new THREE.Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance));
+      }
+    }
+    for (const offset of offsets) {
+      const candidate = boundedOrigin.clone().add(offset);
+      if (Math.abs(candidate.x) + radius > this.WORLD_LIMIT || Math.abs(candidate.z) + radius > this.WORLD_LIMIT) continue;
+      const ground = this.getGroundHeightAt(candidate.x, candidate.z, candidate.y);
+      candidate.y = ground.height;
+      if (this.isPositionClear(candidate, radius, height)) return candidate;
+    }
+    const resolved = this.resolveHorizontal(boundedOrigin, radius, height);
+    return resolved.setY(this.getGroundHeightAt(resolved.x, resolved.z, resolved.y).height);
   }
 
   /**
@@ -100,14 +147,30 @@ export class KinematicCollisionSolver {
   public static resolveHorizontal(
     currentPos: THREE.Vector3,
     radius: number,
-    playerHeight: number
+    playerHeight: number,
+    previousPos?: THREE.Vector3
   ): THREE.Vector3 {
+    if (previousPos) {
+      const distance = Math.hypot(currentPos.x - previousPos.x, currentPos.z - previousPos.z);
+      const steps = Math.max(1, Math.ceil(distance / Math.max(0.1, radius * 0.5)));
+      if (steps > 1) {
+        let position = previousPos.clone().setY(currentPos.y);
+        const stepX = (currentPos.x - previousPos.x) / steps;
+        const stepZ = (currentPos.z - previousPos.z) / steps;
+        for (let step = 0; step < steps; step++) {
+          position.x += stepX;
+          position.z += stepZ;
+          position = this.resolveHorizontal(position, radius, playerHeight);
+        }
+        return position;
+      }
+    }
     const resolved = currentPos.clone();
     const playerMinY = resolved.y;
     const playerMaxY = resolved.y + playerHeight;
 
     // 24x24 chunks at 120m = 2880m expanse (-1440m to +1440m). Bound player safely within active world substrate.
-    const worldLimit = 1380;
+    const worldLimit = this.WORLD_LIMIT - radius;
     resolved.x = THREE.MathUtils.clamp(resolved.x, -worldLimit, worldLimit);
     resolved.z = THREE.MathUtils.clamp(resolved.z, -worldLimit, worldLimit);
 
@@ -176,7 +239,7 @@ export class KinematicCollisionSolver {
           1
         );
         const rampH = ramp.baseY + t * (ramp.topY - ramp.baseY);
-        if (rampH > groundHeight) {
+        if (rampH > groundHeight && currentY >= rampH - 0.6) {
           groundHeight = rampH;
           onRamp = true;
         }

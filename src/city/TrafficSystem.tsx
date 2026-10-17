@@ -1,12 +1,12 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 
 import { TrafficLightSystem } from './TrafficLightSystem';
 import { AudioManager } from '../audio/AudioManager';
 import { NPCManager } from '../npc/NPCManager';
+import { TrafficIncidentSystem } from '../vehicle/TrafficIncidentSystem';
 
 interface TrafficSystemProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
@@ -17,6 +17,8 @@ interface VehicleSim {
   velocity: THREE.Vector3;
   rotationY: number;
   pitch: number;
+  roll: number;
+  wheelSpin: number;
   lastSpeed: number;
   speed: number;
   cruisingSpeed: number;
@@ -27,22 +29,22 @@ interface VehicleSim {
   boundMax: number;
   axis: 'x' | 'z';
   direction: number; // 1 or -1
+  vehicleClass: VehicleClass;
+  laneCenter: number;
+  curveBias: number;
 }
+
+type VehicleClass = 'POLICE' | 'CARGO' | 'TAXI' | 'EMERGENCY' | 'CORPORATE';
 
 const GROUND_COUNT = 32;
 const AERIAL_COUNT = 24;
 
 export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) => {
-  const [timeState, setTimeState] = useState<TimeLightingState>(() =>
-    TimeSystem.getInstance().getState()
-  );
   const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
   useEffect(() => {
-    const unsubTime = TimeSystem.getInstance().subscribe(setTimeState);
     const unsubQuality = QualityManager.subscribe(setQuality);
     return () => {
-      unsubTime();
       unsubQuality();
     };
   }, []);
@@ -53,6 +55,9 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
   const groundGlassMesh = useRef<THREE.InstancedMesh>(null);
   const groundHeadlightMesh = useRef<THREE.InstancedMesh>(null);
   const groundTaillightMesh = useRef<THREE.InstancedMesh>(null);
+  const groundWheelMesh = useRef<THREE.InstancedMesh>(null);
+  const accidentMarkerRef = useRef<THREE.Group>(null);
+  const groundEmergencyLightMesh = useRef<THREE.InstancedMesh>(null);
 
   const aerialBodyMesh = useRef<THREE.InstancedMesh>(null);
   const aerialTrailMesh = useRef<THREE.InstancedMesh>(null);
@@ -62,14 +67,24 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
   // Initialize procedural vehicle simulation state
   const vehicles = useMemo(() => {
     const list: VehicleSim[] = [];
-    const colors = ['#0f172a', '#1e293b', '#334155', '#475569', '#1e1b4b', '#312e81', '#581c87', '#14532d', '#7f1d1d'];
+    const classes: VehicleClass[] = ['POLICE', 'CARGO', 'TAXI', 'EMERGENCY', 'CORPORATE'];
+    const colors: Record<VehicleClass, string> = {
+      POLICE: '#172554',
+      CARGO: '#78350f',
+      TAXI: '#ca8a04',
+      EMERGENCY: '#991b1b',
+      CORPORATE: '#312e81',
+    };
 
     // 1. Ground Hover-Cruisers
     for (let i = 0; i < GROUND_COUNT; i++) {
       const isNorthSouth = i % 2 === 0;
       const laneDirection = i % 4 < 2 ? 1 : -1;
       const speed = 14 + (i % 6) * 2.5;
-      const color = colors[i % colors.length];
+      // Corporate vehicles travel in deterministic three-car platoons.
+      const vehicleClass = i % 10 < 3 ? 'CORPORATE' : classes[(i + 1) % 4];
+      const color = colors[vehicleClass];
+      const curveBias = i % 2 === 0 ? 1 : -1;
 
       if (isNorthSouth) {
         const laneX = laneDirection === 1 ? 4.5 : -4.5;
@@ -79,6 +94,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           velocity: new THREE.Vector3(0, 0, laneDirection * speed),
           rotationY: laneDirection === 1 ? 0 : Math.PI,
           pitch: 0,
+          roll: 0,
+          wheelSpin: 0,
           lastSpeed: speed,
           speed,
           cruisingSpeed: speed,
@@ -87,8 +104,11 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           color,
           boundMin: -440,
           boundMax: 440,
-          axis: 'z',
-          direction: laneDirection,
+           axis: 'z',
+           direction: laneDirection,
+           vehicleClass,
+           laneCenter: laneX,
+           curveBias,
         });
       } else {
         const laneZ = laneDirection === 1 ? 4.5 : -4.5;
@@ -97,7 +117,9 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           position: new THREE.Vector3(xStart, 0.45, laneZ),
           velocity: new THREE.Vector3(laneDirection * speed, 0, 0),
           rotationY: laneDirection === 1 ? Math.PI / 2 : -Math.PI / 2,
-          pitch: 0,
+            pitch: 0,
+            roll: 0,
+            wheelSpin: 0,
           lastSpeed: speed,
           speed,
           cruisingSpeed: speed,
@@ -106,8 +128,11 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           color,
           boundMin: -440,
           boundMax: 440,
-          axis: 'x',
-          direction: laneDirection,
+           axis: 'x',
+           direction: laneDirection,
+            vehicleClass,
+           laneCenter: laneZ,
+           curveBias,
         });
       }
     }
@@ -127,6 +152,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           velocity: new THREE.Vector3(laneDirection * speed, 0, 0),
           rotationY: laneDirection === 1 ? Math.PI / 2 : -Math.PI / 2,
           pitch: 0,
+          roll: 0,
+          wheelSpin: 0,
           lastSpeed: speed,
           speed,
           cruisingSpeed: speed,
@@ -135,9 +162,12 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           color: '#38bdf8',
           boundMin: -550,
           boundMax: 550,
-          axis: 'x',
-          direction: laneDirection,
-        });
+           axis: 'x',
+           direction: laneDirection,
+           vehicleClass: 'CORPORATE',
+           laneCenter: offsetLane,
+           curveBias: 0,
+         });
       } else {
         const zStart = -500 + (i * 45) % 1000;
         list.push({
@@ -145,6 +175,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           velocity: new THREE.Vector3(0, 0, laneDirection * speed),
           rotationY: laneDirection === 1 ? 0 : Math.PI,
           pitch: 0,
+          roll: 0,
+          wheelSpin: 0,
           lastSpeed: speed,
           speed,
           cruisingSpeed: speed,
@@ -153,8 +185,11 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           color: '#a855f7',
           boundMin: -550,
           boundMax: 550,
-          axis: 'z',
-          direction: laneDirection,
+           axis: 'z',
+           direction: laneDirection,
+           vehicleClass: 'CORPORATE',
+           laneCenter: offsetLane,
+           curveBias: 0,
         });
       }
     }
@@ -168,6 +203,8 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
   const groundGlassGeo = useMemo(() => new THREE.BoxGeometry(1.4, 0.45, 1.8), []);
   const headlightGeo = useMemo(() => new THREE.BoxGeometry(0.35, 0.12, 0.08), []);
   const taillightGeo = useMemo(() => new THREE.BoxGeometry(1.6, 0.12, 0.08), []);
+  const groundWheelGeo = useMemo(() => new THREE.CylinderGeometry(0.28, 0.28, 0.16, 12), []);
+  const groundEmergencyLightGeo = useMemo(() => new THREE.BoxGeometry(0.72, 0.11, 0.28), []);
 
   const aerialBodyGeo = useMemo(() => new THREE.ConeGeometry(1.2, 5.0, 4), []);
   const aerialTrailGeo = useMemo(() => new THREE.CylinderGeometry(0.15, 0.6, 3.5, 6), []);
@@ -175,16 +212,63 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
   const lastHornTimeRef = useRef(0);
   const lastFlybyTimeRef = useRef(0);
   const lastBrakeSoundTimeRef = useRef(0);
+  const lastClassSoundTimeRef = useRef(0);
+  const trafficTimeRef = useRef(0);
+  const disruptionNotifiedRef = useRef(false);
+
+  useEffect(() => {
+    if (!groundBodyMesh.current) return;
+    const color = new THREE.Color();
+    vehicles.forEach((vehicle, index) => {
+      if (vehicle.type !== 'GROUND') return;
+      color.set(vehicle.color);
+      groundBodyMesh.current?.setColorAt(index, color);
+    });
+    vehicles.forEach((vehicle, index) => {
+      if (vehicle.type === 'GROUND' && (vehicle.vehicleClass === 'POLICE' || vehicle.vehicleClass === 'EMERGENCY')) {
+        const lightColor = new THREE.Color(vehicle.vehicleClass === 'POLICE' ? '#2563eb' : '#ef4444');
+        groundEmergencyLightMesh.current?.setColorAt(index, lightColor);
+      }
+    });
+    if (groundBodyMesh.current.instanceColor) {
+      groundBodyMesh.current.instanceColor.needsUpdate = true;
+    }
+    if (groundEmergencyLightMesh.current?.instanceColor) {
+      groundEmergencyLightMesh.current.instanceColor.needsUpdate = true;
+    }
+  }, [vehicles]);
 
   // Update loop
   useFrame((_, delta) => {
+    delta = Math.min(delta, 0.1);
     let groundIdx = 0;
     let aerialIdx = 0;
     const maxGround = Math.max(6, Math.round(GROUND_COUNT * quality.vehicleDensity));
     const maxAerial = Math.max(4, Math.round(AERIAL_COUNT * quality.vehicleDensity));
     const pPos = playerPosRef.current;
-    const npcs = NPCManager.getInstance().npcs;
+    const npcs = NPCManager.getInstance().getRenderedNpcs();
     const now = performance.now();
+    trafficTimeRef.current += delta;
+    const disruptionCycle = trafficTimeRef.current % 96;
+    const disruptionActive = disruptionCycle >= 24 && disruptionCycle < 42;
+    if (disruptionActive && !disruptionNotifiedRef.current && typeof window !== 'undefined') {
+      disruptionNotifiedRef.current = true;
+      window.dispatchEvent(new CustomEvent('nexus:notification', {
+        detail: {
+          title: 'TRAFFIC CONTROL // INCIDENT DETECTED',
+          message: 'Central intersection disruption active. Selected lanes are slowing for emergency clearance.',
+          type: 'warning',
+          duration: 4200,
+        },
+      }));
+      AudioManager.getInstance().playVehicleHorn();
+    } else if (!disruptionActive) {
+      disruptionNotifiedRef.current = false;
+    }
+    if (accidentMarkerRef.current) {
+      accidentMarkerRef.current.visible = disruptionActive;
+      accidentMarkerRef.current.rotation.y += delta * 1.4;
+    }
 
     for (let i = 0; i < vehicles.length; i++) {
       const v = vehicles[i];
@@ -196,6 +280,19 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
         const signal = TrafficLightSystem.getInstance().getVehicleSignal(v.axis);
         let targetSpeed = v.cruisingSpeed;
         v.isBraking = false;
+
+        // A deterministic, low-frequency incident affects selected vehicles only.
+        const incidentVehicle = i % 5 === 1 || i % 7 === 0;
+        const incidentCoordinate = v.axis === 'z' ? v.position.z : v.position.x;
+        const laneBlocked = TrafficIncidentSystem.getInstance().isLaneBlocked(v.axis, v.laneCenter, incidentCoordinate);
+        if (laneBlocked) {
+          targetSpeed = v.vehicleClass === 'EMERGENCY' || v.vehicleClass === 'POLICE' ? v.cruisingSpeed * 0.2 : 0;
+          v.isBraking = true;
+        }
+        if (disruptionActive && incidentVehicle && Math.abs(incidentCoordinate) < 34) {
+          targetSpeed = v.vehicleClass === 'EMERGENCY' || v.vehicleClass === 'POLICE' ? v.cruisingSpeed * 0.35 : 0;
+          v.isBraking = true;
+        }
 
         // 1. Check central intersection traffic light approach (-16m stop line)
         if (v.axis === 'z') {
@@ -228,7 +325,7 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
         // 2. Vehicle-to-Vehicle Car-Following Headway (Anti-Clipping & Queuing)
         for (let j = 0; j < vehicles.length; j++) {
-          if (i === j) continue;
+          if (i === j || j >= maxGround) continue;
           const lead = vehicles[j];
           if (lead.type !== 'GROUND' || lead.axis !== v.axis || lead.direction !== v.direction) continue;
 
@@ -308,6 +405,10 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
         const hoverBob = Math.sin(now * 0.003 + i * 1.3) * 0.012;
         const targetPitch = v.isBraking ? -0.065 : accelDelta > 1.0 ? 0.032 : hoverBob;
         v.pitch = THREE.MathUtils.damp(v.pitch, targetPitch, 7.5, delta);
+        const damaged = TrafficIncidentSystem.getInstance().getIncidents().some((incident) => incident.axis === v.axis &&
+          Math.abs(incident.laneCenter - v.laneCenter) < 1.8 && Math.abs(incidentCoordinate - (v.axis === 'x' ? incident.position.x : incident.position.z)) < incident.radius * 0.7 && incidentVehicle);
+        v.roll = THREE.MathUtils.damp(v.roll, damaged ? Math.sin(i * 4.1) * 0.12 : 0, 8, delta);
+        v.wheelSpin += (v.speed * v.direction * delta) / 0.28;
 
         if (v.axis === 'z') {
           v.velocity.z = v.direction * v.speed;
@@ -334,6 +435,10 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
           lastBrakeSoundTimeRef.current = now;
           AudioManager.getInstance().playBrakeSqueal();
         }
+        if (v.type === 'GROUND' && distToPlayer < 12 && now - lastClassSoundTimeRef.current > 5000) {
+          lastClassSoundTimeRef.current = now;
+          AudioManager.getInstance().playVehicleClassFeedback(v.vehicleClass);
+        }
       }
 
       // Wrap boundaries along active axis
@@ -349,6 +454,20 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
         } else if (v.velocity.x < 0 && v.position.x < v.boundMin) {
           v.position.x = v.boundMax;
         }
+      }
+
+      // Ease a small, deterministic S-curve through the central junction. The
+      // simulation remains axis-based for signals and following; this only
+      // adjusts the rendered lane position and yaw near the intersection.
+      if (v.type === 'GROUND') {
+        const longitudinal = v.axis === 'z' ? v.position.z : v.position.x;
+        const progress = THREE.MathUtils.clamp((longitudinal * v.direction + 44) / 88, 0, 1);
+        const curve = Math.sin(progress * Math.PI) * 1.15 * v.curveBias;
+        const curveSlope = Math.cos(progress * Math.PI) * Math.PI * 1.15 / 88 * v.direction;
+        if (v.axis === 'z') v.position.x = v.laneCenter + curve;
+        else v.position.z = v.laneCenter + curve;
+        v.rotationY = (v.direction > 0 ? (v.axis === 'z' ? 0 : Math.PI / 2) : (v.axis === 'z' ? Math.PI : -Math.PI / 2))
+          + (v.axis === 'z' ? curveSlope : -curveSlope);
       }
 
       // Pre-calculate yaw orientation trigonometry without allocating Vector3
@@ -367,24 +486,26 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
         // Ground Cruiser Chassis with Suspension Pitch
         dummy.position.copy(v.position);
-        dummy.rotation.set(v.pitch, v.rotationY, 0);
-        dummy.scale.set(1, 1, 1);
+        dummy.rotation.set(v.pitch, v.rotationY, v.roll);
+        const bodyScale = v.vehicleClass === 'CARGO' ? [1.2, 1.08, 1.35] : v.vehicleClass === 'TAXI' ? [0.92, 0.9, 1.02] : v.vehicleClass === 'CORPORATE' ? [1.04, 1, 1.08] : [1, 1, 1];
+        dummy.scale.set(bodyScale[0], bodyScale[1], bodyScale[2]);
         dummy.updateMatrix();
         groundBodyMesh.current.setMatrixAt(groundIdx, dummy.matrix);
 
         // Canopy Cabin
         if (groundGlassMesh.current) {
           dummy.position.set(v.position.x, v.position.y + 0.45, v.position.z);
-          dummy.rotation.set(v.pitch, v.rotationY, 0);
+          dummy.rotation.set(v.pitch, v.rotationY, v.roll);
           dummy.updateMatrix();
           groundGlassMesh.current.setMatrixAt(groundIdx, dummy.matrix);
         }
 
         // Headlights (forward relative offset, zero allocation)
         if (groundHeadlightMesh.current) {
-          const fwdX = sinY * 2.05;
-          const fwdZ = cosY * 2.05;
-          dummy.position.set(v.position.x + fwdX, v.position.y + 0.05, v.position.z + fwdZ);
+          dummy.position.copy(v.position);
+          dummy.rotation.set(v.pitch, v.rotationY, v.roll);
+          dummy.translateZ(2.05);
+          dummy.translateY(0.05);
           dummy.scale.set(1, 1, 1);
           dummy.updateMatrix();
           groundHeadlightMesh.current.setMatrixAt(groundIdx, dummy.matrix);
@@ -392,13 +513,45 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
         // Taillights (rear relative offset, zero allocation): flare brighter/taller when braking or stopped
         if (groundTaillightMesh.current) {
-          const rearX = -sinY * 2.05;
-          const rearZ = -cosY * 2.05;
-          dummy.position.set(v.position.x + rearX, v.position.y + 0.05, v.position.z + rearZ);
+          dummy.position.copy(v.position);
+          dummy.rotation.set(v.pitch, v.rotationY, v.roll);
+          dummy.translateZ(-2.05);
+          dummy.translateY(0.05);
           const brakeScale = v.isBraking || v.speed < 2.0 ? 1.8 : 1.0;
-          dummy.scale.set(1, brakeScale, 1);
+          dummy.scale.set(v.vehicleClass === 'CARGO' ? 1.15 : 1, brakeScale, 1);
           dummy.updateMatrix();
           groundTaillightMesh.current.setMatrixAt(groundIdx, dummy.matrix);
+        }
+
+        if (groundEmergencyLightMesh.current) {
+          const hasBeacon = v.vehicleClass === 'POLICE' || v.vehicleClass === 'EMERGENCY';
+          const beaconPulse = hasBeacon ? (0.72 + 0.28 * Math.sin(now * 0.014 + i)) : 0;
+          dummy.position.copy(v.position);
+          dummy.rotation.set(v.pitch, v.rotationY, v.roll);
+          dummy.translateY(0.42);
+          dummy.scale.set(beaconPulse, beaconPulse, beaconPulse);
+          dummy.updateMatrix();
+          groundEmergencyLightMesh.current.setMatrixAt(groundIdx, dummy.matrix);
+        }
+
+        if (groundWheelMesh.current) {
+          const wheelOffsets: Array<[number, number]> = [
+            [-0.82, 1.28],
+            [0.82, 1.28],
+            [-0.82, -1.28],
+            [0.82, -1.28],
+          ];
+          wheelOffsets.forEach(([x, z], wheelIndex) => {
+            dummy.position.copy(v.position);
+            dummy.rotation.set(v.pitch, v.rotationY, v.roll);
+            dummy.translateX(x);
+            dummy.translateY(-0.18);
+            dummy.translateZ(z);
+            dummy.rotateZ(Math.PI / 2);
+            dummy.rotateX(v.wheelSpin);
+            dummy.updateMatrix();
+            groundWheelMesh.current?.setMatrixAt(groundIdx * 4 + wheelIndex, dummy.matrix);
+          });
         }
 
         groundIdx++;
@@ -447,6 +600,14 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
       groundTaillightMesh.current.count = groundIdx;
       groundTaillightMesh.current.instanceMatrix.needsUpdate = true;
     }
+    if (groundWheelMesh.current) {
+      groundWheelMesh.current.count = groundIdx * 4;
+      groundWheelMesh.current.instanceMatrix.needsUpdate = true;
+    }
+    if (groundEmergencyLightMesh.current) {
+      groundEmergencyLightMesh.current.count = groundIdx;
+      groundEmergencyLightMesh.current.instanceMatrix.needsUpdate = true;
+    }
     if (aerialBodyMesh.current) {
       aerialBodyMesh.current.count = aerialIdx;
       aerialBodyMesh.current.instanceMatrix.needsUpdate = true;
@@ -457,13 +618,33 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
     }
   });
 
-  const headlightEmissive = timeState.isNight ? 4.5 : 1.8;
-  const taillightEmissive = timeState.isNight ? 5.0 : 2.5;
-
   return (
     <group name="TrafficSystemLayer">
+      {/* Temporary accident marker: a visible, reusable disruption prop */}
+      <group ref={accidentMarkerRef} position={[0, 0.02, 0]} visible={false}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[3.2, 32]} />
+          <meshBasicMaterial color="#ff1744" transparent opacity={0.18} />
+        </mesh>
+        {[-2.2, 2.2].map((x) => (
+          <mesh key={x} position={[x, 0.35, 0]} rotation={[0, 0, Math.PI / 4]}>
+            <boxGeometry args={[0.16, 0.7, 0.16]} />
+            <meshStandardMaterial color="#f59e0b" emissive="#ff1744" emissiveIntensity={1.2} />
+          </mesh>
+        ))}
+        <pointLight position={[0, 2.2, 0]} color="#ff1744" intensity={2.2} distance={14} />
+      </group>
+      {TrafficIncidentSystem.getInstance().getIncidents().map((incident) => (
+        <group key={incident.id} position={[incident.position.x, incident.position.y, incident.position.z]} rotation={[0, incident.damageSeed, 0]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[incident.radius * 1.5, 1.4]} /><meshBasicMaterial color="#f97316" transparent opacity={0.22} /></mesh>
+          <mesh position={[0, 0.18, 0]} rotation={[0.2, 0.4, 0.15]}><boxGeometry args={[1.2, 0.35, 0.7]} /><meshStandardMaterial color="#475569" metalness={0.65} roughness={0.6} /></mesh>
+          <mesh position={[1.1, 0.12, -0.35]} rotation={[0, 0.2, 0.5]}><boxGeometry args={[0.5, 0.22, 0.35]} /><meshStandardMaterial color="#991b1b" emissive="#450a0a" emissiveIntensity={0.6} /></mesh>
+          <pointLight position={[0, 1.2, 0]} color="#f97316" intensity={0.9} distance={7} />
+        </group>
+      ))}
       {/* 0. Ground Cruiser Contact Occlusion Shadow */}
       <instancedMesh
+        frustumCulled={false}
         ref={groundShadowMesh}
         args={[groundShadowGeo, undefined, GROUND_COUNT]}
       >
@@ -472,16 +653,28 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
       {/* 1. Ground Cruiser Chassis */}
       <instancedMesh
+        frustumCulled={false}
         ref={groundBodyMesh}
         args={[groundBodyGeo, undefined, GROUND_COUNT]}
         castShadow={quality.shadows}
         receiveShadow={quality.shadows}
       >
-        <meshStandardMaterial color="#1e293b" roughness={0.25} metalness={0.85} />
+        <meshStandardMaterial vertexColors color="#1e293b" roughness={0.25} metalness={0.85} />
+      </instancedMesh>
+
+      {/* 1b. Procedural rubber wheels with signed spin */}
+      <instancedMesh frustumCulled={false} ref={groundWheelMesh} args={[groundWheelGeo, undefined, GROUND_COUNT * 4]} castShadow={quality.shadows}>
+        <meshStandardMaterial color="#050914" roughness={0.72} metalness={0.35} />
+      </instancedMesh>
+
+      {/* 1c. Deterministic emergency beacons (police and response vehicles) */}
+      <instancedMesh frustumCulled={false} ref={groundEmergencyLightMesh} args={[groundEmergencyLightGeo, undefined, GROUND_COUNT]}>
+        <meshBasicMaterial vertexColors color="#ef4444" toneMapped={false} />
       </instancedMesh>
 
       {/* 2. Ground Cruiser Cockpit Glass */}
       <instancedMesh
+        frustumCulled={false}
         ref={groundGlassMesh}
         args={[groundGlassGeo, undefined, GROUND_COUNT]}
       >
@@ -490,6 +683,7 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
       {/* 3. Glowing LED Headlights */}
       <instancedMesh
+        frustumCulled={false}
         ref={groundHeadlightMesh}
         args={[headlightGeo, undefined, GROUND_COUNT]}
       >
@@ -498,6 +692,7 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
       {/* 4. Glowing Red LED Taillight Bar */}
       <instancedMesh
+        frustumCulled={false}
         ref={groundTaillightMesh}
         args={[taillightGeo, undefined, GROUND_COUNT]}
       >
@@ -506,6 +701,7 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
       {/* 5. Aerial Skyway Commuters */}
       <instancedMesh
+        frustumCulled={false}
         ref={aerialBodyMesh}
         args={[aerialBodyGeo, undefined, AERIAL_COUNT]}
       >
@@ -514,6 +710,7 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) =>
 
       {/* 6. Aerial Plasma Exhaust Jet Trails */}
       <instancedMesh
+        frustumCulled={false}
         ref={aerialTrailMesh}
         args={[aerialTrailGeo, undefined, AERIAL_COUNT]}
       >

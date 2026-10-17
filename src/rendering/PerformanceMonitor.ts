@@ -41,6 +41,8 @@ export class PerformanceMonitor {
     const elapsed = now - this.prevTime;
 
     if (elapsed >= 500) {
+      // Preserve previously delivered snapshots for React subscribers.
+      this.metrics = { ...this.metrics };
       this.metrics.fps = Math.round((this.frames * 1000) / elapsed);
       this.metrics.frameTimeMs = parseFloat((elapsed / this.frames).toFixed(1));
 

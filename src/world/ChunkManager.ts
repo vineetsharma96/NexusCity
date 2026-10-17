@@ -41,6 +41,11 @@ export class ChunkManager {
   constructor() {
     this.loadExploredChunks();
     this.initGrid();
+    this.discoveredChunks.forEach((key) => {
+      const chunk = this.chunks.get(key);
+      if (chunk) this.discoveredDistricts.add(chunk.district.type);
+      else this.discoveredChunks.delete(key);
+    });
   }
 
   private loadExploredChunks(): void {
@@ -50,7 +55,9 @@ export class ChunkManager {
         if (saved) {
           const arr = JSON.parse(saved);
           if (Array.isArray(arr)) {
-            arr.forEach((k: string) => this.discoveredChunks.add(k));
+            arr.forEach((key: unknown) => {
+              if (typeof key === 'string' && /^-?\d+_-?\d+$/.test(key)) this.discoveredChunks.add(key);
+            });
           }
         }
       }
@@ -64,7 +71,7 @@ export class ChunkManager {
     }
   }
 
-  private saveTimer: any = null;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private saveExploredChunks(): void {
     if (this.saveTimer) return;
     this.saveTimer = setTimeout(() => {
@@ -113,6 +120,7 @@ export class ChunkManager {
   }
 
   private lastCheckedPos: THREE.Vector3 = new THREE.Vector3(999999, 0, 999999);
+  private lastQualityKey = '';
 
   public updatePlayerPosition(playerPos: THREE.Vector3): void {
     // 1. Resolve Active District at player position
@@ -134,21 +142,23 @@ export class ChunkManager {
       }
     }
 
-    // Throttle distance & LOD recalculation to when player moves at least 4m
-    if (playerPos.distanceToSquared(this.lastCheckedPos) < 16 && !stateChanged) {
+    const quality = QualityManager.current;
+    const qualityKey = `${quality.drawDistance}:${quality.LODQuality}`;
+    // Quality changes must refresh visible chunks even when the player is standing still.
+    if (playerPos.distanceToSquared(this.lastCheckedPos) < 16 && !stateChanged && qualityKey === this.lastQualityKey) {
       return;
     }
     this.lastCheckedPos.copy(playerPos);
+    this.lastQualityKey = qualityKey;
 
     // 2. Evaluate Distance, Discovery & LOD for Each Chunk using active Quality Preset
-    const quality = QualityManager.current;
     const maxDrawDist = quality.drawDistance || 1200;
     const highCutoff = quality.LODQuality === 'HIGH' ? 220 : quality.LODQuality === 'MEDIUM' ? 165 : 120;
     const medCutoff = quality.LODQuality === 'HIGH' ? 440 : quality.LODQuality === 'MEDIUM' ? 330 : 240;
     const lowCutoff = Math.min(maxDrawDist, quality.LODQuality === 'HIGH' ? 1800 : quality.LODQuality === 'MEDIUM' ? 1100 : 650);
 
     this.chunks.forEach((chunk) => {
-      const dist = playerPos.distanceTo(chunk.center);
+      const dist = Math.hypot(playerPos.x - chunk.center.x, playerPos.z - chunk.center.z);
       chunk.distanceToPlayer = dist;
 
       // Mark chunk as explored when player approaches within 260m
@@ -181,7 +191,9 @@ export class ChunkManager {
   }
 
   public getActiveChunks(): ChunkInfo[] {
-    return Array.from(this.chunks.values()).filter((c) => c.lod !== 'UNLOADED');
+    return Array.from(this.chunks.values())
+      .filter((chunk) => chunk.lod !== 'UNLOADED')
+      .map((chunk) => ({ ...chunk }));
   }
 
   public isChunkExplored(cx: number, cz: number): boolean {
@@ -195,10 +207,12 @@ export class ChunkManager {
 
   public getState(): ChunkManagerState {
     return {
-      chunks: Array.from(this.chunks.values()),
+      // React.memo consumers need new chunk props when LOD changes. Keep published
+      // snapshots independent of the internal records updated by the frame loop.
+      chunks: Array.from(this.chunks.values(), (chunk) => ({ ...chunk })),
       activeDistrict: this.activeDistrict,
-      discoveredDistricts: this.discoveredDistricts,
-      discoveredChunks: this.discoveredChunks,
+      discoveredDistricts: new Set(this.discoveredDistricts),
+      discoveredChunks: new Set(this.discoveredChunks),
       exploredPercent: this.getExploredPercent(),
       recentDiscovery: this.recentDiscovery,
     };

@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useLayoutEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { TreeDef } from './VegetationGenerator';
@@ -82,7 +82,7 @@ export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 850
   }, [count, trees, playerPosRef]);
 
   // Set initial colors once
-  useMemo(() => {
+  useLayoutEffect(() => {
     if (!meshRef.current) return;
     for (let i = 0; i < count; i++) {
       const c = colors[i % colors.length];
@@ -200,6 +200,7 @@ export const FallingLeaves: React.FC<FallingLeavesProps> = ({ trees, count = 850
 
   return (
     <instancedMesh
+      frustumCulled={false}
       ref={meshRef}
       args={[leafGeometry, undefined, count]}
       castShadow={QualityManager.current.shadows}

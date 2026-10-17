@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SaveSystem } from '../core/SaveSystem';
 
 export interface LandmarkDef {
   id: string;
@@ -69,6 +70,8 @@ export class NavigationSystem {
   private routeWaypoints: THREE.Vector3[] = [];
   private distance: number = 0;
   private isMapOpen: boolean = false;
+  private arrivalTriggered = false;
+  private lastRouteUpdatePos = new THREE.Vector3(9999, 9999, 9999);
   private listeners: Set<NavigationChangeListener> = new Set();
 
   public static getInstance(): NavigationSystem {
@@ -83,6 +86,8 @@ export class NavigationSystem {
       this.activeLandmark = null;
       this.routeWaypoints = [];
       this.distance = 0;
+      this.arrivalTriggered = false;
+      this.lastRouteUpdatePos.set(9999, 9999, 9999);
       this.notify();
       return;
     }
@@ -90,6 +95,10 @@ export class NavigationSystem {
     const target = this.landmarks.find((l) => l.id === landmarkId);
     if (target) {
       this.activeLandmark = target;
+      this.routeWaypoints = [];
+      this.distance = playerPos ? Math.round(playerPos.distanceTo(target.position)) : 0;
+      this.arrivalTriggered = false;
+      this.lastRouteUpdatePos.set(9999, 9999, 9999);
       if (playerPos) {
         this.calculateRoute(playerPos);
       }
@@ -100,7 +109,35 @@ export class NavigationSystem {
   public updatePlayerPosition(playerPos: THREE.Vector3): void {
     if (!this.activeLandmark) return;
 
-    this.distance = Math.round(playerPos.distanceTo(this.activeLandmark.position));
+    const rawDistance = playerPos.distanceTo(this.activeLandmark.position);
+    this.distance = Math.round(rawDistance);
+
+    if (rawDistance <= 8 && !this.arrivalTriggered) {
+      this.arrivalTriggered = true;
+      const destination = this.activeLandmark;
+      SaveSystem.getInstance().incrementLandmarkArrival(destination.name);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus:notification', {
+          detail: {
+            title: `ARRIVAL CONFIRMED // ${destination.name.toUpperCase()}`,
+            message: 'Route archived. Landmark telemetry is now available in city history.',
+            type: 'discovery',
+            duration: 4200,
+          },
+        }));
+      }
+      this.activeLandmark = null;
+      this.routeWaypoints = [];
+      this.distance = 0;
+      this.notify();
+      return;
+    }
+
+    // Route geometry and listeners only need updates after meaningful travel;
+    // the player controller can call this every frame without causing a UI
+    // notification and waypoint allocation every frame.
+    if (this.lastRouteUpdatePos.distanceToSquared(playerPos) < 1) return;
+    this.lastRouteUpdatePos.copy(playerPos);
 
     // Recalculate street route when player moves
     this.calculateRoute(playerPos);

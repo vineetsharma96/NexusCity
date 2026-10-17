@@ -10,6 +10,9 @@ import { ProceduralTextures } from '../core/ProceduralTextures';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
+import { StreetSign } from './StreetSign';
+import { NavigationSystem } from '../map/NavigationSystem';
+import { LivingCityEventState, LivingCityEventSystem } from '../world/LivingCityEventSystem';
 
 // Shared static geometries to eliminate redundant GPU vertex buffer uploads
 const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -32,15 +35,31 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const [weatherState, setWeatherState] = useState<WeatherState>(() =>
     WeatherSystem.getInstance().getState()
   );
+  const [cityEvent, setCityEvent] = useState<LivingCityEventState>(() => LivingCityEventSystem.getInstance().getState());
   const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
   useEffect(() => {
-    const unsubTime = TimeSystem.getInstance().subscribe(setTimeState);
-    const unsubWeather = WeatherSystem.getInstance().subscribe(setWeatherState);
+    let lastNightFactor = -1;
+    let lastWeatherUpdate = -Infinity;
+    let lastWetness = -1;
+    const unsubTime = TimeSystem.getInstance().subscribe((state) => {
+      if (Math.abs(state.nightFactor - lastNightFactor) < 0.03) return;
+      lastNightFactor = state.nightFactor;
+      setTimeState(state);
+    });
+    const unsubWeather = WeatherSystem.getInstance().subscribe((state) => {
+      const now = performance.now();
+      if (now - lastWeatherUpdate < 250 || Math.abs(state.wetnessFactor - lastWetness) < 0.01) return;
+      lastWeatherUpdate = now;
+      lastWetness = state.wetnessFactor;
+      setWeatherState(state);
+    });
+    const unsubEvent = LivingCityEventSystem.getInstance().subscribe(setCityEvent);
     const unsubQuality = QualityManager.subscribe(setQuality);
     return () => {
       unsubTime();
       unsubWeather();
+      unsubEvent();
       unsubQuality();
     };
   }, []);
@@ -55,6 +74,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const roadMetalness = THREE.MathUtils.lerp(0.65, 0.88, weatherState.wetnessFactor);
   const sidewalkRoughness = THREE.MathUtils.lerp(0.6, 0.18, weatherState.wetnessFactor);
   const sidewalkMetalness = THREE.MathUtils.lerp(0.3, 0.6, weatherState.wetnessFactor);
+  const gridIsOut = cityEvent.type === 'POWER_OUTAGE' && cityEvent.phase === 'ACTIVE';
 
   // Procedural textures
   const asphaltTex = useMemo(() => RoadGenerator.getAsphaltTexture(), []);
@@ -64,6 +84,10 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
   const puddleRoughness = useMemo(() => ProceduralTextures.getWetPuddleRoughnessMap(), []);
   const claddingNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
+  const landmarkNames = useMemo(() => {
+    const landmarks = NavigationSystem.getInstance().landmarks;
+    return new Map(landmarks.map((landmark) => [landmark.id, landmark.name]));
+  }, []);
 
   return (
     <group name="CityDistrictCentral">
@@ -279,16 +303,16 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
           </mesh>
           {/* Glowing Emissive Light Diffuser */}
           <mesh position={[1.4, 6.32, 0]} geometry={SHARED_UNIT_BOX} scale={[0.65, 0.04, 0.22]}>
-            <meshBasicMaterial color={timeState.nightFactor > 0.3 ? '#00f0ff' : '#083344'} />
+             <meshBasicMaterial color={gridIsOut ? '#17202b' : timeState.nightFactor > 0.3 ? '#00f0ff' : '#083344'} />
           </mesh>
           {/* Localized point light on street lamps adhering to quality maxLights budget */}
-          {quality.maxLights >= 16 && quality.nightLightsEnabled && idx % 4 === 0 && (
+          {quality.maxLights >= 8 && quality.nightLightsEnabled && idx % 8 === 0 && (
             <pointLight
               position={[1.4, 5.8, 0]}
               color="#00f0ff"
               distance={24}
               decay={2}
-              intensity={0.2 + timeState.nightFactor * 2.8}
+               intensity={gridIsOut ? 0.04 : 0.2 + timeState.nightFactor * 2.8}
             />
           )}
         </group>
@@ -337,6 +361,48 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         width={22}
         height={13}
         channel={1}
+      />
+
+      {/* 10. Static wayfinding signs: fixed placements keep exploration clues stable for every seed. */}
+      <StreetSign
+        position={[0, 4.25, -12]}
+        rotationY={Math.PI}
+        label={landmarkNames.get('central_plaza') ?? 'Central Plaza Hub'}
+        direction="S"
+      />
+      <StreetSign
+        position={[0, 4.25, -62]}
+        rotationY={Math.PI}
+        label={landmarkNames.get('north_crossway') ?? 'North Crossing Avenue'}
+        direction="N"
+        accent="#ff4fd8"
+      />
+      <StreetSign
+        position={[0, 4.25, 62]}
+        label={landmarkNames.get('south_crossway') ?? 'South Crossing Avenue'}
+        direction="S"
+        accent="#ff4fd8"
+      />
+      <StreetSign
+        position={[28, 4.25, -28]}
+        rotationY={Math.PI / 2}
+        label={landmarkNames.get('twin_spires') ?? 'Twin Spire Skybridge'}
+        direction="E"
+        accent="#a78bfa"
+      />
+      <StreetSign
+        position={[28, 4.25, 28]}
+        rotationY={Math.PI / 2}
+        label={landmarkNames.get('apex_tower') ?? 'Apex Monolith Tower'}
+        direction="E"
+        accent="#ffd166"
+      />
+      <StreetSign
+        position={[62, 4.25, 62]}
+        rotationY={-Math.PI / 2}
+        label={landmarkNames.get('park_sanctuary') ?? 'Central Park Sanctuary'}
+        direction="E"
+        accent="#59f0b2"
       />
     </group>
   );

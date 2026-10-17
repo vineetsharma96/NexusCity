@@ -8,11 +8,28 @@ export interface SavedPlayerState {
   currentDistrict: string;
 }
 
+export interface VehicleUpgrades {
+  speed: number;
+  handling: number;
+  neon: number;
+}
+
+export interface VehicleFleetRecord {
+  id: string;
+  name: string;
+  owned: boolean;
+  lastUsedAt: number;
+}
+
 export interface DiscoveredEntity {
   id: string;
   name: string;
   category: 'DISTRICT' | 'LANDMARK';
   discoveredAt: number; // timestamp
+  discoveryContext?: {
+    weather: WeatherType;
+    timePhase: string;
+  };
 }
 
 export interface OperativeStats {
@@ -20,9 +37,38 @@ export interface OperativeStats {
   dialoguesCompletedCount: number;
   elevatorsRiddenCount: number;
   fastTravelsCount: number;
+  landmarkArrivalsCount: number;
   timesSavedCount: number;
   firstPlayedTimestamp: number;
   lastPlayedTimestamp: number;
+}
+
+export interface CityHistoryEntry {
+  id: string;
+  title: string;
+  detail: string;
+  recordedAt: number;
+}
+
+export interface TerminalObjectiveRecord {
+  terminalId: string;
+  objectiveId: string;
+  title: string;
+  detail: string;
+  kind: 'MISSION' | 'EVENT';
+  revealed: boolean;
+  active: boolean;
+  eventId?: string;
+  updatedAt: number;
+}
+
+export type MissionStatus = 'AVAILABLE' | 'ACCEPTED' | 'COMPLETED';
+
+export interface SavedMissionState {
+  id: string;
+  status: MissionStatus;
+  progress: number;
+  updatedAt: number;
 }
 
 export interface NexusSaveData {
@@ -30,15 +76,27 @@ export interface NexusSaveData {
   player: SavedPlayerState;
   discoveredDistricts: string[];
   discoveredLandmarks: Record<string, DiscoveredEntity>;
+  cityHistory: CityHistoryEntry[];
   stats: OperativeStats;
   weatherPreference?: WeatherType;
   timePreferenceHour?: number;
   qualityPreset?: QualityPreset;
   audioMuted?: boolean;
   audioVolume?: number;
+  vehicleUpgrades?: VehicleUpgrades;
+  vehicleFleet?: VehicleFleetRecord[];
+  terminalObjectives?: Record<string, TerminalObjectiveRecord>;
+  missionStates?: Record<string, SavedMissionState>;
+  districtReputation?: Record<string, number>;
+  factionRelations?: Record<string, number>;
 }
 
 const STORAGE_KEY = 'nexus_city_flagship_save_v2';
+const isRecord = (value: unknown): value is Record<string, any> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const upgradeLevel = (value: unknown): number => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(3, Math.floor(numeric))) : 0;
+};
 
 type SaveListener = (data: NexusSaveData) => void;
 
@@ -52,6 +110,7 @@ export class SaveSystem {
   private constructor() {
     this.data = this.getDefaultData();
     this.load();
+    this.lastPosition.fromArray(this.data.player.position);
   }
 
   public static getInstance(): SaveSystem {
@@ -79,15 +138,34 @@ export class SaveSystem {
           discoveredAt: now,
         },
       },
+      cityHistory: [
+        {
+          id: 'city_boot',
+          title: 'CITY SYSTEM ONLINE',
+          detail: 'Central Metropolis telemetry is available to the operative.',
+          recordedAt: now,
+        },
+      ],
       stats: {
         distanceTraveledMeters: 0,
         dialoguesCompletedCount: 0,
         elevatorsRiddenCount: 0,
         fastTravelsCount: 0,
+        landmarkArrivalsCount: 0,
         timesSavedCount: 0,
         firstPlayedTimestamp: now,
         lastPlayedTimestamp: now,
       },
+      vehicleUpgrades: {
+        speed: 0,
+        handling: 0,
+        neon: 0,
+      },
+      vehicleFleet: [{ id: 'nexus-hover-01', name: 'Nexus Hovercraft', owned: true, lastUsedAt: now }],
+      terminalObjectives: {},
+      missionStates: {},
+      districtReputation: { CENTRAL_CITY: 0, NEURAL_DISTRICT: 0, SKY_DISTRICT: 0, INDUSTRIAL_DISTRICT: 0, OLD_CITY: 0, GREEN_DISTRICT: 0, UNKNOWN_DISTRICT: 0 },
+      factionRelations: { CIVIC_DIRECTORATE: 0, HELIX_SYNDICATE: 0, FREE_RUNNERS: 0, VERDANT_ASSEMBLY: 0 },
     };
   }
 
@@ -98,27 +176,44 @@ export class SaveSystem {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.version) {
+        if (isRecord(parsed) && parsed.version) {
+          const defaults = this.getDefaultData();
           // Validate and sanitize position if legacy save had subterranean coordinates
           let pos: [number, number, number] = [0, 0.2, 10];
-          if (Array.isArray(parsed.player?.position) && parsed.player.position.length === 3) {
+          if (Array.isArray(parsed.player?.position) && parsed.player.position.length === 3 && parsed.player.position.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))) {
             const py = parsed.player.position[1];
             pos = py < 0 ? [0, 0.2, 10] : parsed.player.position;
           }
 
-          this.data = {
+            const legacyUpgrades = parsed.vehicleUpgrades || {};
+            const upgrades: VehicleUpgrades = {
+              speed: upgradeLevel(legacyUpgrades.speed),
+              handling: upgradeLevel(legacyUpgrades.handling),
+              neon: upgradeLevel(legacyUpgrades.neon),
+            };
+            this.data = {
             ...this.getDefaultData(),
             ...parsed,
+            version: defaults.version,
+            discoveredDistricts: Array.isArray(parsed.discoveredDistricts) ? parsed.discoveredDistricts.filter((id: unknown) => typeof id === 'string') : defaults.discoveredDistricts,
+            discoveredLandmarks: isRecord(parsed.discoveredLandmarks) ? Object.fromEntries(Object.entries(parsed.discoveredLandmarks).filter(([, value]) => isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string' && (value.category === 'DISTRICT' || value.category === 'LANDMARK'))) : defaults.discoveredLandmarks,
+            cityHistory: Array.isArray(parsed.cityHistory) ? parsed.cityHistory.filter((entry: unknown) => isRecord(entry) && typeof entry.id === 'string' && typeof entry.title === 'string' && typeof entry.detail === 'string').slice(0, 40) : defaults.cityHistory,
             player: {
               position: pos,
-              rotationY: parsed.player?.rotationY || 0,
-              currentDistrict: parsed.player?.currentDistrict || 'CENTRAL_PLAZA',
+              rotationY: Number.isFinite(parsed.player?.rotationY) ? parsed.player.rotationY : 0,
+              currentDistrict: typeof parsed.player?.currentDistrict === 'string' ? parsed.player.currentDistrict : 'CENTRAL_PLAZA',
             },
-            stats: {
+              stats: {
               ...this.getDefaultData().stats,
-              ...(parsed.stats || {}),
+              ...Object.fromEntries(Object.entries(defaults.stats).map(([key, fallback]) => [key, Number.isFinite(parsed.stats?.[key]) && parsed.stats[key] >= 0 ? parsed.stats[key] : fallback])),
               lastPlayedTimestamp: Date.now(),
-            },
+              },
+              vehicleUpgrades: upgrades,
+              vehicleFleet: Array.isArray(parsed.vehicleFleet) && parsed.vehicleFleet.length > 0 ? parsed.vehicleFleet.filter((entry: unknown) => isRecord(entry) && typeof entry.id === 'string' && typeof entry.name === 'string' && typeof entry.owned === 'boolean') : defaults.vehicleFleet,
+              terminalObjectives: isRecord(parsed.terminalObjectives) ? Object.fromEntries(Object.entries(parsed.terminalObjectives).filter(([, value]) => isRecord(value) && typeof value.terminalId === 'string' && typeof value.objectiveId === 'string' && typeof value.title === 'string' && typeof value.detail === 'string')) : {},
+              missionStates: isRecord(parsed.missionStates) ? Object.fromEntries(Object.entries(parsed.missionStates).filter(([, value]) => isRecord(value) && typeof value.id === 'string' && ['AVAILABLE', 'ACCEPTED', 'COMPLETED'].includes(value.status))) : {},
+              districtReputation: { ...this.getDefaultData().districtReputation, ...(parsed.districtReputation || {}) },
+              factionRelations: { ...this.getDefaultData().factionRelations, ...(parsed.factionRelations || {}) },
           };
         }
       }
@@ -156,11 +251,14 @@ export class SaveSystem {
   }
 
   public updatePlayerPosition(pos: THREE.Vector3, rotY: number = 0): void {
+    if (![pos.x, pos.y, pos.z, rotY].every(Number.isFinite)) return;
     const dist = this.lastPosition.distanceTo(pos);
     if (dist > 0.05 && dist < 100) {
       this.data.stats.distanceTraveledMeters += dist;
-      this.lastPosition.copy(pos);
     }
+    // Teleports must reset the baseline too, otherwise every later movement is
+    // measured against the old district and travel statistics stop advancing.
+    if (dist > 0.05) this.lastPosition.copy(pos);
 
     this.data.player.position = [
       Math.round(pos.x * 100) / 100,
@@ -189,16 +287,22 @@ export class SaveSystem {
   public recordLandmarkDiscovery(
     id: string,
     name: string,
-    category: 'DISTRICT' | 'LANDMARK'
+    category: 'DISTRICT' | 'LANDMARK',
+    discoveryContext?: DiscoveredEntity['discoveryContext']
   ): boolean {
     if (!this.data.discoveredLandmarks[id]) {
-      this.data.discoveredLandmarks[id] = {
+        this.data.discoveredLandmarks[id] = {
         id,
         name,
         category,
         discoveredAt: Date.now(),
-      };
-      this.save(false);
+        discoveryContext,
+        };
+      this.recordHistory(
+        `landmark_${id}`,
+        `LANDMARK LOGGED // ${name.toUpperCase()}`,
+        `The ${category.toLowerCase()} was added to the persistent city history.`,
+      );
       return true; // Newly discovered
     }
     return false; // Already known
@@ -209,6 +313,23 @@ export class SaveSystem {
     this.save(false);
   }
 
+  public recordHistory(id: string, title: string, detail: string): boolean {
+    if (this.data.cityHistory.some((entry) => entry.id === id)) return false;
+    this.data.cityHistory.unshift({ id, title, detail, recordedAt: Date.now() });
+    this.data.cityHistory = this.data.cityHistory.slice(0, 40);
+    this.save(false);
+    return true;
+  }
+
+  public setTerminalObjective(record: TerminalObjectiveRecord): void {
+    this.data.terminalObjectives = { ...(this.data.terminalObjectives || {}), [record.terminalId]: { ...record } };
+    this.save(false);
+  }
+
+  public getTerminalObjectives(): Readonly<Record<string, TerminalObjectiveRecord>> {
+    return this.data.terminalObjectives || {};
+  }
+
   public incrementElevator(): void {
     this.data.stats.elevatorsRiddenCount += 1;
     this.save(false);
@@ -216,6 +337,49 @@ export class SaveSystem {
 
   public incrementFastTravel(): void {
     this.data.stats.fastTravelsCount += 1;
+    this.save(false);
+  }
+
+  public incrementLandmarkArrival(name: string): void {
+    this.data.stats.landmarkArrivalsCount += 1;
+    this.recordHistory(
+      `arrival_${name}_${this.data.stats.landmarkArrivalsCount}`,
+      `ARRIVAL CONFIRMED // ${name.toUpperCase()}`,
+      'The destination was reached and the route was archived in city history.',
+    );
+  }
+
+  public setVehicleUpgrades(upgrades: VehicleUpgrades): void {
+    this.data.vehicleUpgrades = { ...upgrades };
+    this.save(false);
+  }
+
+  public setVehicleFleet(fleet: VehicleFleetRecord[]): void {
+    this.data.vehicleFleet = fleet.map((entry) => ({ ...entry }));
+    this.save(false);
+  }
+
+  public setMissionState(state: SavedMissionState): void {
+    this.data.missionStates = { ...(this.data.missionStates || {}), [state.id]: { ...state } };
+    this.save(false);
+  }
+
+  public setReputation(district: string, value: number): void {
+    this.data.districtReputation = { ...(this.data.districtReputation || {}), [district]: Math.max(-100, Math.min(100, Math.round(value))) };
+    this.save(false);
+  }
+
+  public setFactionRelation(faction: string, value: number): void {
+    this.data.factionRelations = { ...(this.data.factionRelations || {}), [faction]: Math.max(-100, Math.min(100, Math.round(value))) };
+    this.save(false);
+  }
+
+  public markVehicleUsed(id: string, name: string): void {
+    const fleet = this.data.vehicleFleet || [];
+    const existing = fleet.find((entry) => entry.id === id);
+    if (existing) existing.lastUsedAt = Date.now();
+    else fleet.push({ id, name, owned: true, lastUsedAt: Date.now() });
+    this.data.vehicleFleet = fleet;
     this.save(false);
   }
 

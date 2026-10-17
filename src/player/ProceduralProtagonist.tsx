@@ -9,6 +9,22 @@ interface ProceduralProtagonistProps {
   state: KinematicState;
 }
 
+const dampRotation = (
+  group: THREE.Group | null,
+  axis: 'x' | 'y' | 'z',
+  target: number,
+  lambda: number,
+  delta: number,
+) => {
+  if (!group) return;
+  group.rotation[axis] = THREE.MathUtils.damp(group.rotation[axis], target, lambda, delta);
+};
+
+const dampPositionY = (group: THREE.Group | null, target: number, lambda: number, delta: number) => {
+  if (!group) return;
+  group.position.y = THREE.MathUtils.damp(group.position.y, target, lambda, delta);
+};
+
 export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ state }) => {
   const rootGroupRef = useRef<THREE.Group>(null);
   const bodyGroupRef = useRef<THREE.Group>(null);
@@ -50,18 +66,23 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
     // 1. Sync Root Position, Facing Yaw and Banking Lean
     rootGroupRef.current.position.copy(state.position);
     rootGroupRef.current.rotation.y = state.rotationY;
-    rootGroupRef.current.rotation.z = THREE.MathUtils.lerp(
+    rootGroupRef.current.rotation.z = THREE.MathUtils.damp(
       rootGroupRef.current.rotation.z,
       state.bankAngle || 0,
-      delta * 12
+      12,
+      delta
     );
 
     // 2. Advance Animation Cycle based on current gait
     const gait = state.gait;
     let cycleSpeed = 0;
-    if (gait === 'WALK') cycleSpeed = 7.5;
-    else if (gait === 'RUN') cycleSpeed = 13.0;
-    else if (gait === 'IDLE') cycleSpeed = 2.5;
+    if (gait === 'WALK') {
+      const speedFactor = THREE.MathUtils.clamp(state.speed / 6.8, 0, 1);
+      cycleSpeed = THREE.MathUtils.lerp(3.2, 7.5, speedFactor);
+    } else if (gait === 'RUN') {
+      const speedFactor = THREE.MathUtils.clamp(state.speed / 14.2, 0, 1);
+      cycleSpeed = THREE.MathUtils.lerp(6.0, 13.0, speedFactor);
+    } else if (gait === 'IDLE') cycleSpeed = 2.5;
 
     animTime.current += delta * cycleSpeed;
     const t = animTime.current;
@@ -71,75 +92,76 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
       // Gentle breathing & weight shifting
       const breathe = Math.sin(t) * 0.03;
       if (bodyGroupRef.current) {
-        bodyGroupRef.current.position.y = 0.95 + breathe * 0.5;
-        bodyGroupRef.current.rotation.x = 0;
-        bodyGroupRef.current.rotation.z = Math.sin(t * 0.5) * 0.02;
+        dampPositionY(bodyGroupRef.current, 0.95 + breathe * 0.5, 12, delta);
+        dampRotation(bodyGroupRef.current, 'x', 0, 12, delta);
+        dampRotation(bodyGroupRef.current, 'y', 0, 12, delta);
+        dampRotation(bodyGroupRef.current, 'z', Math.sin(t * 0.5) * 0.02, 12, delta);
       }
-      if (torsoRef.current) torsoRef.current.scale.set(1 + breathe * 0.3, 1, 1 + breathe * 0.3);
-      if (headRef.current) headRef.current.rotation.x = Math.sin(t * 0.5) * 0.03;
+      if (torsoRef.current) {
+        const targetScale = 1 + breathe * 0.3;
+        torsoRef.current.scale.x = THREE.MathUtils.damp(torsoRef.current.scale.x, targetScale, 10, delta);
+        torsoRef.current.scale.z = THREE.MathUtils.damp(torsoRef.current.scale.z, targetScale, 10, delta);
+      }
+      dampRotation(headRef.current, 'x', Math.sin(t * 0.5) * 0.03, 10, delta);
 
       // Relaxed arms
       if (leftArmRef.current) {
-        leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, 0.08, 0.15);
-        leftArmRef.current.rotation.z = THREE.MathUtils.lerp(leftArmRef.current.rotation.z, 0.12, 0.15);
+        dampRotation(leftArmRef.current, 'x', 0.08, 14, delta);
+        dampRotation(leftArmRef.current, 'z', 0.12, 14, delta);
       }
       if (rightArmRef.current) {
-        rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, 0.08, 0.15);
-        rightArmRef.current.rotation.z = THREE.MathUtils.lerp(rightArmRef.current.rotation.z, -0.12, 0.15);
+        dampRotation(rightArmRef.current, 'x', 0.08, 14, delta);
+        dampRotation(rightArmRef.current, 'z', -0.12, 14, delta);
       }
-      if (leftLegRef.current) leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, 0, 0.2);
-      if (rightLegRef.current) rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, 0, 0.2);
-      if (leftShinRef.current) leftShinRef.current.rotation.x = THREE.MathUtils.lerp(leftShinRef.current.rotation.x, 0, 0.2);
-      if (rightShinRef.current) rightShinRef.current.rotation.x = THREE.MathUtils.lerp(rightShinRef.current.rotation.x, 0, 0.2);
+      dampRotation(leftLegRef.current, 'x', 0, 18, delta);
+      dampRotation(rightLegRef.current, 'x', 0, 18, delta);
+      dampRotation(leftShinRef.current, 'x', 0, 18, delta);
+      dampRotation(rightShinRef.current, 'x', 0, 18, delta);
+      dampRotation(leftForearmRef.current, 'x', 0, 14, delta);
+      dampRotation(rightForearmRef.current, 'x', 0, 14, delta);
 
       if (leftThrusterRef.current) leftThrusterRef.current.intensity = 0.2;
       if (rightThrusterRef.current) rightThrusterRef.current.intensity = 0.2;
     } else if (gait === 'WALK' || gait === 'RUN') {
       const isRunning = gait === 'RUN';
-      const strideAmp = isRunning ? 0.95 : 0.6;
-      const armAmp = isRunning ? 1.05 : 0.55;
+      const speedFactor = THREE.MathUtils.clamp(state.speed / (isRunning ? 14.2 : 6.8), 0, 1);
+      const strideAmp = (isRunning ? 0.95 : 0.6) * THREE.MathUtils.lerp(0.25, 1, speedFactor);
+      const armAmp = (isRunning ? 1.05 : 0.55) * THREE.MathUtils.lerp(0.35, 1, speedFactor);
       const forwardLean = isRunning ? 0.32 : 0.12;
 
       // Torso lean and vertical hip bounce (two bounces per full stride cycle)
       const hipBounce = Math.abs(Math.sin(t)) * (isRunning ? 0.1 : 0.05);
       if (bodyGroupRef.current) {
-        bodyGroupRef.current.position.y = 0.95 + hipBounce;
-        bodyGroupRef.current.rotation.x = forwardLean;
-        bodyGroupRef.current.rotation.y = Math.sin(t) * 0.08; // Torso counter-rotation
-        bodyGroupRef.current.rotation.z = Math.cos(t) * 0.04;
+        dampPositionY(bodyGroupRef.current, 0.95 + hipBounce, 18, delta);
+        dampRotation(bodyGroupRef.current, 'x', forwardLean, 14, delta);
+        dampRotation(bodyGroupRef.current, 'y', Math.sin(t) * 0.08 * speedFactor, 14, delta);
+        dampRotation(bodyGroupRef.current, 'z', Math.cos(t) * 0.04 * speedFactor, 14, delta);
       }
 
       // Legs swing (opposite phases)
       const legPhase = Math.sin(t);
-      if (leftLegRef.current) {
-        leftLegRef.current.rotation.x = legPhase * strideAmp;
-      }
-      if (rightLegRef.current) {
-        rightLegRef.current.rotation.x = -legPhase * strideAmp;
-      }
+      dampRotation(leftLegRef.current, 'x', legPhase * strideAmp, 20, delta);
+      dampRotation(rightLegRef.current, 'x', -legPhase * strideAmp, 20, delta);
 
       // Knees bend on backward stroke
-      if (leftShinRef.current) {
-        leftShinRef.current.rotation.x = legPhase < 0 ? Math.abs(legPhase) * (isRunning ? 1.4 : 0.9) : 0.05;
-      }
-      if (rightShinRef.current) {
-        rightShinRef.current.rotation.x = legPhase > 0 ? Math.abs(legPhase) * (isRunning ? 1.4 : 0.9) : 0.05;
-      }
+      const kneeAmp = (isRunning ? 1.4 : 0.9) * THREE.MathUtils.lerp(0.35, 1, speedFactor);
+      dampRotation(leftShinRef.current, 'x', Math.max(0, -legPhase) * kneeAmp + 0.04, 22, delta);
+      dampRotation(rightShinRef.current, 'x', Math.max(0, legPhase) * kneeAmp + 0.04, 22, delta);
 
       // Arms swing opposite to legs
       if (leftArmRef.current) {
-        leftArmRef.current.rotation.x = -legPhase * armAmp;
-        leftArmRef.current.rotation.z = 0.15;
+        dampRotation(leftArmRef.current, 'x', -legPhase * armAmp, 16, delta);
+        dampRotation(leftArmRef.current, 'z', 0.15, 16, delta);
       }
       if (rightArmRef.current) {
-        rightArmRef.current.rotation.x = legPhase * armAmp;
-        rightArmRef.current.rotation.z = -0.15;
+        dampRotation(rightArmRef.current, 'x', legPhase * armAmp, 16, delta);
+        dampRotation(rightArmRef.current, 'z', -0.15, 16, delta);
       }
       if (leftForearmRef.current) {
-        leftForearmRef.current.rotation.x = isRunning ? -0.7 : -0.3;
+        dampRotation(leftForearmRef.current, 'x', isRunning ? -0.7 : -0.3, 14, delta);
       }
       if (rightForearmRef.current) {
-        rightForearmRef.current.rotation.x = isRunning ? -0.7 : -0.3;
+        dampRotation(rightForearmRef.current, 'x', isRunning ? -0.7 : -0.3, 14, delta);
       }
 
       // Thruster pulse on running
@@ -148,6 +170,10 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
       if (rightThrusterRef.current) rightThrusterRef.current.intensity = thrusterGlow;
     } else if (gait === 'JUMP_UP' || gait === 'FALL') {
       const isAscending = gait === 'JUMP_UP';
+      dampRotation(leftForearmRef.current, 'x', -0.2, 14, delta);
+      dampRotation(rightForearmRef.current, 'x', -0.2, 14, delta);
+      dampRotation(bodyGroupRef.current, 'y', 0, 14, delta);
+      dampRotation(bodyGroupRef.current, 'z', 0, 14, delta);
       if (bodyGroupRef.current) {
         bodyGroupRef.current.position.y = 0.95;
         bodyGroupRef.current.rotation.x = isAscending ? -0.15 : 0.18;

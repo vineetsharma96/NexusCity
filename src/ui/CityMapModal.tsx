@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { NavigationSystem, NavigationState, LandmarkDef } from '../map/NavigationSystem';
 import { ChunkManager, ChunkManagerState } from '../world/ChunkManager';
-import { DistrictGenerator, DistrictInfo } from '../city/DistrictGenerator';
+import { DistrictGenerator } from '../city/DistrictGenerator';
 import { AudioManager } from '../audio/AudioManager';
+import { useModalFocus } from './useModalFocus';
 
 interface CityMapModalProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
@@ -32,6 +33,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
 
   const [playerCoord, setPlayerCoord] = useState<{ x: number; z: number }>({ x: 0, z: 0 });
   const [headingDeg, setHeadingDeg] = useState(0);
+  const mapRef = useModalFocus(navState.isMapOpen, () => NavigationSystem.getInstance().setMapOpen(false));
 
   useEffect(() => {
     const unsubNav = NavigationSystem.getInstance().subscribe((state) => {
@@ -51,24 +53,24 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
   // Update telemetry and camera heading while map is open
   useEffect(() => {
     if (!navState.isMapOpen) return;
-
-    const interval = setInterval(() => {
+    const dir = new THREE.Vector3();
+    const updateTelemetry = () => {
       if (playerPosRef?.current) {
-        setPlayerCoord({
-          x: Math.round(playerPosRef.current.x),
-          z: Math.round(playerPosRef.current.z),
-        });
+        const x = Math.round(playerPosRef.current.x);
+        const z = Math.round(playerPosRef.current.z);
+        setPlayerCoord((previous) => previous.x === x && previous.z === z ? previous : { x, z });
       }
 
       const cam = (window as any).__NEXUS_CAMERA__ as THREE.Camera | undefined;
       if (cam) {
-        const dir = new THREE.Vector3();
         cam.getWorldDirection(dir);
         let deg = Math.atan2(dir.x, -dir.z) * (180 / Math.PI);
         if (deg < 0) deg += 360;
-        setHeadingDeg(deg);
+        setHeadingDeg((previous) => Math.abs(previous - deg) < 0.5 ? previous : deg);
       }
-    }, 80);
+    };
+    updateTelemetry();
+    const interval = setInterval(updateTelemetry, 100);
 
     return () => clearInterval(interval);
   }, [navState.isMapOpen, playerPosRef]);
@@ -115,20 +117,22 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
     // Center SVG around player
     const centerOffset = SVG_SIZE / 2;
     setPan({
-      x: (centerOffset - playerSvg.x) * zoom,
-      y: (centerOffset - playerSvg.y) * zoom,
+      x: (centerOffset - playerSvg.x) * 1.1,
+      y: (centerOffset - playerSvg.y) * 1.1,
     });
     setZoom(1.1);
   };
 
   // Drag pan handlers
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || (e.target instanceof Element && e.target.closest('[role="button"]'))) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
     setIsDragging(true);
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     panStartRef.current = { ...pan };
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: React.PointerEvent) => {
     if (!isDragging) return;
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
@@ -143,7 +147,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
   };
 
   const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
+    e.stopPropagation();
     const zoomDelta = e.deltaY < 0 ? 0.15 : -0.15;
     setZoom((prev) => Math.min(2.5, Math.max(0.4, prev + zoomDelta)));
   };
@@ -166,9 +170,9 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
     : 0;
   const selectedEta = Math.round(selectedDist / 5.5);
 
-  const exploredPercent = chunkState.exploredPercent || 5.2;
+  const exploredPercent = chunkState.exploredPercent;
   const totalChunks = 576;
-  const exploredCount = chunkState.discoveredChunks?.size || 30;
+  const exploredCount = chunkState.discoveredChunks.size;
 
   // Render 24x24 chunk grid tiles
   const chunkTiles: React.ReactNode[] = [];
@@ -249,26 +253,32 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
 
   return (
     <div
+      ref={mapRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="city-map-title"
+      tabIndex={-1}
+      className="city-map"
       data-component="CityMapModalContainer"
       style={{
-        position: 'absolute',
+        position: 'fixed',
         top: 0,
         left: 0,
         width: '100vw',
-        height: '100vh',
+        height: '100dvh',
         backgroundColor: 'rgba(3, 7, 18, 0.94)',
         backdropFilter: 'blur(18px)',
         WebkitBackdropFilter: 'blur(18px)',
-        zIndex: 60,
+        zIndex: 160,
         display: 'flex',
         flexDirection: 'column',
         pointerEvents: 'auto',
         userSelect: 'none',
       }}
-      onMouseUp={handleMouseUp}
     >
       {/* 1. Header Bar with Exploration Progress Bar */}
       <div
+        className="city-map-header"
         style={{
           padding: '12px 24px',
           borderBottom: '1px solid rgba(0, 240, 255, 0.25)',
@@ -278,9 +288,10 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
           backgroundColor: 'rgba(6, 12, 28, 0.9)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div className="city-map-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div className="city-map-title-row" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <h2
+              id="city-map-title"
               style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: '1.25rem',
@@ -290,7 +301,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 margin: 0,
               }}
             >
-              HOLOGRAPHIC METROPOLIS BLUEPRINT
+              CITY MAP
             </h2>
             <span
               className="cyber-badge"
@@ -308,7 +319,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="city-map-actions" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             {/* Viewport Zoom & Center Controls */}
             <button
               onClick={handleCenterOnPlayer}
@@ -321,7 +332,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
               }}
               title="Recenter Map on Player"
             >
-              ◎ RECENTER ON OPERATIVE
+              ◎ RECENTER
             </button>
             <div style={{ display: 'flex', gap: 4 }}>
               <button
@@ -367,7 +378,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
         </div>
 
         {/* Exploration Metric & Glowing Progress Bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div className="city-map-metrics" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
           <div
             style={{
               fontFamily: 'var(--font-mono)',
@@ -396,7 +407,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
           >
             <div
               style={{
-                width: `${Math.min(100, Math.max(2, exploredPercent))}%`,
+                width: `${Math.min(100, Math.max(0, exploredPercent))}%`,
                 height: '100%',
                 backgroundColor: 'var(--neon-cyan)',
                 boxShadow: '0 0 10px var(--neon-cyan)',
@@ -410,6 +421,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
             {(['ALL', 'LANDMARKS', 'TRANSIT'] as CategoryFilter[]).map((tab) => (
               <button
                 key={tab}
+                aria-pressed={categoryFilter === tab}
                 onClick={() => {
                   setCategoryFilter(tab);
                   AudioManager.getInstance().playUI('click');
@@ -431,18 +443,25 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
       </div>
 
       {/* 2. Main Body: Vector Map + Details Side Panel */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="city-map-body" style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* Left Side: Interactive SVG Map Container */}
         <div
+          className="city-map-viewport"
           style={{
             flex: 1,
+            minWidth: 0,
+            minHeight: 0,
             position: 'relative',
             overflow: 'hidden',
             cursor: isDragging ? 'grabbing' : 'grab',
             backgroundColor: '#040714',
+            touchAction: 'none',
           }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
+          onPointerDown={handleMouseDown}
+          onPointerMove={handleMouseMove}
+          onPointerUp={handleMouseUp}
+          onPointerCancel={handleMouseUp}
+          onLostPointerCapture={handleMouseUp}
           onWheel={handleWheel}
         >
           {/* Transforming SVG Viewport */}
@@ -577,6 +596,15 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 return (
                   <g
                     key={lm.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Inspect ${lm.name}`}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedLandmark(lm);
+                      }
+                    }}
                     onClick={() => {
                       setSelectedLandmark(lm);
                       AudioManager.getInstance().playUI('click');
@@ -619,12 +647,12 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                     />
 
                     {/* Landmark Name Label */}
-                    <text
+                    {isSelected && <text
                       x={lp.x}
-                      y={lp.y + 19}
+                      y={lp.y - 26}
                       textAnchor="middle"
                       fill={isTarget ? 'var(--neon-amber)' : '#ffffff'}
-                      fontSize="9"
+                      fontSize="12"
                       fontFamily="var(--font-mono)"
                       fontWeight="700"
                       stroke="#050811"
@@ -632,7 +660,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                       paintOrder="stroke"
                     >
                       {lm.name}
-                    </text>
+                    </text>}
                   </g>
                 );
               })}
@@ -711,17 +739,25 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
 
         {/* Right Side: Landmark Inspector & Action Card */}
         <div
+          className="city-map-inspector"
           style={{
-            width: 380,
+            width: 340,
+            flexShrink: 0,
             borderLeft: '1px solid rgba(0, 240, 255, 0.2)',
             backgroundColor: 'rgba(5, 10, 24, 0.96)',
             padding: '20px 24px',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between',
+            gap: 14,
             overflowY: 'auto',
           }}
         >
+          <label className="map-landmark-picker">
+            <span className="menu-section-label">INSPECT LANDMARK</span>
+            <select className="cyber-select" value={selectedLandmark?.id ?? ''} onChange={(event) => setSelectedLandmark(allLandmarks.find((landmark) => landmark.id === event.target.value) ?? null)}>
+              {allLandmarks.map((landmark) => <option key={landmark.id} value={landmark.id}>{landmark.name}</option>)}
+            </select>
+          </label>
           {selectedLandmark ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {/* Category & Badge */}
@@ -786,7 +822,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
               {/* Description */}
               <p
                 style={{
-                  fontFamily: 'var(--font-sans)',
+                  fontFamily: 'var(--font-body)',
                   fontSize: '0.85rem',
                   lineHeight: '1.5',
                   color: 'var(--text-secondary)',

@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { SaveSystem } from '../core/SaveSystem';
 import { AudioManager } from '../audio/AudioManager';
+import { WeatherSystem, WeatherType } from './WeatherSystem';
+import { TimeSystem } from './TimeSystem';
+import { NavigationSystem } from '../map/NavigationSystem';
 
 export interface LandmarkDiscoveryTrigger {
   id: string;
@@ -79,6 +82,12 @@ export class DiscoverySystem {
         radius: 35,
       }
     );
+    // Discovery, navigation and wayfinding must refer to the same locations.
+    const landmarks = NavigationSystem.getInstance().landmarks;
+    this.triggers.forEach((trigger) => {
+      const landmark = landmarks.find((entry) => entry.id === trigger.id);
+      if (landmark) trigger.position.copy(landmark.position);
+    });
   }
 
   public update(playerPos: THREE.Vector3): void {
@@ -88,31 +97,51 @@ export class DiscoverySystem {
     }
     this.lastCheckPos.copy(playerPos);
 
-    const saveSystem = SaveSystem.getInstance();
+    const weather = WeatherSystem.getInstance().getState().currentWeather;
+    const time = TimeSystem.getInstance().getState();
 
     for (let i = 0; i < this.triggers.length; i++) {
       const trig = this.triggers[i];
       const dist = playerPos.distanceTo(trig.position);
 
       if (dist <= trig.radius) {
-        const isNew = saveSystem.recordLandmarkDiscovery(trig.id, trig.name, 'LANDMARK');
-        if (isNew) {
-          // Play ascending procedural discovery arpeggio chime
-          AudioManager.getInstance().playDiscovery();
-
-          // Dispatch celebratory notification event
-          window.dispatchEvent(
-            new CustomEvent('nexus:notification', {
-              detail: {
-                title: `LOCATION DISCOVERED // ${trig.name.toUpperCase()}`,
-                message: `${trig.subtitle} • Logged into Operative Codex.`,
-                type: 'discovery',
-                duration: 4500,
-              },
-            })
-          );
-        }
+        this.recordDiscovery(trig.id, trig.name, trig.subtitle, trig.district, {
+          weather,
+          timePhase: time.phase,
+        });
       }
     }
+  }
+
+  /** Records a world discovery through the same save, audio, and notification path. */
+  public recordDiscovery(
+    id: string,
+    name: string,
+    subtitle: string,
+    district: string,
+    context?: { weather: WeatherType; timePhase: string }
+  ): boolean {
+    const saveSystem = SaveSystem.getInstance();
+    const weather = context?.weather ?? WeatherSystem.getInstance().getState().currentWeather;
+    const time = TimeSystem.getInstance().getState();
+    const isNew = saveSystem.recordLandmarkDiscovery(id, name, 'LANDMARK', {
+      weather,
+      timePhase: context?.timePhase ?? time.phase,
+    });
+
+    if (isNew && typeof window !== 'undefined') {
+      AudioManager.getInstance().playDiscovery();
+      window.dispatchEvent(
+        new CustomEvent('nexus:notification', {
+          detail: {
+            title: `LOCATION DISCOVERED // ${name.toUpperCase()}`,
+            message: `${subtitle} • ${district.toUpperCase()} logged into Operative Codex.`,
+            type: 'discovery',
+            duration: 4500,
+          },
+        })
+      );
+    }
+    return isNew;
   }
 }

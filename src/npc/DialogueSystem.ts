@@ -1,3 +1,10 @@
+import * as THREE from 'three';
+import { DistrictGenerator } from '../city/DistrictGenerator';
+import { TimeSystem, TimeOfDayPhase } from '../world/TimeSystem';
+import { WeatherSystem, WeatherType } from '../world/WeatherSystem';
+import { SaveSystem } from '../core/SaveSystem';
+import { LivingCitySystem } from './LivingCitySystem';
+
 export interface DialogueChoice {
   text: string;
   nextNodeId?: string;
@@ -20,10 +27,19 @@ export interface DialogueConversation {
 
 type DialogueStateListener = (activeNode: DialogueNode | null) => void;
 
+export interface DialogueContext {
+  playerPosition: THREE.Vector3;
+  district?: string;
+  timePhase?: TimeOfDayPhase;
+  weather?: WeatherType;
+}
+
 export class DialogueSystem {
   private static instance: DialogueSystem;
   private conversations: Map<string, DialogueConversation> = new Map();
   private currentNode: DialogueNode | null = null;
+  private currentNpcId: string | null = null;
+  private dialogueCompleted = false;
   private listeners: Set<DialogueStateListener> = new Set();
 
   constructor() {
@@ -186,213 +202,19 @@ export class DialogueSystem {
       },
     });
 
-    // 5. Senior Researcher Nova — Quantum Physicist (Nexus Labs Promenade)
-    this.registerConversation({
-      npcId: 'lab_researcher_nova',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Senior Researcher Nova',
-          role: 'Quantum Containment Specialist // Nexus Advanced Labs',
-          text: 'Careful near the containment perimeter! The tachyon ring is spinning at 14,000 RPM. We are observing zero quantum decoherence across all eight spatial quadrants.',
-          choices: [
-            { text: 'What does the quantum core power?', nextNodeId: 'power' },
-            { text: 'Can I access Level 2 Mezzanine?', nextNodeId: 'elevator' },
-            { text: 'Carry on with your research.', nextNodeId: 'exit' },
-          ],
-        },
-        power: {
-          id: 'power',
-          speaker: 'Senior Researcher Nova',
-          role: 'Quantum Containment Specialist // Nexus Advanced Labs',
-          text: 'It powers the entire district telemetry grid and magnetic hover corridors. Without this reactor, the skyway traffic would lose anti-gravity stabilization within seconds.',
-          choices: [{ text: 'Impressive engineering.', nextNodeId: 'exit' }],
-        },
-        elevator: {
-          id: 'elevator',
-          speaker: 'Senior Researcher Nova',
-          role: 'Quantum Containment Specialist // Nexus Advanced Labs',
-          text: 'Yes! Step onto the elevator lift in the corner. Level 2 has our upper observation deck and deep-spectrum telemetry consoles.',
-          choices: [{ text: 'I will check it out.', nextNodeId: 'exit' }],
-        },
-      },
-    });
-
-    // 6. Mixologist Unit K-9 — Cyber Bartender (Neon Velocity Boulevard)
-    this.registerConversation({
-      npcId: 'lounge_bartender_k9',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Mixologist Unit K-9',
-          role: 'Synthetic Mixologist // Neon Velocity Lounge',
-          text: 'Welcome to Neon Velocity, operative. Synthesized cocktail or a chilled electrolyte infusion? Our taps are direct-fed from the central chilling conduits.',
-          choices: [
-            { text: 'What do you recommend?', nextNodeId: 'recommend' },
-            { text: 'Who frequents this lounge?', nextNodeId: 'patrons' },
-            { text: 'Just passing through.', nextNodeId: 'exit' },
-          ],
-        },
-        recommend: {
-          id: 'recommend',
-          speaker: 'Mixologist Unit K-9',
-          role: 'Synthetic Mixologist // Neon Velocity Lounge',
-          text: 'The "Neon Blue Mirage" — liquid nitrogen, synthetic curacao, and micro-luminescent effervescence. Guaranteed to lower neural heat by 4.2 degrees.',
-          choices: [{ text: 'Sounds refreshing. Thanks, K-9.', nextNodeId: 'exit' }],
-        },
-        patrons: {
-          id: 'patrons',
-          speaker: 'Mixologist Unit K-9',
-          role: 'Synthetic Mixologist // Neon Velocity Lounge',
-          text: 'Netrunners, corporate couriers, skyway pilots on shore leave. Everyone gathers here between night cycles to exchange encrypted dataslates.',
-          choices: [{ text: 'Ill keep my eyes open.', nextNodeId: 'exit' }],
-        },
-      },
-    });
-
-    // 7. Doc Viktor Vance — Ripperdoc Surgeon (Krom-Doc Plaza)
-    this.registerConversation({
-      npcId: 'ripperdoc_viktor',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Doc Viktor Vance',
-          role: 'Master Cyber-Surgeon // Krom-Doc Clinic',
-          text: 'Sit down, take a breath. Looking for titanium bone lacing, sub-dermal reflex accelerators, or an optical HUD recalibration?',
-          choices: [
-            { text: 'How are my current vital telemetry readings?', nextNodeId: 'vitals' },
-            { text: 'Tell me about the cyber-prosthetics cases.', nextNodeId: 'prosthetics' },
-            { text: 'Just browsing the clinic, Doc.', nextNodeId: 'exit' },
-          ],
-        },
-        vitals: {
-          id: 'vitals',
-          speaker: 'Doc Viktor Vance',
-          role: 'Master Cyber-Surgeon // Krom-Doc Clinic',
-          text: 'Your bioreactor output is solid. Kinematic response time under 12 milliseconds. Your cyber armor is in pristine condition.',
-          choices: [{ text: 'Good to know.', nextNodeId: 'exit' }],
-        },
-        prosthetics: {
-          id: 'prosthetics',
-          speaker: 'Doc Viktor Vance',
-          role: 'Master Cyber-Surgeon // Krom-Doc Clinic',
-          text: 'Grade-5 carbon fiber and aero-grade titanium alloys. We craft prosthetics that can withstand atmospheric re-entry friction.',
-          choices: [{ text: 'Unbelievable craftsmanship.', nextNodeId: 'exit' }],
-        },
-      },
-    });
-
-    // 8. Netrunner Zero-Day — Rogue Hacker (Black-Ice Safehouse Alley)
-    this.registerConversation({
-      npcId: 'netrunner_zeroday',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Netrunner Zero-Day',
-          role: 'Black-Ice Infiltration Operative // Classified Safehouse',
-          text: 'Keep your comms encrypted while you are in here. The Megacorp ICE probes ping this sector every forty seconds, looking for packet leaks.',
-          choices: [
-            { text: 'What are you decrypting on these server banks?', nextNodeId: 'decryption' },
-            { text: 'Can I use the deep-net terminal?', nextNodeId: 'terminal' },
-            { text: 'Ill let you focus.', nextNodeId: 'exit' },
-          ],
-        },
-        decryption: {
-          id: 'decryption',
-          speaker: 'Netrunner Zero-Day',
-          role: 'Black-Ice Infiltration Operative // Classified Safehouse',
-          text: 'Intercepted corporate flight manifests from the high-altitude skyways. The megacorps are shifting classified quantum data cubes to the outer orbital rings.',
-          choices: [{ text: 'Stay safe in the shadows.', nextNodeId: 'exit' }],
-        },
-        terminal: {
-          id: 'terminal',
-          speaker: 'Netrunner Zero-Day',
-          role: 'Black-Ice Infiltration Operative // Classified Safehouse',
-          text: 'Go ahead. The console on the center desk has a bypass key loaded. Run an ICE-breaker sweep if you want to inspect encrypted feeds.',
-          choices: [{ text: 'Thanks for the access.', nextNodeId: 'exit' }],
-        },
-      },
-    });
-
-    // 9. Master Chef Taro — Noodle Artisan (Tokyo-Neo Food Court)
-    this.registerConversation({
-      npcId: 'chef_taro',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Master Chef Taro',
-          role: 'Executive Synth-Chef // Tokyo-Neo Ramen',
-          text: 'Irasshaimase! Welcome! Boiling hot synthetic tonkotsu ramen with roasted garlic oil and simulated chashu! Best recipe in Sector 1!',
-          choices: [
-            { text: 'How do you prepare synthetic ramen?', nextNodeId: 'recipe' },
-            { text: 'The atmosphere in here is amazing.', nextNodeId: 'ambience' },
-            { text: 'Smells delicious, Chef!', nextNodeId: 'exit' },
-          ],
-        },
-        recipe: {
-          id: 'recipe',
-          speaker: 'Master Chef Taro',
-          role: 'Executive Synth-Chef // Tokyo-Neo Ramen',
-          text: 'High-protein algae broth boiled for sixteen hours under magnetic heat induction. Even cyber-enhanced bodies need real culinary soul!',
-          choices: [{ text: 'I can smell the craftsmanship.', nextNodeId: 'exit' }],
-        },
-        ambience: {
-          id: 'ambience',
-          speaker: 'Master Chef Taro',
-          role: 'Executive Synth-Chef // Tokyo-Neo Ramen',
-          text: 'Traditional lanterns blended with neon signs. A peaceful haven away from the thundering skyway commuters outside.',
-          choices: [{ text: 'A true oasis. Arigato!', nextNodeId: 'exit' }],
-        },
-      },
-    });
-
-    // 10. Executive Vane — Corporate Tycoon (Apex Plaza Promenade)
-    this.registerConversation({
-      npcId: 'penthouse_executive_vane',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Executive Vane',
-          role: 'Vice President of Aerial Transit // Apex Monolith',
-          text: 'Quite a view from up here at 180 meters altitude, isn’t it? The entire 3-kilometer metropolis spread across the horizon like a living circuit board.',
-          choices: [
-            { text: 'How do you oversee the city?', nextNodeId: 'oversight' },
-            { text: 'Is that the Sky District skybridge over there?', nextNodeId: 'skybridge' },
-            { text: 'Stunning penthouse, sir.', nextNodeId: 'exit' },
-          ],
-        },
-        oversight: {
-          id: 'oversight',
-          speaker: 'Executive Vane',
-          role: 'Vice President of Aerial Transit // Apex Monolith',
-          text: 'Through quantum telemetry feeds. Every hover-cruiser, every airborne transit drone, every kilowatt of street lighting is monitored in real-time.',
-          choices: [{ text: 'A magnificent vantage point.', nextNodeId: 'exit' }],
-        },
-        skybridge: {
-          id: 'skybridge',
-          speaker: 'Executive Vane',
-          role: 'Vice President of Aerial Transit // Apex Monolith',
-          text: 'Indeed. The Twin Spires skybridge connects the financial towers at 60 meters. When the rain sets in, the clouds sweep directly through the bridge arches.',
-          choices: [{ text: 'A truly breathtaking spectacle.', nextNodeId: 'exit' }],
-        },
-      },
-    });
   }
 
   public registerConversation(conv: DialogueConversation): void {
     this.conversations.set(conv.npcId, conv);
   }
 
-  public startDialogue(npcId: string, citizenName?: string, citizenRole?: string): boolean {
+  public startDialogue(npcId: string, citizenName?: string, citizenRole?: string, context?: DialogueContext): boolean {
+    this.currentNpcId = npcId;
+    this.dialogueCompleted = false;
     const conv = this.conversations.get(npcId);
     if (conv) {
-      this.currentNode = conv.nodes[conv.startNodeId] || null;
+      const node = conv.nodes[conv.startNodeId] || null;
+      this.currentNode = node ? this.withContextualDirection(node, context) : null;
     } else {
       // Procedural Citizen ambient dialogue chatter
       const ambientQuotes = [
@@ -404,12 +226,12 @@ export class DialogueSystem {
         "The Neon Velocity Lounge on West Avenue has the best synthesized espresso in District 1.",
         "Beautiful day in Nexus City. The solar arrays are running at 100% capacity.",
       ];
-      const randomQuote = ambientQuotes[Math.floor(Math.random() * ambientQuotes.length)];
+      const quoteIndex = this.stableIndex(npcId, ambientQuotes.length);
       this.currentNode = {
         id: `dialogue_${npcId}`,
         speaker: citizenName || 'Nexus Citizen',
         role: citizenRole || 'Metropolis Resident',
-        text: randomQuote,
+        text: `${ambientQuotes[quoteIndex]}\n\n${this.getContextualDirection(context)}\n${LivingCitySystem.getInstance().getDialogueContext(npcId, citizenRole || 'Metropolis Resident')}`,
         choices: [
           { text: 'Understood. Safe travels in the city.', nextNodeId: 'exit' },
           { text: 'Catch you later.', nextNodeId: 'exit' },
@@ -420,6 +242,44 @@ export class DialogueSystem {
     return !!this.currentNode;
   }
 
+  private withContextualDirection(node: DialogueNode, context?: DialogueContext): DialogueNode {
+    if (!context) return node;
+    const cityRhythm = this.currentNpcId ? LivingCitySystem.getInstance().getDialogueContext(this.currentNpcId, node.role) : '';
+    return { ...node, text: `${node.text}\n\n${this.getContextualDirection(context)}\n${cityRhythm}` };
+  }
+
+  private stableIndex(value: string, length: number): number {
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) hash = (hash * 31 + value.charCodeAt(i)) | 0;
+    return Math.abs(hash) % length;
+  }
+
+  private getContextualDirection(context?: DialogueContext): string {
+    const position = context?.playerPosition || new THREE.Vector3();
+    const district = context?.district || DistrictGenerator.getDistrictAt(position.x, position.z).name;
+    const time = context?.timePhase || TimeSystem.getInstance().getState().phase;
+    const weather = context?.weather || WeatherSystem.getInstance().getState().currentWeather;
+    const districtDirection: Record<string, string> = {
+      'CENTRAL METROPOLIS': 'Central Plaza is the reliable hub for transit and city telemetry.',
+      'SKY DISTRICT': 'The Twin Spire Skybridge is north; keep to the marked approach in poor visibility.',
+      'NEURAL DISTRICT': 'Nexus Labs and the Apex Monolith route east through the lit research avenues.',
+      'INDUSTRIAL REACTOR ZONE': 'South Crossing is the safest route toward the illuminated reactor corridors.',
+      'BIOSPHERE GREEN DISTRICT': 'Central Park Sanctuary is close by; follow the waterway lights.',
+      'OLD METRO HISTORIC SECTOR': 'The Old Metro lanes lead back toward South Crossing and the central boulevards.',
+    };
+    const weatherAdvice = weather === 'FOG' || weather === 'HEAVY_RAIN'
+      ? 'Visibility is reduced, so use landmark lights and stay on the main paths.'
+      : weather === 'RAIN'
+        ? 'The streets are wet; favor covered walkways and illuminated crossings.'
+        : 'Clear conditions make the skyline landmarks easy to use as bearings.';
+    const timeAdvice = time === 'NIGHT' || time === 'DUSK' || time === 'BLUE_HOUR'
+      ? 'After dark, follow the cyan avenue beacons.'
+      : time === 'DAWN'
+        ? 'At dawn, the east-facing avenue is the clearest route.'
+        : 'Daylight keeps the major avenue signs visible.';
+    return `[LOCAL DIRECTIONS] ${district}: ${districtDirection[district] || 'Use the nearest marked avenue to reach Central Plaza.'} ${weatherAdvice} ${timeAdvice}`;
+  }
+
   public selectChoice(choice: DialogueChoice): void {
     if (choice.action) choice.action();
 
@@ -428,20 +288,31 @@ export class DialogueSystem {
       return;
     }
 
-    // Find the node in the current conversation
-    for (const conv of this.conversations.values()) {
-      if (conv.nodes[choice.nextNodeId]) {
-        this.currentNode = conv.nodes[choice.nextNodeId];
-        this.notify();
-        return;
-      }
+    // Node names are shared between conversations; resolve within this speaker.
+    const conversation = this.currentNpcId ? this.conversations.get(this.currentNpcId) : undefined;
+    const nextNode = conversation?.nodes[choice.nextNodeId];
+    if (nextNode) {
+      this.currentNode = nextNode;
+      this.notify();
+      return;
     }
 
     this.closeDialogue();
   }
 
   public closeDialogue(): void {
+    if (this.currentNpcId && !this.dialogueCompleted) {
+      this.dialogueCompleted = true;
+      const npcId = this.currentNpcId;
+      SaveSystem.getInstance().incrementDialogue();
+      SaveSystem.getInstance().recordHistory(
+        `dialogue_${npcId}_${Date.now()}`,
+        `CONTACT LOGGED // ${npcId.replace(/_/g, ' ').toUpperCase()}`,
+        'A conversation was completed and added to the operative city history.',
+      );
+    }
     this.currentNode = null;
+    this.currentNpcId = null;
     this.notify();
   }
 

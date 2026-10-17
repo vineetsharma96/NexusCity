@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { NavigationSystem, NavigationState, LandmarkDef } from '../map/NavigationSystem';
+import { NavigationSystem, NavigationState } from '../map/NavigationSystem';
 
 interface WorldHUDMarkersProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -33,13 +33,16 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
     const tempVec = new THREE.Vector3();
     const tempPos = new THREE.Vector3();
     const camDir = new THREE.Vector3();
+    let lastProjection = 0;
 
-    const updateProjections = () => {
+    const updateProjections = (now: number) => {
+      animId = requestAnimationFrame(updateProjections);
+      if (now - lastProjection < 1000 / 30) return;
+      lastProjection = now;
       const cam = (window as any).__NEXUS_CAMERA__ as THREE.Camera | undefined;
       const pPos = playerPosRef?.current;
 
       if (!cam || !pPos) {
-        animId = requestAnimationFrame(updateProjections);
         return;
       }
 
@@ -110,8 +113,15 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         }
       });
 
-      setMarkers(projectedList);
-      animId = requestAnimationFrame(updateProjections);
+      // Keep labels inside the viewport and avoid stacking unreadable badges.
+      const visible = projectedList
+        .sort((a, b) => Number(b.isTarget) - Number(a.isTarget) || a.dist - b.dist)
+        .filter((marker, index, list) => !list.slice(0, index).some((other) => Math.abs(marker.x - other.x) < 200 && Math.abs(marker.y - other.y) < 38))
+        .map((marker) => ({ ...marker, x: THREE.MathUtils.clamp(marker.x, 120, width - 120), y: THREE.MathUtils.clamp(marker.y, 64, height - 90) }));
+      setMarkers((previous) => previous.length === visible.length && previous.every((marker, index) => {
+        const next = visible[index];
+        return marker.id === next.id && marker.dist === next.dist && Math.abs(marker.x - next.x) < 0.75 && Math.abs(marker.y - next.y) < 0.75 && Math.abs(marker.opacity - next.opacity) < 0.03;
+      }) ? previous : visible);
     };
 
     animId = requestAnimationFrame(updateProjections);
@@ -126,7 +136,7 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         top: 0,
         left: 0,
         width: '100vw',
-        height: '100vh',
+        height: '100dvh',
         pointerEvents: 'none',
         zIndex: 28,
         overflow: 'hidden',

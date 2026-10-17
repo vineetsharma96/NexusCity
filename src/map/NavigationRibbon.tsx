@@ -15,6 +15,7 @@ export const NavigationRibbon: React.FC = () => {
     return NavigationSystem.getInstance().subscribe(setNavState);
   }, []);
 
+
   // Procedural chevron flow texture
   const chevronTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
@@ -50,6 +51,8 @@ export const NavigationRibbon: React.FC = () => {
     return tex;
   }, []);
 
+  useEffect(() => () => chevronTexture.dispose(), [chevronTexture]);
+
   useFrame((_, delta) => {
     if (textureRef.current) {
       // Flow texture along the path
@@ -68,7 +71,6 @@ export const NavigationRibbon: React.FC = () => {
     if (!navState.activeLandmark || points.length < 2) return [];
 
     const segments: { position: THREE.Vector3; rotationY: number; length: number }[] = [];
-    const width = 0.9;
 
     for (let i = 0; i < points.length - 1; i++) {
       const p1 = points[i];

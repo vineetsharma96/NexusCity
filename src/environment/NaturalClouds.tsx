@@ -1,9 +1,9 @@
-import React, { useRef, useMemo, useState, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { WindSystem } from '../world/WindSystem';
-import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
-import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
+import { TimeSystem } from '../world/TimeSystem';
+import { WeatherSystem } from '../world/WeatherSystem';
 
 interface CloudCluster {
   x: number;
@@ -20,22 +20,6 @@ interface CloudCluster {
 export const NaturalClouds: React.FC = () => {
   const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.InstancedMesh>(null);
-
-  const [timeLighting, setTimeLighting] = useState<TimeLightingState>(() =>
-    TimeSystem.getInstance().getState()
-  );
-  const [weather, setWeather] = useState<WeatherState>(() =>
-    WeatherSystem.getInstance().getState()
-  );
-
-  useEffect(() => {
-    const unsubTime = TimeSystem.getInstance().subscribe(setTimeLighting);
-    const unsubWeather = WeatherSystem.getInstance().subscribe(setWeather);
-    return () => {
-      unsubTime();
-      unsubWeather();
-    };
-  }, []);
 
   // Generate 42 natural cloud clusters, each with 5-7 overlapping soft billowy puffs
   const { clusters, totalPuffs } = useMemo(() => {
@@ -101,8 +85,12 @@ export const NaturalClouds: React.FC = () => {
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const cloudColor = useMemo(() => new THREE.Color(), []);
 
+  useEffect(() => () => { geometry.dispose(); material.dispose(); }, [geometry, material]);
+
   useFrame((_, delta) => {
     if (!meshRef.current) return;
+    const timeLighting = TimeSystem.getInstance().getState();
+    const weather = WeatherSystem.getInstance().getState();
 
     const wind = WindSystem.getInstance().getVector();
     const driftSpeed = 0.25; // Clouds drift at high altitude

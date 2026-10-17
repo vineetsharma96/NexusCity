@@ -126,6 +126,12 @@ export class CityGenerator {
       });
     });
 
+    // Keep the dedicated sanctuary clear of generated towers and their colliders.
+    const sanctuary = new THREE.Box3(new THREE.Vector3(39, -1, 39), new THREE.Vector3(111, 300, 111));
+    for (let index = buildings.length - 1; index >= 0; index--) {
+      if (buildings[index].collisionBounds.some((bounds) => bounds.intersectsBox(sanctuary))) buildings.splice(index, 1);
+    }
+
     // 3. Register All Building Footprints in KinematicCollisionSolver
     buildings.forEach((bldg) => {
       bldg.collisionBounds.forEach((box) => {

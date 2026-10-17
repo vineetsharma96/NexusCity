@@ -24,7 +24,7 @@ export const CrosswalkMarkings: React.FC<CrosswalkMarkingsProps> = ({ position =
       {crosswalks.map((cw, idx) => (
         <group key={`cw-${idx}`} position={cw.pos as [number, number, number]} rotation={[0, cw.rot, 0]}>
           {/* Stop Line Bar for Vehicles (just ahead of crosswalk) */}
-          <mesh position={[0, 0.04, cw.depth / 2 + 0.6]}>
+          <mesh position={[0, 0.04, cw.depth / 2 + 0.6]} rotation={[-Math.PI / 2, 0, 0]}>
             <planeGeometry args={[cw.width, 0.45]} />
             <meshStandardMaterial
               color="#00f0ff"

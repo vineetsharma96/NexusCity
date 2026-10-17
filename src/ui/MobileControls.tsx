@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { TouchController } from '../player/TouchController';
 import { InputManager } from '../player/InputManager';
+import { NavigationSystem } from '../map/NavigationSystem';
+import { InteractionSystem } from '../interaction/InteractionSystem';
 
-export const MobileControls: React.FC = () => {
+export const MobileControls: React.FC<{ disabled?: boolean }> = ({ disabled = false }) => {
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isSprintActive, setIsSprintActive] = useState(false);
   const [joystickPos, setJoystickPos] = useState<{
@@ -20,6 +22,12 @@ export const MobileControls: React.FC = () => {
   });
 
   useEffect(() => {
+    if (disabled) {
+      TouchController.getInstance().reset();
+      setIsSprintActive(false);
+      setJoystickPos((prev) => ({ ...prev, active: false }));
+      return;
+    }
     const checkTouch = () => {
       const hasTouch =
         'ontouchstart' in window ||
@@ -33,6 +41,7 @@ export const MobileControls: React.FC = () => {
     const tc = TouchController.getInstance();
 
     const onTouchStart = (e: TouchEvent) => {
+      if (InputManager.isUIBlocked() || (e.target instanceof Element && e.target.closest('button, select, input, [role="dialog"]'))) return;
       tc.handleTouchStart(e);
       if (tc.state.joystickActive) {
         setJoystickPos({
@@ -69,13 +78,15 @@ export const MobileControls: React.FC = () => {
     window.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
     return () => {
+      tc.reset();
+      InputManager.setVirtualAction('sprint', false);
       window.removeEventListener('resize', checkTouch);
       window.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('touchend', onTouchEnd);
       window.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, []);
+  }, [disabled]);
 
   const toggleSprint = () => {
     const next = !isSprintActive;
@@ -83,7 +94,7 @@ export const MobileControls: React.FC = () => {
     InputManager.setVirtualAction('sprint', next);
   };
 
-  if (!isTouchDevice) return null;
+  if (!isTouchDevice || disabled) return null;
 
   return (
     <div
@@ -92,7 +103,7 @@ export const MobileControls: React.FC = () => {
         top: 0,
         left: 0,
         width: '100vw',
-        height: '100vh',
+        height: '100dvh',
         pointerEvents: 'none',
         zIndex: 20,
         touchAction: 'none',
@@ -133,7 +144,7 @@ export const MobileControls: React.FC = () => {
         <div
           style={{
             position: 'absolute',
-            bottom: 40,
+            bottom: 'max(40px, env(safe-area-inset-bottom))',
             left: 36,
             width: 90,
             height: 90,
@@ -162,7 +173,7 @@ export const MobileControls: React.FC = () => {
       <div
         style={{
           position: 'absolute',
-          bottom: 30,
+          bottom: 'max(24px, env(safe-area-inset-bottom))',
           right: 20,
           display: 'flex',
           flexDirection: 'column',
@@ -171,28 +182,8 @@ export const MobileControls: React.FC = () => {
           alignItems: 'flex-end',
         }}
       >
-        {/* Top Row: Menu, Map and Sprint Toggle */}
+        {/* Top Row: Map and Sprint Toggle */}
         <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            className="cyber-btn"
-            style={{
-              width: 50,
-              height: 50,
-              borderRadius: '50%',
-              padding: 0,
-              fontSize: '0.72rem',
-              color: '#00ffaa',
-              borderColor: '#00ffaa',
-              backgroundColor: 'rgba(10, 28, 20, 0.85)',
-              boxShadow: '0 0 10px rgba(0, 255, 170, 0.3)',
-            }}
-            onTouchStart={(e) => {
-              e.stopPropagation();
-              window.dispatchEvent(new CustomEvent('nexus:open-menu'));
-            }}
-          >
-            MENU
-          </button>
           <button
             className="cyber-btn"
             style={{
@@ -205,10 +196,7 @@ export const MobileControls: React.FC = () => {
               borderColor: '#38bdf8',
               backgroundColor: 'rgba(10, 20, 35, 0.85)',
             }}
-            onTouchStart={(e) => {
-              e.stopPropagation();
-              InputManager.setVirtualAction('map', true);
-            }}
+            onClick={() => NavigationSystem.getInstance().setMapOpen(true)}
           >
             MAP
           </button>
@@ -224,10 +212,8 @@ export const MobileControls: React.FC = () => {
               backgroundColor: isSprintActive ? 'var(--neon-cyan)' : 'rgba(10, 20, 35, 0.85)',
               boxShadow: isSprintActive ? '0 0 16px var(--neon-cyan)' : undefined,
             }}
-            onTouchStart={(e) => {
-              e.stopPropagation();
-              toggleSprint();
-            }}
+            aria-pressed={isSprintActive}
+            onClick={toggleSprint}
           >
             RUN
           </button>
@@ -248,14 +234,19 @@ export const MobileControls: React.FC = () => {
               backgroundColor: 'rgba(25, 18, 10, 0.85)',
               boxShadow: '0 0 12px rgba(255, 170, 0, 0.3)',
             }}
-            onTouchStart={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation();
+              e.currentTarget.setPointerCapture(e.pointerId);
               InputManager.setVirtualAction('jump', true);
             }}
-            onTouchEnd={(e) => {
+            onPointerUp={(e) => {
               e.stopPropagation();
               InputManager.setVirtualAction('jump', false);
             }}
+            onPointerCancel={() => InputManager.setVirtualAction('jump', false)}
+            onLostPointerCapture={() => InputManager.setVirtualAction('jump', false)}
+            onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') InputManager.setVirtualAction('jump', true); }}
+            onKeyUp={() => InputManager.setVirtualAction('jump', false)}
           >
             JUMP
           </button>
@@ -274,16 +265,9 @@ export const MobileControls: React.FC = () => {
             color: 'var(--neon-emerald)',
             backgroundColor: 'rgba(10, 28, 20, 0.85)',
           }}
-          onTouchStart={(e) => {
-            e.stopPropagation();
-            InputManager.setVirtualAction('interact', true);
-          }}
-          onTouchEnd={(e) => {
-            e.stopPropagation();
-            InputManager.setVirtualAction('interact', false);
-          }}
+          onClick={() => InteractionSystem.getInstance().triggerInteract()}
         >
-          INTERACT [E]
+          INTERACT
         </button>
       </div>
     </div>

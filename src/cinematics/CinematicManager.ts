@@ -145,6 +145,7 @@ export class CinematicManager {
     outCamPos: THREE.Vector3,
     outLookAt: THREE.Vector3
   ): boolean {
+    delta = Math.min(Math.max(delta, 0), 0.1);
     if (this.phase === 'GAMEPLAY') {
       return false; // PlayerCamera handles everything
     }

@@ -26,6 +26,7 @@ export class AudioManager {
   private ambientOsc2: OscillatorNode | null = null;
   private ambientNoiseNode: AudioBufferSourceNode | null = null;
   private ambientFilter: BiquadFilterNode | null = null;
+  private districtAmbientGain: GainNode | null = null;
 
   // Weather synth nodes
   private rainNoiseNode: AudioBufferSourceNode | null = null;
@@ -43,14 +44,17 @@ export class AudioManager {
 
   private constructor() {
     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
       const savedMute = localStorage.getItem('nexus_audio_muted');
       if (savedMute !== null) {
         this.isMuted = savedMute === 'true';
       }
       const savedVol = localStorage.getItem('nexus_audio_volume');
       if (savedVol !== null) {
-        this.masterVolume = parseFloat(savedVol) || 0.75;
+        const volume = Number(savedVol);
+        if (Number.isFinite(volume)) this.masterVolume = THREE.MathUtils.clamp(volume, 0, 1);
       }
+      } catch { /* Audio remains usable when browser storage is unavailable. */ }
     }
   }
 
@@ -115,7 +119,7 @@ export class AudioManager {
       this.init();
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      void this.ctx.resume().catch(() => { /* A later user gesture can resume playback. */ });
     }
   }
 
@@ -129,7 +133,7 @@ export class AudioManager {
     }
 
     if (typeof window !== 'undefined') {
-      localStorage.setItem('nexus_audio_muted', this.isMuted ? 'true' : 'false');
+      try { localStorage.setItem('nexus_audio_muted', this.isMuted ? 'true' : 'false'); } catch {}
     }
 
     this.notify();
@@ -137,12 +141,13 @@ export class AudioManager {
   }
 
   public setMasterVolume(vol: number): void {
+    if (!Number.isFinite(vol)) return;
     this.masterVolume = THREE.MathUtils.clamp(vol, 0, 1);
     if (!this.isMuted && this.ctx && this.masterGain) {
       this.masterGain.gain.setTargetAtTime(this.masterVolume, this.ctx.currentTime, 0.05);
     }
     if (typeof window !== 'undefined') {
-      localStorage.setItem('nexus_audio_volume', this.masterVolume.toString());
+      try { localStorage.setItem('nexus_audio_volume', this.masterVolume.toString()); } catch {}
     }
     this.notify();
   }
@@ -203,17 +208,22 @@ export class AudioManager {
     this.currentDistrictName = districtName;
 
     // Clean up previous ambient nodes
-    try {
-      this.ambientOsc1?.stop();
-      this.ambientOsc2?.stop();
-      this.ambientNoiseNode?.stop();
-    } catch {}
+    for (const source of [this.ambientOsc1, this.ambientOsc2, this.ambientNoiseNode]) {
+      try { source?.stop(); } catch {}
+      source?.disconnect();
+    }
+    this.ambientOsc1 = null;
+    this.ambientOsc2 = null;
+    this.ambientNoiseNode = null;
+    this.ambientFilter?.disconnect();
+    this.districtAmbientGain?.disconnect();
+    this.districtAmbientGain = this.ctx.createGain();
+    this.districtAmbientGain.connect(this.ambientGain);
 
     const now = this.ctx.currentTime;
 
     // Base filter
     this.ambientFilter = this.ctx.createBiquadFilter();
-    this.ambientFilter.connect(this.ambientGain);
 
     const dUpper = districtName.toUpperCase();
 
@@ -228,6 +238,7 @@ export class AudioManager {
       this.ambientNoiseNode.buffer = noiseBuf;
       this.ambientNoiseNode.loop = true;
       this.ambientNoiseNode.connect(this.ambientFilter);
+      this.ambientFilter.connect(this.districtAmbientGain);
       this.ambientNoiseNode.start();
 
       this.ambientOsc1 = this.ctx.createOscillator();
@@ -236,7 +247,7 @@ export class AudioManager {
       const oscGain = this.ctx.createGain();
       oscGain.gain.setValueAtTime(0.045, now);
       this.ambientOsc1.connect(oscGain);
-      oscGain.connect(this.ambientGain);
+      oscGain.connect(this.districtAmbientGain);
       this.ambientOsc1.start();
     } else if (dUpper.includes('NEURAL')) {
       // 2. Neural District: Resonant data-center compute hum & server cooling
@@ -257,7 +268,7 @@ export class AudioManager {
       this.ambientOsc1.connect(this.ambientFilter);
       this.ambientOsc2.connect(this.ambientFilter);
       this.ambientFilter.connect(subGain);
-      subGain.connect(this.ambientGain);
+      subGain.connect(this.districtAmbientGain);
 
       this.ambientOsc1.start();
       this.ambientOsc2.start();
@@ -280,7 +291,7 @@ export class AudioManager {
       this.ambientOsc1.connect(this.ambientFilter);
       this.ambientOsc2.connect(this.ambientFilter);
       this.ambientFilter.connect(indGain);
-      indGain.connect(this.ambientGain);
+      indGain.connect(this.districtAmbientGain);
 
       this.ambientOsc1.start();
       this.ambientOsc2.start();
@@ -299,7 +310,7 @@ export class AudioManager {
 
       this.ambientOsc1.connect(this.ambientFilter);
       this.ambientFilter.connect(neonGain);
-      neonGain.connect(this.ambientGain);
+      neonGain.connect(this.districtAmbientGain);
       this.ambientOsc1.start();
     } else if (dUpper.includes('GREEN') || dUpper.includes('BIOSPHERE')) {
       // 5. Biosphere Preserve: Tranquil organic canopy breeze & soft chimes
@@ -312,6 +323,7 @@ export class AudioManager {
       this.ambientNoiseNode.buffer = noiseBuf;
       this.ambientNoiseNode.loop = true;
       this.ambientNoiseNode.connect(this.ambientFilter);
+      this.ambientFilter.connect(this.districtAmbientGain);
       this.ambientNoiseNode.start();
 
       this.ambientOsc1 = this.ctx.createOscillator();
@@ -320,7 +332,7 @@ export class AudioManager {
       const padGain = this.ctx.createGain();
       padGain.gain.setValueAtTime(0.035, now);
       this.ambientOsc1.connect(padGain);
-      padGain.connect(this.ambientGain);
+      padGain.connect(this.districtAmbientGain);
       this.ambientOsc1.start();
     } else {
       // 6. Central Metropolis (Default): Low urban street traffic rumble
@@ -332,6 +344,7 @@ export class AudioManager {
       this.ambientNoiseNode.buffer = pinkBuf;
       this.ambientNoiseNode.loop = true;
       this.ambientNoiseNode.connect(this.ambientFilter);
+      this.ambientFilter.connect(this.districtAmbientGain);
       this.ambientNoiseNode.start();
 
       this.ambientOsc1 = this.ctx.createOscillator();
@@ -340,7 +353,7 @@ export class AudioManager {
       const oscGain = this.ctx.createGain();
       oscGain.gain.setValueAtTime(0.08, now);
       this.ambientOsc1.connect(oscGain);
-      oscGain.connect(this.ambientGain);
+      oscGain.connect(this.districtAmbientGain);
       this.ambientOsc1.start();
     }
   }
@@ -468,6 +481,11 @@ export class AudioManager {
     this.playDiscoveryChime();
   }
 
+  public playShortcutCue(): void {
+    this.playUI('open');
+    this.playDiscoveryChime();
+  }
+
   public playVehicleHorn(): void {
     if (!this.ctx || !this.sfxGain || this.isMuted) return;
     const now = this.ctx.currentTime;
@@ -562,6 +580,57 @@ export class AudioManager {
 
     osc.start(now);
     osc.stop(now + 0.36);
+  }
+
+  public playPoliceAlert(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    [520, 760].forEach((frequency, index) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(frequency, now + index * 0.16);
+      gain.gain.setValueAtTime(0.0001, now + index * 0.16);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + index * 0.16 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.16 + 0.15);
+      osc.connect(gain); gain.connect(this.sfxGain!);
+      osc.start(now + index * 0.16); osc.stop(now + index * 0.16 + 0.17);
+    });
+  }
+
+  public playRepairComplete(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    [392, 523.25, 659.25].forEach((frequency, index) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(frequency, now + index * 0.08);
+      gain.gain.setValueAtTime(0.07, now + index * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.08 + 0.32);
+      osc.connect(gain); gain.connect(this.sfxGain!);
+      osc.start(now + index * 0.08); osc.stop(now + index * 0.08 + 0.34);
+    });
+  }
+
+  public playTransitArrival(): void {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    const now = this.ctx.currentTime;
+    [659.25, 783.99].forEach((frequency, index) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'triangle'; osc.frequency.setValueAtTime(frequency, now + index * 0.13);
+      gain.gain.setValueAtTime(0.06, now + index * 0.13);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.13 + 0.35);
+      osc.connect(gain); gain.connect(this.sfxGain!);
+      osc.start(now + index * 0.13); osc.stop(now + index * 0.13 + 0.37);
+    });
+  }
+
+  public playVehicleClassFeedback(vehicleClass: 'POLICE' | 'CARGO' | 'TAXI' | 'EMERGENCY' | 'CORPORATE'): void {
+    if (vehicleClass === 'POLICE' || vehicleClass === 'EMERGENCY') this.playPoliceAlert();
+    else if (vehicleClass === 'CARGO') this.playBrakeSqueal();
+    else if (vehicleClass === 'TAXI') this.playVehicleHorn();
+    else this.playHoverFlyby(0, 0.65);
   }
 
   public playDiscoveryChime(): void {

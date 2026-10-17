@@ -1,0 +1,172 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { Vector3 } from 'three';
+
+async function systems() {
+  const data = new Map();
+  const events = [];
+  globalThis.localStorage = { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, String(value)), removeItem: (key) => data.delete(key) };
+  globalThis.window = { dispatchEvent: (event) => { events.push(event); return true; } };
+  const result = await build({
+    stdin: { resolveDir: process.cwd(), contents: `
+      export { SaveSystem } from './src/core/SaveSystem';
+      export { LivingCityEventSystem } from './src/world/LivingCityEventSystem';
+      export { DialogueSystem } from './src/npc/DialogueSystem';
+      export { VehicleInteractionSystem } from './src/vehicle/VehicleInteractionSystem';
+      export { InteractionSystem } from './src/interaction/InteractionSystem';
+      export { TerminalSystem } from './src/interaction/TerminalSystem';
+      export { NavigationSystem } from './src/map/NavigationSystem';
+      export { DiscoverySystem } from './src/world/DiscoverySystem';
+      export { AudioManager } from './src/audio/AudioManager';
+      export { NPCManager } from './src/npc/NPCManager';
+      export { CityGenerator } from './src/city/CityGenerator';
+      export { WeatherSystem } from './src/world/WeatherSystem';
+    ` },
+    bundle: true, platform: 'node', format: 'esm', write: false,
+  });
+  // Each import receives fresh singleton state, matching a fresh browser session.
+  const url = `data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}#${Math.random()}`;
+  return { ...(await import(url)), data, events };
+}
+
+test('save load rejects malformed coordinates and collection fields, caps upgrades', async () => {
+  const { SaveSystem, data } = await systems();
+  data.set('nexus_city_flagship_save_v2', JSON.stringify({ version: 2, player: { position: [0, 'bad', 10], rotationY: 'bad' }, discoveredDistricts: null, discoveredLandmarks: null, cityHistory: null, terminalObjectives: null, missionStates: { invalid: { id: 'invalid', status: 'BROKEN' } }, stats: { distanceTraveledMeters: 'bad' }, vehicleUpgrades: { speed: 999, handling: true, neon: -4 } }));
+  const save = SaveSystem.getInstance();
+  assert.deepEqual(save.getData().player.position, [0, 0.2, 10]);
+  assert.equal(save.getData().player.rotationY, 0);
+  assert.deepEqual(save.getData().vehicleUpgrades, { speed: 3, handling: 1, neon: 0 });
+  assert.equal(save.getData().stats.distanceTraveledMeters, 0);
+  assert.deepEqual(save.getData().missionStates, {});
+  assert.doesNotThrow(() => save.updateDistrict('NEURAL_DISTRICT'));
+  assert.doesNotThrow(() => save.recordHistory('test', 'TEST', 'Valid history after recovery'));
+});
+
+test('distance statistics use loaded location and resume after long teleports', async () => {
+  const { SaveSystem, data } = await systems();
+  data.set('nexus_city_flagship_save_v2', JSON.stringify({ version: 2, player: { position: [500, 0.2, 10] } }));
+  const save = SaveSystem.getInstance();
+  try {
+    save.updatePlayerPosition(new Vector3(501, 0.2, 10));
+    assert.equal(save.getData().stats.distanceTraveledMeters, 1);
+    save.updatePlayerPosition(new Vector3(1000, 0.2, 10));
+    save.updatePlayerPosition(new Vector3(1002, 0.2, 10));
+    assert.equal(save.getData().stats.distanceTraveledMeters, 3);
+    save.updatePlayerPosition(new Vector3(NaN, 0, 0));
+    assert.deepEqual(save.getData().player.position, [1002, 0.2, 10]);
+  } finally { clearTimeout(save.autoSaveTimer); }
+});
+
+test('city event IDs stay stable inside a phase across later cycles', async () => {
+  const { LivingCityEventSystem, events } = await systems();
+  const director = LivingCityEventSystem.getInstance();
+  for (let i = 0; i < 469; i++) director.update(0.25);
+  const id = director.getState().id;
+  assert.equal(director.getState().type, 'PUBLIC_FESTIVAL');
+  for (let i = 0; i < 20; i++) director.update(0.25);
+  assert.equal(director.getState().id, id);
+  assert.equal(events.filter((event) => event.detail?.title === 'NEXUS NIGHT MARKET // CITY BROADCAST').length, 2);
+});
+
+test('dialogue choices resolve shared node IDs within the current speaker', async () => {
+  const { DialogueSystem } = await systems();
+  const dialogue = DialogueSystem.getInstance();
+  for (const speaker of ['first', 'second']) dialogue.registerConversation({ npcId: speaker, startNodeId: 'intro', nodes: { intro: { id: 'intro', speaker, role: 'Resident', text: 'Hello', choices: [{ text: 'Continue', nextNodeId: 'shared' }] }, shared: { id: 'shared', speaker, role: 'Resident', text: speaker, choices: [] } } });
+  dialogue.startDialogue('second');
+  dialogue.selectChoice(dialogue.getActiveNode().choices[0]);
+  assert.equal(dialogue.getActiveNode().speaker, 'second');
+});
+
+test('vehicle exits preserve parked position and transit links follow shuttle position', async () => {
+  const { VehicleInteractionSystem, InteractionSystem } = await systems();
+  const vehicle = VehicleInteractionSystem.getInstance();
+  const interactions = InteractionSystem.getInstance();
+  const parked = new Vector3(4.5, 0.45, 10);
+  vehicle.registerRideable('hover', 'Hovercraft', parked, 'vehicle');
+  interactions.updatePlayerPosition(parked);
+  assert.equal(interactions.triggerInteract(), true);
+  assert.equal(vehicle.getState().mode, 'RIDING');
+  vehicle.dismount();
+  assert.equal(vehicle.getState().mode, 'ON_FOOT');
+  assert.equal(vehicle.getVehiclePosition().y, 0.45);
+  assert.equal(vehicle.getDismountPosition().y, 0);
+  assert.notEqual(vehicle.getDismountPosition().x, parked.x);
+  const node = new Vector3(-7, 0.2, 10);
+  vehicle.registerRideable('transit', 'Transit', node, 'transit');
+  interactions.updatePlayerPosition(node);
+  interactions.triggerInteract();
+  vehicle.syncTransitPosition(new Vector3(32, 0.62, 10), Math.PI / 2);
+  assert.equal(vehicle.getState().mode, 'TRANSIT_LINKED');
+  assert.equal(vehicle.getMountedPosition().x, 32);
+  assert.equal(vehicle.getState().vehicleRotationY, Math.PI / 2);
+  interactions.updatePlayerPosition(vehicle.getMountedPosition());
+  assert.equal(interactions.getActive().actionText, 'RELEASE TRANSIT LINK');
+});
+
+test('weather auto-cycle advances from the manually selected weather', async () => {
+  const { WeatherSystem } = await systems();
+  const weather = WeatherSystem.getInstance();
+  weather.setWeather('HEAVY_RAIN', true);
+  weather.update(90);
+  assert.equal(weather.getState().currentWeather, 'FOG');
+});
+
+
+test('navigation and discovery share targets and initialize route distance immediately', async () => {
+  const { NavigationSystem, DiscoverySystem } = await systems();
+  const nav = NavigationSystem.getInstance();
+  nav.setDestination('park_sanctuary', new Vector3(0, 0.2, 0));
+  assert.equal(nav.getState().distance, 106);
+  assert.ok(nav.getState().routeWaypoints.length > 1);
+  const discovery = DiscoverySystem.getInstance();
+  for (const trigger of discovery.triggers) assert.deepEqual(trigger.position.toArray(), nav.landmarks.find((landmark) => landmark.id === trigger.id).position.toArray());
+  nav.updatePlayerPosition(new Vector3(75, 0.2, 75));
+  assert.equal(nav.getState().activeLandmark, null);
+  assert.equal(nav.getState().distance, 0);
+});
+
+test('saved telemetry objectives resume and replacement deactivates the old objective', async () => {
+  const { SaveSystem, TerminalSystem, InteractionSystem } = await systems();
+  const save = SaveSystem.getInstance();
+  const original = { terminalId: 'first', objectiveId: 'scan_first', title: 'SCAN', detail: 'Telemetry', kind: 'MISSION', revealed: true, active: true, updatedAt: 1 };
+  save.setTerminalObjective(original);
+  const terminals = TerminalSystem.getInstance();
+  assert.equal(terminals.getActiveObjective().terminalId, 'first');
+  const position = new Vector3(10, 0.2, 10);
+  terminals.register({ id: 'second', name: 'Second Terminal', position, district: 'CENTRAL' });
+  const interaction = InteractionSystem.getInstance();
+  interaction.updatePlayerPosition(position);
+  interaction.triggerInteract();
+  assert.equal(save.getTerminalObjectives().first.active, false);
+  assert.equal(terminals.getActiveObjective().terminalId, 'second');
+});
+
+test('audio preserves a saved zero volume', async () => {
+  const { AudioManager, data } = await systems();
+  data.set('nexus_audio_volume', '0');
+  assert.equal(AudioManager.getInstance().getSettings().masterVolume, 0);
+});
+
+test('quality-culled citizens cannot remain invisible interaction targets', async () => {
+  const { NPCManager, InteractionSystem } = await systems();
+  const npcs = NPCManager.getInstance();
+  const visible = npcs.npcs[0];
+  npcs.setRenderedNpcs([visible]);
+  assert.deepEqual(npcs.getRenderedNpcs().map((npc) => npc.id), [visible.id]);
+  const interactions = InteractionSystem.getInstance();
+  const hidden = npcs.npcs.find((npc) => npc.position.distanceTo(visible.position) > 8);
+  interactions.updatePlayerPosition(hidden.position);
+  assert.equal(interactions.getActive(), null);
+  interactions.updatePlayerPosition(visible.position);
+  assert.equal(interactions.getActive().id, visible.id);
+});
+
+test('generated building footprints keep the dedicated sanctuary clear', async () => {
+  const { CityGenerator } = await systems();
+  const city = CityGenerator.generateDistrict();
+  assert.ok(city.buildings.length > 0);
+  for (const building of city.buildings) for (const box of building.collisionBounds) {
+    assert.ok(box.max.x <= 39 || box.min.x >= 111 || box.max.z <= 39 || box.min.z >= 111);
+  }
+});

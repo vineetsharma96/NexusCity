@@ -1,6 +1,7 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { KinematicCollisionSolver } from './KinematicCollision';
 
 interface ContactShadowDecalProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
@@ -44,6 +45,7 @@ export const ContactShadowDecal: React.FC<ContactShadowDecalProps> = ({ playerPo
   const materialRef = useRef<THREE.MeshBasicMaterial>(null);
 
   const shadowTex = useMemo(() => createContactShadowTexture(), []);
+  useEffect(() => () => shadowTex.dispose(), [shadowTex]);
 
   useFrame(() => {
     if (!meshRef.current || !materialRef.current || !playerPosRef?.current) return;
@@ -54,8 +56,9 @@ export const ContactShadowDecal: React.FC<ContactShadowDecalProps> = ({ playerPo
     meshRef.current.position.z = pPos.z;
 
     // Height offset above ground surface
-    const heightAboveGround = Math.max(0, pPos.y);
-    meshRef.current.position.y = 0.012; // Flush above pavement, avoiding z-fighting
+    const ground = KinematicCollisionSolver.getGroundHeightAt(pPos.x, pPos.z, pPos.y);
+    const heightAboveGround = Math.max(0, pPos.y - ground.height);
+    meshRef.current.position.y = ground.height + 0.012;
 
     // Scale and fade out smoothly as player jumps or falls
     const distFactor = THREE.MathUtils.clamp(1.0 - heightAboveGround / 2.5, 0.0, 1.0);

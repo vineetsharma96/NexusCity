@@ -59,6 +59,8 @@ export class WeatherSystem {
   public setWeather(weather: WeatherType, autoCycle: boolean = false): void {
     this.targetWeather = weather;
     this.currentWeather = weather;
+    this.currentCycleIndex = this.weatherCycleOrder.indexOf(weather);
+    this.autoCycleTimer = 0;
     this.autoCycleEnabled = autoCycle;
     if (weather === 'HEAVY_RAIN') {
       this.resetLightningTimer();

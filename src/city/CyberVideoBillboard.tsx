@@ -1,6 +1,11 @@
 import React, { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { WeatherState, WeatherSystem } from '../world/WeatherSystem';
+import { EmergencyAlertSystem, EmergencyState } from '../world/EmergencyAlertSystem';
+import { DistrictGenerator } from './DistrictGenerator';
+import { SaveSystem } from '../core/SaveSystem';
+import { LivingCityEventState, LivingCityEventSystem } from '../world/LivingCityEventSystem';
 
 interface CyberVideoBillboardProps {
   position: [number, number, number];
@@ -21,6 +26,12 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
   const textureRef = useRef<THREE.CanvasTexture | null>(null);
   const tickerOffsetRef = useRef(0);
   const lastDrawTimeRef = useRef(0);
+  const weatherRef = useRef<WeatherState>(WeatherSystem.getInstance().getState());
+  const emergencyRef = useRef<EmergencyState>(EmergencyAlertSystem.getInstance().getState());
+  const cityEventRef = useRef<LivingCityEventState>(LivingCityEventSystem.getInstance().getState());
+  const discoveryCountRef = useRef(Object.keys(SaveSystem.getInstance().getData().discoveredLandmarks).length);
+  const lastDiscoveryRef = useRef('CENTRAL PLAZA HUB');
+  const district = DistrictGenerator.getDistrictAt(position[0], position[2]);
 
   // Setup offscreen canvas and texture
   const { canvas, texture } = useMemo(() => {
@@ -30,8 +41,12 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
     const tex = new THREE.CanvasTexture(c);
     tex.minFilter = THREE.LinearFilter;
     tex.magFilter = THREE.LinearFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.generateMipmaps = false;
     return { canvas: c, texture: tex };
   }, []);
+
+  useEffect(() => () => texture.dispose(), [texture]);
 
   useEffect(() => {
     canvasRef.current = canvas;
@@ -49,6 +64,25 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
     }
   }, [canvas, texture]);
 
+  useEffect(() => {
+    const unsubscribeWeather = WeatherSystem.getInstance().subscribe((state) => { weatherRef.current = state; });
+    const unsubscribeEmergency = EmergencyAlertSystem.getInstance().subscribe((state) => { emergencyRef.current = state; });
+    const unsubscribeCityEvent = LivingCityEventSystem.getInstance().subscribe((state) => { cityEventRef.current = state; });
+    const handleDiscovery = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.type !== 'discovery') return;
+      discoveryCountRef.current += 1;
+      lastDiscoveryRef.current = detail?.title?.replace('LOCATION DISCOVERED // ', '') || lastDiscoveryRef.current;
+    };
+    window.addEventListener('nexus:notification', handleDiscovery);
+    return () => {
+      unsubscribeWeather();
+      unsubscribeEmergency();
+      unsubscribeCityEvent();
+      window.removeEventListener('nexus:notification', handleDiscovery);
+    };
+  }, []);
+
   // Frame update for dynamic video rendering
   useFrame(({ clock, camera }) => {
     const camDist = Math.hypot(
@@ -60,8 +94,8 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
 
     const time = clock.getElapsedTime();
 
-    // Throttle canvas draw to ~30 FPS for optimal performance
-    if (time - lastDrawTimeRef.current < 0.033) return;
+    // Broadcast panels remain fluid at 15 FPS without uploading four canvases every frame.
+    if (time - lastDrawTimeRef.current < 1 / 15) return;
     lastDrawTimeRef.current = time;
 
     const ctx = canvas.getContext('2d');
@@ -69,6 +103,9 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
 
     const w = canvas.width;
     const h = canvas.height;
+    const weather = weatherRef.current;
+    const emergency = emergencyRef.current;
+    const cityEvent = cityEventRef.current;
 
     // Determine active video channel (can cycle or use prop)
     const activeChannel = channel;
@@ -337,6 +374,33 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
       ctx.fillText('FPS: 60 // RES: 1080p // REC ●', 20, h - 20);
       ctx.fillText(`GRID LOCK: ACTIVE [${Math.floor(time * 10) % 9999}]`, w - 240, 30);
     }
+
+    // Shared public-service strip: content changes only when world services change;
+    // animation remains isolated to this canvas and never drives React state.
+    ctx.fillStyle = emergency.active ? (emergency.kind === 'STORM' ? '#7f1d1d' : '#713f12') : '#071827';
+    ctx.fillRect(10, 42, w - 20, 24);
+    ctx.font = 'bold 12px "Courier New", monospace';
+    ctx.fillStyle = emergency.active ? '#fef2f2' : '#a5f3fc';
+    const weatherLabel = weather.currentWeather === 'HEAVY_RAIN' ? 'STORM' : weather.currentWeather;
+    const alertLabel = emergency.active ? `${emergency.kind} ${emergency.level} // ${emergency.message}` : 'PUBLIC CHANNELS NOMINAL';
+    ctx.fillText(`${district.name} // WEATHER: ${weatherLabel} // ${alertLabel}`.slice(0, 92), 18, 58);
+
+    // Phase 2 overrides the public-service strip for corporate response events.
+    if (cityEvent.phase !== 'IDLE') {
+      const eventColor = cityEvent.type === 'CORPORATE_LOCKDOWN' ? '#ff176b' : cityEvent.type === 'POWER_OUTAGE' ? '#ffb000' : '#ff5c35';
+      ctx.fillStyle = eventColor;
+      ctx.fillRect(10, 68, w - 20, 22);
+      ctx.fillStyle = '#050816';
+      ctx.font = 'bold 11px "Courier New", monospace';
+      const eventLabel = cityEvent.phase === 'RECOVERY' ? 'RECOVERY // ' : 'LIVE EVENT // ';
+      ctx.fillText(`${eventLabel}${cityEvent.title} // ${cityEvent.message}`.slice(0, 96), 18, 83);
+    }
+
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(12, h - 66, w - 24, 20);
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = '11px "Courier New", monospace';
+    ctx.fillText(`CODEX SYNC: ${discoveryCountRef.current} DISCOVERIES // LAST: ${lastDiscoveryRef.current}`, 20, h - 52);
 
     // 5. Global Video Glitch & Scanline Overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';

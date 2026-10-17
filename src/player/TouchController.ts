@@ -34,7 +34,19 @@ export class TouchController {
     return TouchController.instance;
   }
 
+  public reset = (): void => {
+    this.movementTouchId = null;
+    this.lookTouchId = null;
+    this.pinchSecondaryTouchId = null;
+    this.state.joystickActive = false;
+    this.state.touchLookActive = false;
+    this.state.isPinching = false;
+    this.state.pinchDistance = 0;
+    InputManager.setVirtualMovement(0, 0);
+  };
+
   public handleTouchStart = (e: TouchEvent): void => {
+    if (InputManager.isUIBlocked()) return;
     const halfWidth = window.innerWidth * 0.45; // Left 45% of screen is joystick
 
     for (let i = 0; i < e.changedTouches.length; i++) {
@@ -72,6 +84,10 @@ export class TouchController {
   };
 
   public handleTouchMove = (e: TouchEvent): void => {
+    if (InputManager.isUIBlocked()) {
+      this.reset();
+      return;
+    }
     // 1. Handle pinch zoom if two fingers on right side
     if (this.state.isPinching && this.lookTouchId !== null && this.pinchSecondaryTouchId !== null) {
       const t1 = Array.from(e.touches).find((t) => t.identifier === this.lookTouchId);
@@ -117,8 +133,8 @@ export class TouchController {
           const dy = (touch.clientY - this.state.lastTouchLook.y) * 1.8;
 
           InputManager.addVirtualLookDelta(dx, dy);
-          this.state.lastTouchLook = { x: touch.clientX, y: touch.clientY };
         }
+        this.state.lastTouchLook = { x: touch.clientX, y: touch.clientY };
       }
     }
   };
@@ -132,14 +148,19 @@ export class TouchController {
         this.state.joystickActive = false;
         InputManager.setVirtualMovement(0, 0);
       } else if (touch.identifier === this.lookTouchId) {
-        this.lookTouchId = null;
-        this.state.touchLookActive = false;
+        const remaining = Array.from(e.touches).find((candidate) => candidate.identifier === this.pinchSecondaryTouchId);
+        this.lookTouchId = remaining?.identifier ?? null;
+        this.pinchSecondaryTouchId = null;
+        this.state.touchLookActive = !!remaining;
+        if (remaining) this.state.lastTouchLook = { x: remaining.clientX, y: remaining.clientY };
         this.state.isPinching = false;
         this.state.pinchDistance = 0;
       } else if (touch.identifier === this.pinchSecondaryTouchId) {
         this.pinchSecondaryTouchId = null;
         this.state.isPinching = false;
         this.state.pinchDistance = 0;
+        const remaining = Array.from(e.touches).find((candidate) => candidate.identifier === this.lookTouchId);
+        if (remaining) this.state.lastTouchLook = { x: remaining.clientX, y: remaining.clientY };
       }
     }
   };

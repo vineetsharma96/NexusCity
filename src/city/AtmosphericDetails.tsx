@@ -210,6 +210,7 @@ export const AtmosphericDetails: React.FC<AtmosphericDetailsProps> = ({ playerPo
     <group name="AtmosphericEnvironmentLayer">
       {/* 1. Billowing Street Steam Vents */}
       <instancedMesh
+        frustumCulled={false}
         ref={steamMeshRef}
         args={[steamGeo, undefined, STEAM_COUNT]}
       >
@@ -251,6 +252,7 @@ export const AtmosphericDetails: React.FC<AtmosphericDetailsProps> = ({ playerPo
 
       {/* 2. Low Rolling Ground Mist Sheets */}
       <instancedMesh
+        frustumCulled={false}
         ref={mistMeshRef}
         args={[mistGeo, undefined, MIST_COUNT]}
       >

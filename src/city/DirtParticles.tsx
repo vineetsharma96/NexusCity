@@ -77,11 +77,6 @@ export const DirtParticles: React.FC<DirtParticlesProps> = ({ playerPosRef, coun
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
 
-  // Initial colors per instance
-  useMemo(() => {
-    // will be set on first frames
-  }, []);
-
   useFrame((_, delta) => {
     if (!meshRef.current) return;
 
@@ -91,8 +86,6 @@ export const DirtParticles: React.FC<DirtParticlesProps> = ({ playerPosRef, coun
     }
     if (!meshRef.current.visible) meshRef.current.visible = true;
 
-    // Update global wind
-    windSystem.update(delta);
     const windVec = windSystem.getVector();
     const gust = windSystem.getGustFactor();
     const pPos = playerPosRef.current;

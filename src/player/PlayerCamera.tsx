@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { InputManager } from './InputManager';
 import { KinematicCollisionSolver } from './KinematicCollision';
 import { CinematicManager } from '../cinematics/CinematicManager';
+import { VehicleInteractionSystem } from '../vehicle/VehicleInteractionSystem';
 
 interface PlayerCameraProps {
   targetPos: THREE.Vector3;
@@ -14,7 +15,7 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
   const { camera, gl } = useThree();
 
   // Focus offset (chest/head height)
-  const focusOffset = new THREE.Vector3(0, 1.45, 0);
+  const focusOffset = useMemo(() => new THREE.Vector3(0, 1.45, 0), []);
   const currentFocus = useRef(targetPos.clone().add(focusOffset));
 
   // Spherical coordinate state: [radius, phi, theta]
@@ -27,10 +28,19 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
   // Reusable vectors for cinematic calculations
   const cinematicCamPos = useMemo(() => new THREE.Vector3(), []);
   const cinematicLookAt = useMemo(() => new THREE.Vector3(), []);
+  const targetFocus = useMemo(() => new THREE.Vector3(), []);
+  const freeOffset = useMemo(() => new THREE.Vector3(), []);
+  const rayDirection = useMemo(() => new THREE.Vector3(), []);
+  const ray = useMemo(() => new THREE.Ray(), []);
+  const boxTarget = useMemo(() => new THREE.Box3(), []);
+  const hitPoint = useMemo(() => new THREE.Vector3(), []);
+  const finalPosition = useMemo(() => new THREE.Vector3(), []);
+  const wasCinematic = useRef(false);
 
   // Zoom control via scroll wheel
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
+      if (InputManager.isUIBlocked()) return;
       e.preventDefault();
       const zoomSpeed = 0.005;
       desiredRadius.current = THREE.MathUtils.clamp(
@@ -55,6 +65,9 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
     );
 
     if (isCinematicActive) {
+      wasCinematic.current = true;
+      InputManager.consumeLookDelta();
+      InputManager.consumeZoomDelta();
       camera.position.copy(cinematicCamPos);
       camera.lookAt(cinematicLookAt);
       currentFocus.current.copy(cinematicLookAt);
@@ -89,41 +102,56 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
     }
 
     // 2. Follow player focus point smoothly
-    const targetFocus = targetPos.clone().add(focusOffset);
-    currentFocus.current.lerp(targetFocus, THREE.MathUtils.clamp(delta * 10, 0, 1));
+    const vehicleState = VehicleInteractionSystem.getInstance().getState();
+    targetFocus.copy(targetPos).add(focusOffset);
+    if (wasCinematic.current) {
+      currentFocus.current.copy(targetFocus);
+      freeOffset.copy(camera.position).sub(targetFocus);
+      spherical.current.setFromVector3(freeOffset);
+      desiredRadius.current = THREE.MathUtils.clamp(spherical.current.radius, 3.5, 18);
+      currentRadius.current = spherical.current.radius;
+      wasCinematic.current = false;
+    } else if (currentFocus.current.distanceToSquared(targetFocus) > 400) {
+      // Fast travel should move the camera with the player, not sweep through city blocks.
+      currentFocus.current.copy(targetFocus);
+    } else {
+      currentFocus.current.lerp(targetFocus, 1 - Math.exp(-Math.max(0, delta) * 10));
+    }
 
     // 3. Collision-Aware Spring-Arm Raycast
-    spherical.current.radius = desiredRadius.current;
-    const freeOffset = new THREE.Vector3().setFromSpherical(spherical.current);
+    spherical.current.radius = vehicleState.mode === 'RIDING'
+      ? THREE.MathUtils.clamp(desiredRadius.current + 2.5, 5.5, 20)
+      : desiredRadius.current;
+    freeOffset.setFromSpherical(spherical.current);
 
     // Raycast from focus to desiredPos
-    const rayDir = freeOffset.clone().normalize();
-    const maxDist = desiredRadius.current;
+    const rayDir = rayDirection.copy(freeOffset).normalize();
+    const maxDist = spherical.current.radius;
     let actualDist = maxDist;
 
     // Use getAllBoxes to inspect both static world colliders AND active building/prop colliders
     const boxes = KinematicCollisionSolver.getAllBoxes();
-    const ray = new THREE.Ray(currentFocus.current, rayDir);
-    const boxTarget = new THREE.Box3();
+    ray.set(currentFocus.current, rayDir);
 
     for (const b of boxes) {
       boxTarget.min.copy(b.min);
       boxTarget.max.copy(b.max);
-      const hitPoint = new THREE.Vector3();
       const hit = ray.intersectBox(boxTarget, hitPoint);
       if (hit) {
         const hitDist = currentFocus.current.distanceTo(hitPoint);
         if (hitDist < actualDist) {
           // Pull camera in front of obstacle with cushion
-          actualDist = Math.max(1.2, hitDist - 0.25);
+          actualDist = Math.max(0.2, hitDist - 0.25);
         }
       }
     }
 
     // Smoothly interpolate radius to avoid snapping
-    currentRadius.current = THREE.MathUtils.lerp(currentRadius.current, actualDist, delta * 12);
+    currentRadius.current = actualDist < currentRadius.current
+      ? actualDist
+      : THREE.MathUtils.damp(currentRadius.current, actualDist, 12, Math.max(0, delta));
     const finalOffset = rayDir.multiplyScalar(currentRadius.current);
-    const finalPos = currentFocus.current.clone().add(finalOffset);
+    const finalPos = finalPosition.copy(currentFocus.current).add(finalOffset);
 
     // Ensure camera never sinks below street floor
     if (finalPos.y < 0.4) {

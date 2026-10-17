@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { DialogueSystem, DialogueNode, DialogueChoice } from '../npc/DialogueSystem';
+import { useModalFocus } from './useModalFocus';
 
 export const DialogueBox: React.FC = () => {
   const [node, setNode] = useState<DialogueNode | null>(null);
+  const dialogueRef = useModalFocus(Boolean(node), () => DialogueSystem.getInstance().closeDialogue());
 
   useEffect(() => {
     return DialogueSystem.getInstance().subscribe(setNode);
@@ -20,13 +22,19 @@ export const DialogueBox: React.FC = () => {
 
   return (
     <div
+      ref={dialogueRef}
+      className="dialogue-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dialogue-speaker"
+      tabIndex={-1}
       style={{
         position: 'absolute',
-        bottom: 40,
+        bottom: 'max(20px, env(safe-area-inset-bottom))',
         left: '50%',
         transform: 'translateX(-50%)',
         width: 'min(92vw, 680px)',
-        zIndex: 50,
+        zIndex: 130,
         pointerEvents: 'auto',
       }}
     >
@@ -66,6 +74,7 @@ export const DialogueBox: React.FC = () => {
 
             <div>
               <div
+                id="dialogue-speaker"
                 style={{
                   fontFamily: 'var(--font-display)',
                   fontSize: '1.05rem',
@@ -91,6 +100,7 @@ export const DialogueBox: React.FC = () => {
 
           <button
             onClick={handleClose}
+            aria-label="Close conversation"
             style={{
               background: 'none',
               border: 'none',

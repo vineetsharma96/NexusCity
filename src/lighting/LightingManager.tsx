@@ -1,11 +1,12 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { QualitySettings } from '../rendering/QualityManager';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
-import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
+import { WeatherSystem } from '../world/WeatherSystem';
 import { WindSystem } from '../world/WindSystem';
 import { CelestialVolumetricRays } from './CelestialVolumetricRays';
+import { LivingCityEventSystem } from '../world/LivingCityEventSystem';
 
 interface LightingManagerProps {
   quality: QualitySettings;
@@ -19,28 +20,53 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const ambientLightRef = useRef<THREE.AmbientLight>(null);
   const fogRef = useRef<THREE.Fog>(null);
   const celestialOrbRef = useRef<THREE.Group>(null);
-  const lightTargetRef = useRef<THREE.Object3D>(new THREE.Object3D());
+  const lightTarget = useMemo(() => new THREE.Object3D(), []);
   const nightLightsGroupRef = useRef<THREE.Group>(null);
 
   const [lighting, setLighting] = useState<TimeLightingState>(() =>
     TimeSystem.getInstance().getState()
   );
-  const [weather, setWeather] = useState<WeatherState>(() =>
-    WeatherSystem.getInstance().getState()
-  );
+  const colors = useMemo(() => ({ sky: new THREE.Color(), fog: new THREE.Color(), tint: new THREE.Color(), storm: new THREE.Color('#050810'), flash: new THREE.Color('#cce8ff') }), []);
+  const origin = useMemo(() => new THREE.Vector3(), []);
+
+  useEffect(() => {
+    // Metallic surfaces need reflected sky light as well as direct lamps.
+    // A tiny procedural sky cube keeps roads and facades readable without assets.
+    const faces = ['#8ba5bf', '#8ba5bf', '#c4d6e8', '#303d50', '#8ba5bf', '#8ba5bf'].map((color) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 32;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = color;
+      context.fillRect(0, 0, 32, 32);
+      return canvas;
+    });
+    const environment = new THREE.CubeTexture(faces);
+    environment.colorSpace = THREE.SRGBColorSpace;
+    environment.needsUpdate = true;
+    const previous = scene.environment;
+    const previousIntensity = scene.environmentIntensity;
+    scene.environment = environment;
+    return () => {
+      scene.environment = previous;
+      scene.environmentIntensity = previousIntensity;
+      environment.dispose();
+    };
+  }, [scene]);
 
   const sDist = quality.shadowDistance;
 
   useEffect(() => {
-    scene.add(lightTargetRef.current);
-    const unsubTime = TimeSystem.getInstance().subscribe(setLighting);
-    const unsubWeather = WeatherSystem.getInstance().subscribe(setWeather);
+    scene.add(lightTarget);
+    let lastRenderKey = '';
+    const unsubTime = TimeSystem.getInstance().subscribe((state) => {
+      const key = `${state.isNight}:${Math.floor(state.nightFactor * 10)}`;
+      if (key !== lastRenderKey) { lastRenderKey = key; setLighting(state); }
+    });
     return () => {
-      scene.remove(lightTargetRef.current);
+      scene.remove(lightTarget);
       unsubTime();
-      unsubWeather();
     };
-  }, [scene]);
+  }, [scene, lightTarget]);
 
   // Update shadow camera frustum and projection matrix on quality changes
   useEffect(() => {
@@ -53,6 +79,9 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       cam.near = 1.0;
       cam.far = Math.min(900, sDist * 3.5);
       cam.updateProjectionMatrix();
+      // Three.js keeps the old allocation when only mapSize changes.
+      dirLightRef.current.shadow.map?.dispose();
+      dirLightRef.current.shadow.map = null;
     }
   }, [sDist, quality.shadowMapSize]);
 
@@ -61,15 +90,16 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     TimeSystem.getInstance().update(delta);
     WeatherSystem.getInstance().update(delta);
     WindSystem.getInstance().update(delta);
+    const lighting = TimeSystem.getInstance().getState();
+    const weather = WeatherSystem.getInstance().getState();
+    const cityEvent = LivingCityEventSystem.getInstance().getState();
+    scene.environmentIntensity = (lighting.isNight ? 0.38 : 0.85) * (1 - weather.skyDarkness * 0.45);
 
-    const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
+    const pPos = playerPosRef?.current || origin;
 
     // 1. Calculate blended sky & fog colors
-    const baseSky = new THREE.Color(lighting.skyColor);
-    const stormySky = new THREE.Color('#050810');
-    const lightningSky = new THREE.Color('#cce8ff');
-
-    const effectiveSky = baseSky.clone().lerp(stormySky, weather.skyDarkness);
+    const lightningSky = colors.flash;
+    const effectiveSky = colors.sky.set(lighting.skyColor).lerp(colors.storm, weather.skyDarkness);
     if (weather.lightningIntensity > 0.01) {
       effectiveSky.lerp(lightningSky, weather.lightningIntensity * 0.85);
     }
@@ -79,9 +109,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     }
 
     // 2. Dynamic Fog adjustment
-    const baseFog = new THREE.Color(lighting.fogColor);
-    const weatherFog = new THREE.Color(weather.fogColorTint);
-    const effectiveFogColor = baseFog.clone().lerp(weatherFog, Math.min(1.0, (weather.fogDensityMultiplier - 1.0) / 2.0));
+    const effectiveFogColor = colors.fog.set(lighting.fogColor).lerp(colors.tint.set(weather.fogColorTint), Math.min(1.0, (weather.fogDensityMultiplier - 1.0) / 2.0));
     if (weather.lightningIntensity > 0.01) {
       effectiveFogColor.lerp(lightningSky, weather.lightningIntensity * 0.7);
     }
@@ -107,13 +135,14 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       );
 
       // Light target follows player so shadows follow the player everywhere in the city
-      lightTargetRef.current.position.set(pPos.x, pPos.y, pPos.z);
-      lightTargetRef.current.updateMatrixWorld();
-      dirLightRef.current.target = lightTargetRef.current;
+      lightTarget.position.set(pPos.x, pPos.y, pPos.z);
+      lightTarget.updateMatrixWorld();
+      dirLightRef.current.target = lightTarget;
 
       const celestialDimming = 1.0 - weather.skyDarkness * 0.65;
       const lightningBoost = weather.lightningIntensity * 5.0;
-      dirLightRef.current.intensity = (lighting.celestialIntensity * celestialDimming) + lightningBoost;
+       const outageDim = cityEvent.type === 'POWER_OUTAGE' && cityEvent.phase === 'ACTIVE' ? 0.62 : 1;
+       dirLightRef.current.intensity = ((lighting.celestialIntensity * celestialDimming) + lightningBoost) * outageDim;
 
       if (weather.lightningIntensity > 0.05) {
         dirLightRef.current.color.set('#e0f2fe');
@@ -139,17 +168,18 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
 
     if (hemiLightRef.current) {
       const hemiDim = 1.0 - weather.skyDarkness * 0.45;
-      hemiLightRef.current.color.copy(effectiveSky);
+      hemiLightRef.current.color.set(lighting.hemiSkyColor);
       hemiLightRef.current.groundColor.set(lighting.hemiGroundColor);
       hemiLightRef.current.intensity =
-        ((lighting.isNight ? 0.85 : 1.25) * hemiDim + weather.lightningIntensity * 1.2) * giScale;
+        ((lighting.isNight ? 0.85 : 1.25) * hemiDim + weather.lightningIntensity * 1.2) * giScale * (cityEvent.type === 'POWER_OUTAGE' ? 0.82 : 1);
     }
 
     // 6. Ambient fill light
     if (ambientLightRef.current) {
+      ambientLightRef.current.color.set(lighting.isNight ? '#9bb5d8' : '#d8e3f0');
       const ambDim = 1.0 - weather.skyDarkness * 0.5;
       ambientLightRef.current.intensity =
-        ((lighting.isNight ? 0.75 : lighting.ambientIntensity) * ambDim + weather.lightningIntensity * 1.5) * giScale;
+        ((lighting.isNight ? 0.75 : lighting.ambientIntensity) * ambDim + weather.lightningIntensity * 1.5) * giScale * (cityEvent.type === 'POWER_OUTAGE' ? 0.72 : 1);
     }
 
     // 7. Smoothly glide night lights group across chunk boundaries
@@ -162,9 +192,9 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   });
 
   // Calculate local streetlamp illumination points around player
-  const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
-  const isNightTime = lighting.isNight || lighting.phase === 'DUSK' || lighting.phase === 'BLUE_HOUR' || lighting.phase === 'SUNSET' || lighting.phase === 'DAWN';
-  const nightIntensity = lighting.isNight ? 2.5 : lighting.phase === 'BLUE_HOUR' ? 2.0 : lighting.phase === 'DUSK' ? 2.2 : 1.4;
+  const pPos = playerPosRef?.current || origin;
+  const isNightTime = lighting.nightFactor > 0.38;
+  const nightIntensity = lighting.nightFactor > 0.8 ? 2.8 : lighting.nightFactor > 0.6 ? 2.2 : 1.5;
 
   return (
     <>
@@ -249,17 +279,11 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
             </>
           )}
 
-          {/* Park sanctuary ambient lantern light if in vicinity (if maxLights >= 12) */}
-          {quality.maxLights >= 12 && Math.hypot(pPos.x - 75, pPos.z - 75) < 90 && (
-            <pointLight
-              position={[75, 4.5, 75]}
-              intensity={3.2}
-              distance={65}
-              color="#00ffcc"
-              decay={2}
-            />
-          )}
         </group>
+      )}
+
+      {isNightTime && quality.nightLightsEnabled && quality.maxLights >= 12 && (
+        <pointLight position={[75, 4.5, 75]} intensity={3.2} distance={65} color="#00ffcc" decay={2} />
       )}
 
       {/* Realtime Visible Radiant Celestial Orb in Sky (Sun / Moon) */}
@@ -299,7 +323,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         </group>
 
       {/* Ambient fill light */}
-      <ambientLight ref={ambientLightRef} intensity={lighting.ambientIntensity} color="#182a4d" />
+      <ambientLight ref={ambientLightRef} intensity={lighting.ambientIntensity} color={lighting.hemiSkyColor} />
 
       {/* Celestial Volumetric Light Rays (God Rays / Moonbeams) */}
       <CelestialVolumetricRays quality={quality} playerPosRef={playerPosRef} />

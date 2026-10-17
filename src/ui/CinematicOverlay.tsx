@@ -21,6 +21,42 @@ export const CinematicOverlay: React.FC = () => {
   const isTransitioning = cinematic.phase === 'TRANSITION_TO_PLAYER';
   const isVista = cinematic.phase === 'VISTA_MODE';
 
+  if (isVista) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 5000,
+          pointerEvents: 'none',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          padding: '18px 20px',
+        }}
+      >
+        <div aria-hidden="true" />
+        <button
+          onClick={() => CinematicManager.getInstance().skip()}
+          style={{
+            pointerEvents: 'auto',
+            padding: '8px 12px',
+            color: '#d7faff',
+            background: 'rgba(3, 8, 20, 0.72)',
+            border: '1px solid rgba(0, 240, 255, 0.34)',
+            borderRadius: 3,
+            fontFamily: 'var(--font-mono, monospace)',
+            fontSize: '0.68rem',
+            letterSpacing: '1px',
+            cursor: 'pointer',
+          }}
+        >
+          RESUME [V]
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -37,6 +73,7 @@ export const CinematicOverlay: React.FC = () => {
     >
       {/* Top Cinematic Letterbox Bar */}
       <div
+        className="cinematic-bar"
         style={{
           height: '75px',
           backgroundColor: '#040711',
@@ -103,7 +140,7 @@ export const CinematicOverlay: React.FC = () => {
               e.currentTarget.style.boxShadow = '0 0 16px rgba(0, 240, 255, 0.4)';
             }}
           >
-            <span>{isVista ? 'RESUME CONTROL [ESC / V]' : 'SKIP INTRO [SPACE]'}</span>
+            <span>SKIP INTRO</span>
             <span style={{ color: '#00f0ff' }}>→</span>
           </button>
         )}
@@ -111,6 +148,7 @@ export const CinematicOverlay: React.FC = () => {
 
       {/* Center Cinematic Grid Overlay Elements */}
       <div
+        className="cinematic-caption"
         style={{
           position: 'relative',
           padding: '0 40px 10px 40px',
@@ -169,6 +207,7 @@ export const CinematicOverlay: React.FC = () => {
 
       {/* Bottom Cinematic Letterbox Bar */}
       <div
+        className="cinematic-bar"
         style={{
           height: '75px',
           backgroundColor: '#040711',
