@@ -1,24 +1,25 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
+import { WeatherState, WeatherSystem } from '../world/WeatherSystem';
+import { WindSystem } from '../world/WindSystem';
 import { QualityManager } from '../rendering/QualityManager';
 
 interface RainParticlesProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
 }
 
-const DROP_COUNT = 1800;
-const SPLASH_COUNT = 90;
+const BASE_DROP_COUNT = 1400;
+const MAX_DROP_COUNT = 2800;
+const BASE_EMBER_COUNT = 320;
+const MAX_EMBER_COUNT = 640;
 
 export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) => {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const splashMeshRef = useRef<THREE.InstancedMesh>(null);
+  const rainMeshRef = useRef<THREE.InstancedMesh>(null);
+  const emberMeshRef = useRef<THREE.InstancedMesh>(null);
   const rainMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const splashMatRef = useRef<THREE.MeshBasicMaterial>(null);
-
-  // Weather state listener
   const weatherRef = useRef<WeatherState>(WeatherSystem.getInstance().getState());
+  const windSystem = WindSystem.getInstance();
 
   useEffect(() => {
     return WeatherSystem.getInstance().subscribe((w) => {
@@ -26,167 +27,130 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
     });
   }, []);
 
-  // Raindrop simulation arrays
-  const drops = useMemo(() => {
-    const data = [];
-    for (let i = 0; i < DROP_COUNT; i++) {
-      data.push({
-        x: (Math.random() - 0.5) * 70,
-        y: Math.random() * 32,
-        z: (Math.random() - 0.5) * 70,
-        speedMult: 0.85 + Math.random() * 0.35,
-        length: 0.6 + Math.random() * 0.45,
-      });
-    }
-    return data;
-  }, []);
+  const drops = useMemo(
+    () =>
+      Array.from({ length: MAX_DROP_COUNT }, () => ({
+        x: (Math.random() - 0.5) * 68,
+        y: Math.random() * 30,
+        z: (Math.random() - 0.5) * 68,
+        speed: 0.85 + Math.random() * 0.35,
+        len: 0.65 + Math.random() * 0.4,
+      })),
+    []
+  );
 
-  // Ground splash simulation arrays
-  const splashes = useMemo(() => {
-    const data = [];
-    for (let i = 0; i < SPLASH_COUNT; i++) {
-      data.push({
-        x: (Math.random() - 0.5) * 40,
-        y: 0.04,
-        z: (Math.random() - 0.5) * 40,
-        life: Math.random(), // 0 to 1
-        scale: 0.1,
-      });
-    }
-    return data;
-  }, []);
+  const embers = useMemo(
+    () =>
+      Array.from({ length: MAX_EMBER_COUNT }, () => ({
+        x: (Math.random() - 0.5) * 76,
+        y: 0.3 + Math.random() * 18,
+        z: (Math.random() - 0.5) * 76,
+        phase: Math.random() * Math.PI * 2,
+        scale: 0.06 + Math.random() * 0.08,
+      })),
+    []
+  );
 
-  // Base geometries
-  const dropGeo = useMemo(() => new THREE.CylinderGeometry(0.012, 0.016, 0.9, 4), []);
-  const splashGeo = useMemo(() => new THREE.RingGeometry(0.05, 0.22, 8), []);
-
+  const dropGeo = useMemo(() => new THREE.CylinderGeometry(0.012, 0.015, 0.9, 4), []);
+  const emberGeo = useMemo(() => new THREE.DodecahedronGeometry(0.45, 0), []);
   const dummy = useMemo(() => new THREE.Object3D(), []);
-  const splashDummy = useMemo(() => new THREE.Object3D(), []);
+  const upVec = useMemo(() => new THREE.Vector3(0, -1, 0), []);
+  const quat = useMemo(() => new THREE.Quaternion(), []);
 
-  useFrame((_, delta) => {
+  useFrame(({ clock }, delta) => {
+    const dt = Math.min(delta, 0.05);
     const weather = weatherRef.current;
-    const rainIntensity = weather.rainIntensity;
-
-    // Update material opacities based on rain intensity
-    if (rainMatRef.current) {
-      rainMatRef.current.opacity = Math.min(0.65, rainIntensity * 0.6);
-      rainMatRef.current.visible = rainIntensity > 0.02;
-    }
-    if (splashMatRef.current) {
-      splashMatRef.current.opacity = Math.min(0.45, rainIntensity * 0.4);
-      splashMatRef.current.visible = rainIntensity > 0.1;
-    }
-
-    if (rainIntensity <= 0.02 || !meshRef.current) return;
-
     const pPos = playerPosRef.current;
-    const wind = weather.windVector;
+    const quality = QualityManager.current;
+    const density = quality.particlesDensity;
 
-    // Dynamic density scaling by quality profile
-    const density = QualityManager.current.particlesDensity;
-    const activeDropCount = Math.max(120, Math.round(DROP_COUNT * density));
-    const activeSplashCount = Math.max(10, Math.round(SPLASH_COUNT * density));
-
-    // Orientation quaternion aligning drop along wind vector
-    const windDir = wind.clone().normalize();
-    const up = new THREE.Vector3(0, -1, 0); // Drop flows down along wind
-    const quat = new THREE.Quaternion().setFromUnitVectors(up, windDir);
-
-    // 1. Update Raindrops
-    for (let i = 0; i < activeDropCount; i++) {
-      const drop = drops[i];
-
-      // Integrate motion
-      drop.x += wind.x * delta * drop.speedMult;
-      drop.y += wind.y * delta * drop.speedMult;
-      drop.z += wind.z * delta * drop.speedMult;
-
-      // Wrap vertically around player
-      const bottomLimit = pPos.y - 1;
-      const topLimit = pPos.y + 26;
-
-      if (drop.y < bottomLimit) {
-        drop.y = topLimit + Math.random() * 6;
-        drop.x = pPos.x + (Math.random() - 0.5) * 70;
-        drop.z = pPos.z + (Math.random() - 0.5) * 70;
-      }
-
-      // Wrap horizontally if drifted too far from player
-      if (Math.abs(drop.x - pPos.x) > 38) {
-        drop.x = pPos.x + (Math.random() - 0.5) * 70;
-      }
-      if (Math.abs(drop.z - pPos.z) > 38) {
-        drop.z = pPos.z + (Math.random() - 0.5) * 70;
-      }
-
-      dummy.position.set(drop.x, drop.y, drop.z);
-      dummy.quaternion.copy(quat);
-      dummy.scale.set(1, drop.length, 1);
-      dummy.updateMatrix();
-
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+    // 1. Update Rain Streaks
+    const rainActive = quality.rainParticlesEnabled && density > 0.02 && weather.rainIntensity > 0.02;
+    if (rainMatRef.current) {
+      rainMatRef.current.opacity = rainActive ? Math.min(0.62, weather.rainIntensity * 0.58) : 0;
+      rainMatRef.current.visible = rainActive;
     }
-    meshRef.current.count = activeDropCount;
-    meshRef.current.instanceMatrix.needsUpdate = true;
 
-    // 2. Update Ground Splashes
-    if (splashMeshRef.current && rainIntensity > 0.1) {
-      for (let i = 0; i < activeSplashCount; i++) {
-        const splash = splashes[i];
-        splash.life += delta * (2.8 + rainIntensity * 2.0);
+    if (rainMeshRef.current) {
+      if (!rainActive) {
+        rainMeshRef.current.visible = false;
+      } else {
+        rainMeshRef.current.visible = true;
+        const activeDrops = Math.min(
+          drops.length,
+          Math.max(60, Math.round(BASE_DROP_COUNT * density))
+        );
+        const wind = weather.windVector;
+        quat.setFromUnitVectors(upVec, wind.clone().normalize());
 
-        if (splash.life >= 1.0) {
-          splash.life = 0;
-          splash.x = pPos.x + (Math.random() - 0.5) * 44;
-          splash.z = pPos.z + (Math.random() - 0.5) * 44;
-          splash.y = 0.04;
+        for (let i = 0; i < activeDrops; i++) {
+          const d = drops[i];
+          if (!d) continue;
+          d.x += wind.x * dt * d.speed;
+          d.y += wind.y * dt * d.speed;
+          d.z += wind.z * dt * d.speed;
+
+          if (d.y < pPos.y - 1) {
+            d.y = pPos.y + 26 + Math.random() * 5;
+            d.x = pPos.x + (Math.random() - 0.5) * 68;
+            d.z = pPos.z + (Math.random() - 0.5) * 68;
+          }
+          dummy.position.set(d.x, d.y, d.z);
+          dummy.quaternion.copy(quat);
+          dummy.scale.set(1, d.len, 1);
+          dummy.updateMatrix();
+          rainMeshRef.current.setMatrixAt(i, dummy.matrix);
         }
-
-        splash.scale = 0.1 + splash.life * 0.7;
-
-        splashDummy.position.set(splash.x, splash.y, splash.z);
-        splashDummy.rotation.x = -Math.PI / 2;
-        splashDummy.scale.set(splash.scale, splash.scale, 1);
-        splashDummy.updateMatrix();
-
-        splashMeshRef.current.setMatrixAt(i, splashDummy.matrix);
+        rainMeshRef.current.count = activeDrops;
+        rainMeshRef.current.instanceMatrix.needsUpdate = true;
       }
-      splashMeshRef.current.count = activeSplashCount;
-      splashMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
+
+    // 2. Update Wind-Driven Atmospheric Motes
+    if (emberMeshRef.current) {
+      if (!quality.windParticlesEnabled || density <= 0.02) {
+        emberMeshRef.current.visible = false;
+        return;
+      }
+      emberMeshRef.current.visible = true;
+      const t = clock.getElapsedTime();
+      const windVec = windSystem.getVector();
+      const gust = windSystem.getGustFactor();
+      const activeEmbers = Math.min(
+        embers.length,
+        Math.max(24, Math.round(BASE_EMBER_COUNT * density))
+      );
+
+      for (let i = 0; i < activeEmbers; i++) {
+        const e = embers[i];
+        if (!e) continue;
+        e.x += (windVec.x * 0.32 + Math.sin(t * 1.8 + e.phase) * 0.6) * dt * gust;
+        e.y += Math.cos(t * 1.4 + e.phase) * 0.35 * dt;
+        e.z += (windVec.z * 0.32 + Math.cos(t * 1.6 + e.phase) * 0.6) * dt * gust;
+
+        if (e.x - pPos.x > 40) e.x -= 80;
+        else if (e.x - pPos.x < -40) e.x += 80;
+        if (e.z - pPos.z > 40) e.z -= 80;
+        else if (e.z - pPos.z < -40) e.z += 80;
+
+        dummy.position.set(e.x, Math.max(0.2, e.y), e.z);
+        dummy.rotation.set(t + e.phase, t * 0.7, 0);
+        dummy.scale.setScalar(e.scale);
+        dummy.updateMatrix();
+        emberMeshRef.current.setMatrixAt(i, dummy.matrix);
+      }
+      emberMeshRef.current.count = activeEmbers;
+      emberMeshRef.current.instanceMatrix.needsUpdate = true;
     }
   });
 
   return (
-    <group name="RainPrecipitationSystem">
-      {/* Falling Rain Streaks */}
-      <instancedMesh
-        ref={meshRef}
-        args={[dropGeo, undefined, DROP_COUNT]}
-        frustumCulled={false}
-      >
-        <meshBasicMaterial
-          ref={rainMatRef}
-          color="#c8e4ff"
-          transparent
-          opacity={0.0}
-          depthWrite={false}
-        />
+    <group name="AtmosphericParticlesLayer">
+      <instancedMesh ref={rainMeshRef} args={[dropGeo, undefined, MAX_DROP_COUNT]} frustumCulled={false}>
+        <meshBasicMaterial ref={rainMatRef} color="#bae6fd" transparent opacity={0} depthWrite={false} />
       </instancedMesh>
-
-      {/* Pavement Ground Splash Discs */}
-      <instancedMesh
-        ref={splashMeshRef}
-        args={[splashGeo, undefined, SPLASH_COUNT]}
-        frustumCulled={false}
-      >
-        <meshBasicMaterial
-          ref={splashMatRef}
-          color="#d8edff"
-          transparent
-          opacity={0.0}
-          depthWrite={false}
-          side={THREE.DoubleSide}
-        />
+      <instancedMesh ref={emberMeshRef} args={[emberGeo, undefined, MAX_EMBER_COUNT]} frustumCulled={false}>
+        <meshBasicMaterial color="#f59e0b" transparent opacity={0.55} depthWrite={false} />
       </instancedMesh>
     </group>
   );

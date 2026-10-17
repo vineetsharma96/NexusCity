@@ -1,306 +1,376 @@
-import { WebGLCapabilities, WebGLDiagnosticInfo } from './WebGLCapabilities';
+import { WebGLCapabilities } from './WebGLCapabilities';
 
-export type QualityPreset = 'AUTO' | 'ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE' | 'CUSTOM';
+export type QualityPreset = 'AUTO' | 'LITE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'ULTRA' | 'CUSTOM';
 
 export interface QualitySettings {
   name: QualityPreset;
-  renderScale: number; // 0.5 to 2.0 (resolution multiplier)
-  dpr: [number, number]; // [min, max]
-  shadows: boolean;
-  shadowQuality: 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH' | 'ULTRA';
-  shadowMapSize: number;
-  shadowDistance: number;
-  GIQuality: 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH';
-  reflectionQuality: 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH';
-  particleDensity: number;
-  vegetationDensity: number;
-  NPCDensity: number;
-  vehicleDensity: number;
+  dpr: [number, number];
   drawDistance: number;
-  maxActiveChunks: number;
+  shadows: boolean;
+  shadowMapSize: number;
+  maxLights: number;
+  particlesDensity: number;
+  NPCDensity: number;
   LODQuality: 'LOW' | 'MEDIUM' | 'HIGH';
   postProcessing: boolean;
   bloom: boolean;
-  volumetrics: boolean;
+  sharpeningEnabled: boolean;
+  vignetteEnabled: boolean;
   antiAliasing: boolean;
-  textureQuality: 'LOW' | 'MEDIUM' | 'HIGH';
-  anisotropy: number;
-  maxLights: number;
-  particlesDensity: number;
   cloudsEnabled: boolean;
+  rainParticlesEnabled: boolean;
   windParticlesEnabled: boolean;
   nightLightsEnabled: boolean;
+  volumetricRaysEnabled: boolean;
+  starsEnabled: boolean;
+  horizonHazeEnabled: boolean;
+  fogEnabled: boolean;
+  wetReflectionsEnabled: boolean;
+  normalMapsEnabled: boolean;
+  vegetationEnabled: boolean;
+  trafficEnabled: boolean;
+  npcsEnabled: boolean;
+  billboardsEnabled: boolean;
+  streetFurnitureEnabled: boolean;
+  reflectionQuality: 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH';
+  maxActiveChunks: number;
 }
 
-export const QUALITY_PROFILES: Record<Exclude<QualityPreset, 'CUSTOM' | 'AUTO'>, QualitySettings> = {
-  ULTRA: {
-    name: 'ULTRA',
-    renderScale: 1.25,
-    dpr: [1, 1.75],
-    shadows: true,
-    shadowQuality: 'ULTRA',
-    shadowMapSize: 2048,
-    shadowDistance: 220,
-    GIQuality: 'HIGH',
-    reflectionQuality: 'HIGH',
-    particleDensity: 1.0,
-    vegetationDensity: 1.0,
-    NPCDensity: 1.0,
-    vehicleDensity: 1.0,
-    drawDistance: 2000,
-    maxActiveChunks: 120,
-    LODQuality: 'HIGH',
-    postProcessing: true,
-    bloom: true,
-    volumetrics: true,
-    antiAliasing: true,
-    textureQuality: 'HIGH',
-    anisotropy: 8,
-    maxLights: 20,
-    particlesDensity: 1.0,
-    cloudsEnabled: true,
-    windParticlesEnabled: true,
-    nightLightsEnabled: true,
-  },
-  HIGH: {
-    name: 'HIGH',
-    renderScale: 1.0,
-    dpr: [1, 1.25],
-    shadows: true,
-    shadowQuality: 'HIGH',
-    shadowMapSize: 1024,
-    shadowDistance: 150,
-    GIQuality: 'MEDIUM',
-    reflectionQuality: 'MEDIUM',
-    particleDensity: 0.75,
-    vegetationDensity: 0.8,
-    NPCDensity: 0.8,
-    vehicleDensity: 0.8,
-    drawDistance: 1400,
-    maxActiveChunks: 75,
-    LODQuality: 'HIGH',
-    postProcessing: true,
-    bloom: true,
-    volumetrics: true,
-    antiAliasing: true,
-    textureQuality: 'HIGH',
-    anisotropy: 4,
-    maxLights: 12,
-    particlesDensity: 0.75,
-    cloudsEnabled: true,
-    windParticlesEnabled: true,
-    nightLightsEnabled: true,
-  },
-  MEDIUM: {
-    name: 'MEDIUM',
-    renderScale: 0.9,
-    dpr: [0.9, 1.1],
-    shadows: true,
-    shadowQuality: 'MEDIUM',
-    shadowMapSize: 512,
-    shadowDistance: 90,
-    GIQuality: 'LOW',
-    reflectionQuality: 'LOW',
-    particleDensity: 0.45,
-    vegetationDensity: 0.6,
-    NPCDensity: 0.6,
-    vehicleDensity: 0.6,
-    drawDistance: 900,
-    maxActiveChunks: 45,
-    LODQuality: 'MEDIUM',
+export const QUALITY_PROFILES: Record<Exclude<QualityPreset, 'AUTO' | 'CUSTOM'>, QualitySettings> = {
+  LITE: {
+    name: 'LITE',
+    dpr: [0.65, 0.75],
+    drawDistance: 260,
+    shadows: false,
+    shadowMapSize: 256,
+    maxLights: 2,
+    particlesDensity: 0.15,
+    NPCDensity: 0.25,
+    LODQuality: 'LOW',
     postProcessing: false,
     bloom: false,
-    volumetrics: false,
+    sharpeningEnabled: false,
+    vignetteEnabled: false,
     antiAliasing: false,
-    textureQuality: 'MEDIUM',
-    anisotropy: 2,
-    maxLights: 8,
-    particlesDensity: 0.45,
-    cloudsEnabled: true,
-    windParticlesEnabled: true,
-    nightLightsEnabled: true,
+    cloudsEnabled: false,
+    rainParticlesEnabled: true,
+    windParticlesEnabled: false,
+    nightLightsEnabled: false,
+    volumetricRaysEnabled: false,
+    starsEnabled: false,
+    horizonHazeEnabled: false,
+    fogEnabled: true,
+    wetReflectionsEnabled: false,
+    normalMapsEnabled: false,
+    vegetationEnabled: false,
+    trafficEnabled: true,
+    npcsEnabled: true,
+    billboardsEnabled: false,
+    streetFurnitureEnabled: false,
+    reflectionQuality: 'OFF',
+    maxActiveChunks: 20,
   },
   LOW: {
     name: 'LOW',
-    renderScale: 0.8,
-    dpr: [0.8, 1.0],
+    dpr: [0.75, 1.0],
+    drawDistance: 360,
     shadows: false,
-    shadowQuality: 'OFF',
-    shadowMapSize: 256,
-    shadowDistance: 60,
-    GIQuality: 'OFF',
-    reflectionQuality: 'OFF',
-    particleDensity: 0.25,
-    vegetationDensity: 0.4,
-    NPCDensity: 0.4,
-    vehicleDensity: 0.4,
-    drawDistance: 650,
-    maxActiveChunks: 25,
-    LODQuality: 'LOW',
-    postProcessing: false,
-    bloom: false,
-    volumetrics: false,
-    antiAliasing: false,
-    textureQuality: 'LOW',
-    anisotropy: 1,
+    shadowMapSize: 512,
     maxLights: 4,
-    particlesDensity: 0.25,
-    cloudsEnabled: false,
-    windParticlesEnabled: false,
-    nightLightsEnabled: false,
-  },
-  LITE: {
-    name: 'LITE',
-    renderScale: 0.7,
-    dpr: [0.75, 0.9],
-    shadows: false,
-    shadowQuality: 'OFF',
-    shadowMapSize: 128,
-    shadowDistance: 40,
-    GIQuality: 'OFF',
-    reflectionQuality: 'OFF',
-    particleDensity: 0.1,
-    vegetationDensity: 0.2,
-    NPCDensity: 0.25,
-    vehicleDensity: 0.25,
-    drawDistance: 450,
-    maxActiveChunks: 16,
+    particlesDensity: 0.3,
+    NPCDensity: 0.4,
     LODQuality: 'LOW',
     postProcessing: false,
     bloom: false,
-    volumetrics: false,
+    sharpeningEnabled: false,
+    vignetteEnabled: true,
     antiAliasing: false,
-    textureQuality: 'LOW',
-    anisotropy: 1,
-    maxLights: 2,
-    particlesDensity: 0.1,
-    cloudsEnabled: false,
+    cloudsEnabled: true,
+    rainParticlesEnabled: true,
     windParticlesEnabled: false,
-    nightLightsEnabled: false,
+    nightLightsEnabled: true,
+    volumetricRaysEnabled: true,
+    starsEnabled: true,
+    horizonHazeEnabled: false,
+    fogEnabled: true,
+    wetReflectionsEnabled: false,
+    normalMapsEnabled: false,
+    vegetationEnabled: true,
+    trafficEnabled: true,
+    npcsEnabled: true,
+    billboardsEnabled: true,
+    streetFurnitureEnabled: false,
+    reflectionQuality: 'OFF',
+    maxActiveChunks: 35,
+  },
+  MEDIUM: {
+    name: 'MEDIUM',
+    dpr: [0.9, 1.1],
+    drawDistance: 520,
+    shadows: true,
+    shadowMapSize: 1024,
+    maxLights: 10,
+    particlesDensity: 0.65,
+    NPCDensity: 0.7,
+    LODQuality: 'MEDIUM',
+    postProcessing: true,
+    bloom: true,
+    sharpeningEnabled: false,
+    vignetteEnabled: true,
+    antiAliasing: false,
+    cloudsEnabled: true,
+    rainParticlesEnabled: true,
+    windParticlesEnabled: true,
+    nightLightsEnabled: true,
+    volumetricRaysEnabled: true,
+    starsEnabled: true,
+    horizonHazeEnabled: true,
+    fogEnabled: true,
+    wetReflectionsEnabled: true,
+    normalMapsEnabled: true,
+    vegetationEnabled: true,
+    trafficEnabled: true,
+    npcsEnabled: true,
+    billboardsEnabled: true,
+    streetFurnitureEnabled: true,
+    reflectionQuality: 'LOW',
+    maxActiveChunks: 50,
+  },
+  HIGH: {
+    name: 'HIGH',
+    dpr: [1.0, 1.5],
+    drawDistance: 720,
+    shadows: true,
+    shadowMapSize: 2048,
+    maxLights: 20,
+    particlesDensity: 1.0,
+    NPCDensity: 1.0,
+    LODQuality: 'HIGH',
+    postProcessing: true,
+    bloom: true,
+    sharpeningEnabled: true,
+    vignetteEnabled: true,
+    antiAliasing: true,
+    cloudsEnabled: true,
+    rainParticlesEnabled: true,
+    windParticlesEnabled: true,
+    nightLightsEnabled: true,
+    volumetricRaysEnabled: true,
+    starsEnabled: true,
+    horizonHazeEnabled: true,
+    fogEnabled: true,
+    wetReflectionsEnabled: true,
+    normalMapsEnabled: true,
+    vegetationEnabled: true,
+    trafficEnabled: true,
+    npcsEnabled: true,
+    billboardsEnabled: true,
+    streetFurnitureEnabled: true,
+    reflectionQuality: 'MEDIUM',
+    maxActiveChunks: 75,
+  },
+  ULTRA: {
+    name: 'ULTRA',
+    dpr: [1.5, 2.0],
+    drawDistance: 1200,
+    shadows: true,
+    shadowMapSize: 4096,
+    maxLights: 36,
+    particlesDensity: 1.6,
+    NPCDensity: 1.35,
+    LODQuality: 'HIGH',
+    postProcessing: true,
+    bloom: true,
+    sharpeningEnabled: true,
+    vignetteEnabled: true,
+    antiAliasing: true,
+    cloudsEnabled: true,
+    rainParticlesEnabled: true,
+    windParticlesEnabled: true,
+    nightLightsEnabled: true,
+    volumetricRaysEnabled: true,
+    starsEnabled: true,
+    horizonHazeEnabled: true,
+    fogEnabled: true,
+    wetReflectionsEnabled: true,
+    normalMapsEnabled: true,
+    vegetationEnabled: true,
+    trafficEnabled: true,
+    npcsEnabled: true,
+    billboardsEnabled: true,
+    streetFurnitureEnabled: true,
+    reflectionQuality: 'HIGH',
+    maxActiveChunks: 120,
   },
 };
 
-const STORAGE_KEY = 'nexus_city_graphics_settings_v3';
-const LEGACY_STORAGE_KEY = 'nexus_city_graphics_settings_v2';
-const isPreset = (value: unknown): value is QualityPreset =>
-  typeof value === 'string' && ['AUTO', 'CUSTOM', ...Object.keys(QUALITY_PROFILES)].includes(value);
+type Listener = (settings: QualitySettings) => void;
 
-function restoreCustom(value: unknown): QualitySettings {
-  const settings = { ...QUALITY_PROFILES.MEDIUM, name: 'CUSTOM' as const };
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return settings;
-  const input = value as Record<string, unknown>;
-  const output = settings as unknown as Record<string, unknown>;
-  for (const [key, fallback] of Object.entries(settings)) {
-    const candidate = input[key];
-    if (typeof fallback === 'boolean' && typeof candidate === 'boolean') output[key] = candidate;
-    if (typeof fallback === 'number' && typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0) {
-      const values = Object.values(QUALITY_PROFILES).map((profile) => (profile as unknown as Record<string, number>)[key]);
-      output[key] = Math.max(Math.min(...values), Math.min(Math.max(...values), candidate));
-    }
-    if (typeof fallback === 'string' && key !== 'name' && Object.values(QUALITY_PROFILES).some((profile) => (profile as unknown as Record<string, unknown>)[key] === candidate)) output[key] = candidate;
-  }
-  if (Array.isArray(input.dpr) && input.dpr.length === 2 && input.dpr.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0.5 && n <= 2) && input.dpr[0] <= input.dpr[1]) {
-    settings.dpr = [input.dpr[0], input.dpr[1]];
-  }
-  settings.maxActiveChunks = Math.floor(settings.maxActiveChunks);
-  return settings;
+const STORAGE_KEY = 'nexus_city_graphics_settings_v3';
+const LEGACY_STORAGE_KEYS = ['nexus_city_graphics_settings_v2'];
+const PRESETS = new Set<QualityPreset>(['AUTO', 'LITE', 'LOW', 'MEDIUM', 'HIGH', 'ULTRA', 'CUSTOM']);
+const LOD_VALUES = new Set<QualitySettings['LODQuality']>(['LOW', 'MEDIUM', 'HIGH']);
+const REFLECTION_VALUES = new Set<QualitySettings['reflectionQuality']>(['OFF', 'LOW', 'MEDIUM', 'HIGH']);
+
+function clampNum(value: unknown, min: number, max: number, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 }
 
-type QualityChangeListener = (settings: QualitySettings) => void;
+function sanitizeBool(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
 
-class QualityManagerClass {
-  private currentPreset: QualityPreset = 'AUTO';
-  // Start AUTO at MEDIUM so a cold load does not immediately activate the
-  // highest draw distance and post-processing budget. Users can still opt
-  // into HIGH/ULTRA explicitly, while AUTO remains usable on more hardware.
-  private autoBasePreset: 'ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE' = 'MEDIUM';
-  private customSettings: QualitySettings = {
-    ...QUALITY_PROFILES.MEDIUM,
-    name: 'CUSTOM',
+function sanitizeDpr(value: unknown, fallback: [number, number]): [number, number] {
+  if (!Array.isArray(value) || value.length !== 2) return [...fallback] as [number, number];
+  const low = clampNum(value[0], 0.5, 2, fallback[0]);
+  const high = clampNum(value[1], low, 2, Math.max(low, fallback[1]));
+  return [low, high];
+}
+
+function sanitizeSettings(raw: Partial<QualitySettings> | undefined, base: QualitySettings): QualitySettings {
+  if (!raw || typeof raw !== 'object') return { ...base, dpr: [...base.dpr] as [number, number] };
+  return {
+    name: raw.name && PRESETS.has(raw.name) ? raw.name : base.name,
+    dpr: sanitizeDpr(raw.dpr, base.dpr),
+    drawDistance: clampNum(raw.drawDistance, 180, 2000, base.drawDistance),
+    shadows: sanitizeBool(raw.shadows, base.shadows),
+    shadowMapSize: clampNum(raw.shadowMapSize, 256, 4096, base.shadowMapSize),
+    maxLights: Math.round(clampNum(raw.maxLights, 0, 64, base.maxLights)),
+    particlesDensity: clampNum(raw.particlesDensity, 0, 2, base.particlesDensity),
+    NPCDensity: clampNum(raw.NPCDensity, 0, 2, base.NPCDensity),
+    LODQuality: raw.LODQuality && LOD_VALUES.has(raw.LODQuality) ? raw.LODQuality : base.LODQuality,
+    postProcessing: sanitizeBool(raw.postProcessing, base.postProcessing),
+    bloom: sanitizeBool(raw.bloom, base.bloom),
+    sharpeningEnabled: sanitizeBool(raw.sharpeningEnabled, base.sharpeningEnabled),
+    vignetteEnabled: sanitizeBool(raw.vignetteEnabled, base.vignetteEnabled),
+    antiAliasing: sanitizeBool(raw.antiAliasing, base.antiAliasing),
+    cloudsEnabled: sanitizeBool(raw.cloudsEnabled, base.cloudsEnabled),
+    rainParticlesEnabled: sanitizeBool(raw.rainParticlesEnabled, base.rainParticlesEnabled),
+    windParticlesEnabled: sanitizeBool(raw.windParticlesEnabled, base.windParticlesEnabled),
+    nightLightsEnabled: sanitizeBool(raw.nightLightsEnabled, base.nightLightsEnabled),
+    volumetricRaysEnabled: sanitizeBool(raw.volumetricRaysEnabled, base.volumetricRaysEnabled),
+    starsEnabled: sanitizeBool(raw.starsEnabled, base.starsEnabled),
+    horizonHazeEnabled: sanitizeBool(raw.horizonHazeEnabled, base.horizonHazeEnabled),
+    fogEnabled: sanitizeBool(raw.fogEnabled, base.fogEnabled),
+    wetReflectionsEnabled: sanitizeBool(raw.wetReflectionsEnabled, base.wetReflectionsEnabled),
+    normalMapsEnabled: sanitizeBool(raw.normalMapsEnabled, base.normalMapsEnabled),
+    vegetationEnabled: sanitizeBool(raw.vegetationEnabled, base.vegetationEnabled),
+    trafficEnabled: sanitizeBool(raw.trafficEnabled, base.trafficEnabled),
+    npcsEnabled: sanitizeBool(raw.npcsEnabled, base.npcsEnabled),
+    billboardsEnabled: sanitizeBool(raw.billboardsEnabled, base.billboardsEnabled),
+    streetFurnitureEnabled: sanitizeBool(raw.streetFurnitureEnabled, base.streetFurnitureEnabled),
+    reflectionQuality:
+      raw.reflectionQuality && REFLECTION_VALUES.has(raw.reflectionQuality)
+        ? raw.reflectionQuality
+        : base.reflectionQuality,
+    maxActiveChunks: Math.floor(clampNum(raw.maxActiveChunks, 12, 160, base.maxActiveChunks)),
   };
-  private listeners: Set<QualityChangeListener> = new Set();
-  private capabilities: WebGLDiagnosticInfo;
+}
+
+class QualityManagerImpl {
+  private currentPreset: QualityPreset = 'AUTO';
+  private settings: QualitySettings = QUALITY_PROFILES.HIGH;
+  private listeners = new Set<Listener>();
 
   constructor() {
-    this.capabilities = WebGLCapabilities.detect();
-    this.init();
+    if (!this.loadFromStorage()) {
+      this.applyAutoDetection();
+    }
   }
 
-  private init(): void {
-    // 1. Detect base tier for AUTO mode based on hardware and WebGL capabilities
-    if (typeof window !== 'undefined') {
-      const caps = this.capabilities;
+  private getAutoProfile(): QualitySettings {
+    const caps = WebGLCapabilities.detect();
+    if (caps.isVirGL) {
+      return this.applyCapabilityGuards({ ...QUALITY_PROFILES.LOW, name: 'LOW', dpr: [0.85, 1.0] });
+    }
+    if (caps.isMobile) {
+      return this.applyCapabilityGuards({
+        ...QUALITY_PROFILES.LITE,
+        name: 'LITE',
+        dpr: [0.65, Math.min(caps.recommendedDpr, 0.85)],
+        cloudsEnabled: true,
+        nightLightsEnabled: true,
+      });
+    }
+    if (caps.isConstrained || caps.recommendedPreset === 'LOW') {
+      const base = caps.recommendedPreset === 'LOW' ? QUALITY_PROFILES.LOW : QUALITY_PROFILES.MEDIUM;
+      return this.applyCapabilityGuards({
+        ...base,
+        dpr: [0.9, Math.min(caps.recommendedDpr, 1.1)],
+      });
+    }
+    return this.applyCapabilityGuards({
+      ...QUALITY_PROFILES.HIGH,
+      dpr: [1.0, Math.min(1.5, caps.recommendedDpr)],
+    });
+  }
 
-      // Honor the detector's LOW recommendation for software/unsupported GPUs.
-      // Keep the default at MEDIUM even when a faster device can opt into HIGH.
-      this.autoBasePreset = caps.recommendedPreset === 'LOW' ? 'LOW' : 'MEDIUM';
+  private applyCapabilityGuards(settings: QualitySettings): QualitySettings {
+    const caps = WebGLCapabilities.detect();
+    const guarded = sanitizeSettings(settings, settings);
+
+    if (!caps.supportsHalfFloatRenderTarget) {
+      guarded.postProcessing = false;
+      guarded.bloom = false;
     }
 
-    // 2. Restore saved settings from localStorage
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (isPreset(parsed?.preset)) {
-            this.currentPreset = parsed.preset;
-          }
-          this.customSettings = restoreCustom(parsed?.customSettings);
+    if (caps.isMobile || caps.isConstrained) {
+      const maxDpr = Math.max(0.65, Math.min(caps.recommendedDpr || 1, 1.25));
+      guarded.dpr = [Math.min(guarded.dpr[0], maxDpr), Math.min(guarded.dpr[1], maxDpr)];
+    }
+
+    return guarded;
+  }
+
+  private loadFromStorage(): boolean {
+    try {
+      const raw =
+        localStorage.getItem(STORAGE_KEY) ??
+        LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find((val): val is string => val !== null) ??
+        null;
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      if (parsed && PRESETS.has(parsed.preset)) {
+        this.currentPreset = parsed.preset;
+        if (parsed.preset === 'CUSTOM' && parsed.customSettings) {
+          this.settings = this.applyCapabilityGuards(
+            sanitizeSettings({ ...parsed.customSettings, name: 'CUSTOM' }, QUALITY_PROFILES.MEDIUM)
+          );
+          return true;
         }
-      } catch (e) {
-        console.warn('[QualityManager] Failed to load saved graphics settings:', e);
+        if (parsed.preset !== 'AUTO' && parsed.preset !== 'CUSTOM') {
+          this.settings = this.applyCapabilityGuards({ ...QUALITY_PROFILES[parsed.preset as Exclude<QualityPreset, 'AUTO' | 'CUSTOM'>] });
+          return true;
+        }
       }
+    } catch {
+      // Ignore storage errors
     }
+    return false;
   }
 
-  private save(): void {
-    if (typeof window === 'undefined') return;
+  private saveToStorage(): void {
     try {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
           preset: this.currentPreset,
-          customSettings: this.customSettings,
+          customSettings: this.currentPreset === 'CUSTOM' ? this.settings : undefined,
         })
       );
-    } catch (e) {
-      console.warn('[QualityManager] Failed to save graphics settings:', e);
+    } catch {
+      // Ignore
     }
   }
 
-  public get isMobileDevice(): boolean {
-    return this.capabilities.isMobile || this.capabilities.isVirGL;
-  }
-
-  public get isVirGLEnvironment(): boolean {
-    return this.capabilities.isVirGL;
+  public applyAutoDetection(): void {
+    this.currentPreset = 'AUTO';
+    this.settings = this.getAutoProfile();
+    this.notify();
   }
 
   public get current(): QualitySettings {
-    let settings: QualitySettings;
-    if (this.currentPreset === 'CUSTOM') {
-      settings = this.customSettings;
-    } else if (this.currentPreset === 'AUTO') {
-      settings = {
-        ...QUALITY_PROFILES[this.autoBasePreset],
-        name: 'AUTO',
-      };
-    } else {
-      settings = QUALITY_PROFILES[this.currentPreset];
-    }
-
-    // Apply framebuffer guards on desktop as well as mobile: a desktop GPU can
-    // also lack renderable half floats or use a constrained software renderer.
-    const constrained = this.capabilities.isConstrained || this.isMobileDevice || this.isVirGLEnvironment;
-    const maxAllowedDpr = this.capabilities.recommendedDpr;
-    const maximumDpr = constrained ? Math.min(settings.dpr[1], maxAllowedDpr) : settings.dpr[1];
-    const minimumDpr = constrained ? Math.min(settings.dpr[0], 0.85, maximumDpr) : settings.dpr[0];
-    return {
-      ...settings,
-      dpr: [minimumDpr, maximumDpr],
-      bloom: settings.bloom && this.capabilities.supportsHalfFloatRenderTarget,
-      postProcessing: settings.postProcessing && this.capabilities.supportsHalfFloatRenderTarget,
-    };
+    return this.settings;
   }
 
   public get preset(): QualityPreset {
@@ -308,58 +378,90 @@ class QualityManagerClass {
   }
 
   public setPreset(preset: QualityPreset): void {
-    if (!isPreset(preset)) return;
-    if (this.currentPreset === preset) return;
     this.currentPreset = preset;
-
-    if (preset !== 'CUSTOM' && preset !== 'AUTO') {
-      this.customSettings = {
-        ...QUALITY_PROFILES[preset],
+    if (preset === 'AUTO') {
+      this.applyAutoDetection();
+    } else if (preset === 'CUSTOM') {
+      this.settings = this.applyCapabilityGuards({
+        ...this.settings,
         name: 'CUSTOM',
-      };
+      });
+      this.notify();
+    } else {
+      this.settings = this.applyCapabilityGuards({ ...QUALITY_PROFILES[preset] });
+      this.notify();
     }
-
-    this.save();
-    const settings = this.current;
-    this.listeners.forEach((listener) => listener(settings));
+    this.saveToStorage();
   }
 
   public updateCustomSettings(partial: Partial<QualitySettings>): void {
-    // Start edits from the effective profile, including the adaptive AUTO tier.
-    const baseline = this.current;
     this.currentPreset = 'CUSTOM';
-    this.customSettings = restoreCustom({ ...baseline, ...partial });
-    this.save();
-    const settings = this.current;
-    this.listeners.forEach((listener) => listener(settings));
+    this.settings = this.applyCapabilityGuards(sanitizeSettings({ ...this.settings, ...partial, name: 'CUSTOM' }, this.settings));
+    this.saveToStorage();
+    this.notify();
   }
 
-  public subscribe(listener: QualityChangeListener): () => void {
-    this.listeners.add(listener);
-    listener(this.current);
-    return () => {
-      this.listeners.delete(listener);
-    };
+  public setAllGraphicsToggles(enabled: boolean): void {
+    this.updateCustomSettings({
+      postProcessing: enabled,
+      bloom: enabled,
+      sharpeningEnabled: enabled,
+      vignetteEnabled: enabled,
+      antiAliasing: enabled,
+      shadows: enabled,
+      nightLightsEnabled: enabled,
+      volumetricRaysEnabled: enabled,
+      starsEnabled: enabled,
+      horizonHazeEnabled: enabled,
+      fogEnabled: enabled,
+      cloudsEnabled: enabled,
+      rainParticlesEnabled: enabled,
+      windParticlesEnabled: enabled,
+      wetReflectionsEnabled: enabled,
+      normalMapsEnabled: enabled,
+      vegetationEnabled: enabled,
+      trafficEnabled: enabled,
+      npcsEnabled: enabled,
+      billboardsEnabled: enabled,
+      streetFurnitureEnabled: enabled,
+      reflectionQuality: enabled ? 'HIGH' : 'OFF',
+    });
   }
 
-  /**
-   * Automatically drops one quality tier if FPS is constrained (ONLY when preset is AUTO).
-   */
   public throttleDown(): boolean {
-    if (this.currentPreset !== 'AUTO') {
-      return false;
+    if (this.currentPreset !== 'AUTO') return false;
+    if (this.settings.name === 'ULTRA') {
+      this.settings = this.applyCapabilityGuards({ ...QUALITY_PROFILES.HIGH });
+      this.notify();
+      return true;
     }
-
-    const order: ('ULTRA' | 'HIGH' | 'MEDIUM' | 'LOW' | 'LITE')[] = ['ULTRA', 'HIGH', 'MEDIUM', 'LOW', 'LITE'];
-    const idx = order.indexOf(this.autoBasePreset);
-    if (idx !== -1 && idx < order.length - 1) {
-      this.autoBasePreset = order[idx + 1];
-      const settings = this.current;
-      this.listeners.forEach((listener) => listener(settings));
+    if (this.settings.name === 'HIGH') {
+      this.settings = this.applyCapabilityGuards({ ...QUALITY_PROFILES.MEDIUM });
+      this.notify();
+      return true;
+    }
+    if (this.settings.name === 'MEDIUM') {
+      this.settings = this.applyCapabilityGuards({ ...QUALITY_PROFILES.LOW });
+      this.notify();
+      return true;
+    }
+    if (this.settings.name === 'LOW') {
+      this.settings = this.applyCapabilityGuards({ ...QUALITY_PROFILES.LITE });
+      this.notify();
       return true;
     }
     return false;
   }
+
+  public subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+    listener(this.settings);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify(): void {
+    this.listeners.forEach((l) => l(this.settings));
+  }
 }
 
-export const QualityManager = new QualityManagerClass();
+export const QualityManager = new QualityManagerImpl();

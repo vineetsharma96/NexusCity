@@ -1,13 +1,13 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { QualitySettings } from '../rendering/QualityManager';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
-import { WeatherSystem } from '../world/WeatherSystem';
-import { WindSystem } from '../world/WindSystem';
+import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
+import { ChunkManager } from '../world/ChunkManager';
+import { DistrictInfo } from '../city/DistrictGenerator';
 import { CelestialVolumetricRays } from './CelestialVolumetricRays';
-import { LivingCityEventSystem } from '../world/LivingCityEventSystem';
-import { WebGLCapabilities } from '../rendering/WebGLCapabilities';
+import { LivingCityEventState, LivingCityEventSystem } from '../world/LivingCityEventSystem';
 
 interface LightingManagerProps {
   quality: QualitySettings;
@@ -15,321 +15,313 @@ interface LightingManagerProps {
 }
 
 export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playerPosRef }) => {
-  const { scene } = useThree();
+  const { scene, gl } = useThree();
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
-  const hemiLightRef = useRef<THREE.HemisphereLight>(null);
-  const ambientLightRef = useRef<THREE.AmbientLight>(null);
-  const fogRef = useRef<THREE.Fog>(null);
-  const celestialOrbRef = useRef<THREE.Group>(null);
-  const lightTarget = useMemo(() => new THREE.Object3D(), []);
-  const nightLightsGroupRef = useRef<THREE.Group>(null);
-
-  const [lighting, setLighting] = useState<TimeLightingState>(() =>
-    TimeSystem.getInstance().getState()
+  const skyUniforms = useMemo(
+    () => ({
+      topColor: { value: new THREE.Color('#04070f') },
+      bottomColor: { value: new THREE.Color('#0b1326') },
+      offset: { value: 18 },
+      exponent: { value: 0.65 },
+    }),
+    []
   );
-  const colors = useMemo(() => ({ sky: new THREE.Color(), fog: new THREE.Color(), tint: new THREE.Color(), storm: new THREE.Color('#050810'), flash: new THREE.Color('#cce8ff') }), []);
-  const origin = useMemo(() => new THREE.Vector3(), []);
+
+  const [timeState, setTimeState] = useState<TimeLightingState>(() => TimeSystem.getInstance().getState());
+  const [weatherState, setWeatherState] = useState<WeatherState>(() => WeatherSystem.getInstance().getState());
+  const [district, setDistrict] = useState<DistrictInfo>(() => ChunkManager.getInstance().getState().currentDistrict);
+  const [cityEvent, setCityEvent] = useState<LivingCityEventState>(() => LivingCityEventSystem.getInstance().getState());
 
   useEffect(() => {
-    const caps = WebGLCapabilities.detect();
-    if (!caps.supportsHalfFloatRenderTarget || caps.isVirGL || caps.isConstrained) return;
-    // Metallic surfaces need reflected sky light as well as direct lamps.
-    // A tiny procedural sky cube keeps roads and facades readable without assets.
-    const faces = ['#8ba5bf', '#8ba5bf', '#c4d6e8', '#303d50', '#8ba5bf', '#8ba5bf'].map((color) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 32;
-      const context = canvas.getContext('2d')!;
-      context.fillStyle = color;
-      context.fillRect(0, 0, 32, 32);
-      return canvas;
-    });
-    const environment = new THREE.CubeTexture(faces);
-    environment.colorSpace = THREE.SRGBColorSpace;
-    environment.needsUpdate = true;
-    const previous = scene.environment;
-    const previousIntensity = scene.environmentIntensity;
-    scene.environment = environment;
+    const uTime = TimeSystem.getInstance().subscribe(setTimeState);
+    const uWea = WeatherSystem.getInstance().subscribe(setWeatherState);
+    const uChunk = ChunkManager.getInstance().subscribe((s) => setDistrict(s.currentDistrict));
+    const uEvt = LivingCityEventSystem.getInstance().subscribe(setCityEvent);
     return () => {
-      scene.environment = previous;
-      scene.environmentIntensity = previousIntensity;
-      environment.dispose();
+      uTime();
+      uWea();
+      uChunk();
+      uEvt();
     };
-  }, [scene]);
+  }, []);
 
-  const sDist = quality.shadowDistance;
+  const safeShadowMapSize = Math.min(quality.shadowMapSize, gl.capabilities.maxTextureSize || 4096);
 
+  // Dynamically reallocate directional shadow map when shadowMapSize changes
   useEffect(() => {
-    scene.add(lightTarget);
-    let lastRenderKey = '';
-    const unsubTime = TimeSystem.getInstance().subscribe((state) => {
-      const key = `${state.isNight}:${Math.floor(state.nightFactor * 10)}`;
-      if (key !== lastRenderKey) { lastRenderKey = key; setLighting(state); }
+    const light = dirLightRef.current;
+    if (!light) return;
+    light.shadow.mapSize.set(safeShadowMapSize, safeShadowMapSize);
+    if (light.shadow.map) {
+      light.shadow.map.dispose();
+      light.shadow.map = null;
+    }
+    light.shadow.needsUpdate = true;
+  }, [safeShadowMapSize, quality.shadows]);
+
+  // High-definition procedural environment cubemap scaled by reflectionQuality
+  useEffect(() => {
+    if (quality.reflectionQuality === 'OFF') {
+      scene.environment = null;
+      return;
+    }
+
+    const cubeSize =
+      quality.reflectionQuality === 'HIGH' ? 256 : quality.reflectionQuality === 'MEDIUM' ? 128 : 64;
+    const envScene = new THREE.Scene();
+    const skyGeo = new THREE.SphereGeometry(60, 24, 12);
+    const skyMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          float h = normalize(vWorldPos).y;
+          vec3 top = vec3(0.02, 0.05, 0.12);
+          vec3 mid = vec3(0.16, 0.52, 0.78);
+          vec3 bot = vec3(0.04, 0.07, 0.14);
+          vec3 col = h > 0.0 ? mix(mid, top, pow(h, 0.52)) : mix(mid, bot, min(1.0, -h * 3.2));
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
     });
-    return () => {
-      scene.remove(lightTarget);
-      unsubTime();
+    envScene.add(new THREE.Mesh(skyGeo, skyMat));
+
+    const stripGeo = new THREE.BoxGeometry(9, 2.2, 0.5);
+    const towerGeo = new THREE.BoxGeometry(4, 18, 4);
+    const addStrip = (color: string, x: number, y: number, z: number) => {
+      const m = new THREE.Mesh(stripGeo, new THREE.MeshBasicMaterial({ color }));
+      m.position.set(x, y, z);
+      m.lookAt(0, 0, 0);
+      envScene.add(m);
     };
-  }, [scene, lightTarget]);
+    addStrip('#f59e0b', 20, 7, 0);
+    addStrip('#38bdf8', -20, 7, 0);
+    addStrip('#10b981', 0, 7, 20);
+    addStrip('#f43f5e', 0, 7, -20);
+    addStrip('#fde68a', 14, 14, 14);
+    addStrip('#7dd3fc', -14, 14, -14);
 
-  // Update shadow camera frustum and projection matrix on quality changes
-  useEffect(() => {
-    if (dirLightRef.current && dirLightRef.current.shadow) {
-      const cam = dirLightRef.current.shadow.camera;
-      cam.left = -sDist;
-      cam.right = sDist;
-      cam.top = sDist;
-      cam.bottom = -sDist;
-      cam.near = 1.0;
-      cam.far = Math.min(900, sDist * 3.5);
-      cam.updateProjectionMatrix();
-      // Three.js keeps the old allocation when only mapSize changes.
-      dirLightRef.current.shadow.map?.dispose();
-      dirLightRef.current.shadow.map = null;
-    }
-  }, [sDist, quality.shadowMapSize]);
-
-  useFrame((_, delta) => {
-    // Advance continuous time system, weather simulation, and wind dynamics
-    TimeSystem.getInstance().update(delta);
-    WeatherSystem.getInstance().update(delta);
-    WindSystem.getInstance().update(delta);
-    const lighting = TimeSystem.getInstance().getState();
-    const weather = WeatherSystem.getInstance().getState();
-    const cityEvent = LivingCityEventSystem.getInstance().getState();
-    scene.environmentIntensity = (lighting.isNight ? 0.38 : 0.85) * (1 - weather.skyDarkness * 0.45);
-
-    const pPos = playerPosRef?.current || origin;
-
-    // 1. Calculate blended sky & fog colors
-    const lightningSky = colors.flash;
-    const effectiveSky = colors.sky.set(lighting.skyColor).lerp(colors.storm, weather.skyDarkness);
-    if (weather.lightningIntensity > 0.01) {
-      effectiveSky.lerp(lightningSky, weather.lightningIntensity * 0.85);
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const dist = 26;
+      const tMesh = new THREE.Mesh(
+        towerGeo,
+        new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? '#0b1324' : '#111c33' })
+      );
+      tMesh.position.set(Math.cos(angle) * dist, 6, Math.sin(angle) * dist);
+      envScene.add(tMesh);
     }
 
-    if (scene.background instanceof THREE.Color) {
-      scene.background.copy(effectiveSky);
+    const cubeRT = new THREE.WebGLCubeRenderTarget(cubeSize, {
+      format: THREE.RGBAFormat,
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter,
+    });
+    const cubeCam = new THREE.CubeCamera(0.1, 120, cubeRT);
+    scene.environment = cubeRT.texture;
+    (scene as unknown as { __envUpdate?: { cubeCam: THREE.CubeCamera; envScene: THREE.Scene; rendered: boolean } }).__envUpdate = {
+      cubeCam,
+      envScene,
+      rendered: false,
+    };
+
+    return () => {
+      scene.environment = null;
+      cubeRT.dispose();
+      skyGeo.dispose();
+      skyMat.dispose();
+      stripGeo.dispose();
+      towerGeo.dispose();
+    };
+  }, [scene, quality.reflectionQuality]);
+
+  useFrame(({ gl: renderer }) => {
+    const envData = (scene as unknown as { __envUpdate?: { cubeCam: THREE.CubeCamera; envScene: THREE.Scene; rendered: boolean } }).__envUpdate;
+    if (envData && !envData.rendered) {
+      envData.cubeCam.update(renderer, envData.envScene);
+      envData.rendered = true;
     }
 
-    // 2. Dynamic Fog adjustment
-    const effectiveFogColor = colors.fog.set(lighting.fogColor).lerp(colors.tint.set(weather.fogColorTint), Math.min(1.0, (weather.fogDensityMultiplier - 1.0) / 2.0));
-    if (weather.lightningIntensity > 0.01) {
-      effectiveFogColor.lerp(lightningSky, weather.lightningIntensity * 0.7);
-    }
+    const activeDir = timeState.isNight ? timeState.moonDirection : timeState.sunDirection;
+    const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
 
-    const baseNear = 75;
-    const baseFar = quality.drawDistance;
-    const effectiveNear = Math.max(12, baseNear / weather.fogDensityMultiplier);
-    const effectiveFar = Math.max(48, baseFar / weather.fogDensityMultiplier);
-
-    if (fogRef.current) {
-      fogRef.current.near = effectiveNear;
-      fogRef.current.far = effectiveFar;
-      fogRef.current.color.copy(effectiveFogColor);
-    }
-
-    // 3. Realtime Directional Sun/Moon Light with Dynamic Shadows
     if (dirLightRef.current) {
-      // Dynamic orbital position centered around player
       dirLightRef.current.position.set(
-        pPos.x + lighting.celestialPosition.x,
-        lighting.celestialPosition.y,
-        pPos.z + lighting.celestialPosition.z
+        pPos.x + activeDir.x * 110,
+        Math.max(36, activeDir.y * 130),
+        pPos.z + activeDir.z * 110
       );
-
-      // Light target follows player so shadows follow the player everywhere in the city
-      lightTarget.position.set(pPos.x, pPos.y, pPos.z);
-      lightTarget.updateMatrixWorld();
-      dirLightRef.current.target = lightTarget;
-
-      const celestialDimming = 1.0 - weather.skyDarkness * 0.65;
-      const lightningBoost = weather.lightningIntensity * 5.0;
-       const outageDim = cityEvent.type === 'POWER_OUTAGE' && cityEvent.phase === 'ACTIVE' ? 0.62 : 1;
-       dirLightRef.current.intensity = ((lighting.celestialIntensity * celestialDimming) + lightningBoost) * outageDim;
-
-      if (weather.lightningIntensity > 0.05) {
-        dirLightRef.current.color.set('#e0f2fe');
-      } else {
-        dirLightRef.current.color.set(lighting.celestialColor);
-      }
+      dirLightRef.current.target.position.set(pPos.x, 0, pPos.z);
+      dirLightRef.current.target.updateMatrixWorld();
     }
 
-    // 4. Realtime Visible Radiant Sun / Moon Celestial Mesh Position
-    if (celestialOrbRef.current) {
-      // Position celestial orb high in the sky along the celestial vector
-      const celestialDist = 4.2;
-      celestialOrbRef.current.position.set(
-        pPos.x + lighting.celestialPosition.x * celestialDist,
-        Math.max(40, lighting.celestialPosition.y * celestialDist),
-        pPos.z + lighting.celestialPosition.z * celestialDist
-      );
+    const topCol = new THREE.Color(timeState.skyTopColor);
+    const distFog = new THREE.Color(district.fogColor);
+    const baseHor = new THREE.Color(timeState.skyHorizonColor).lerp(distFog, 0.45);
+    if (weatherState.rainIntensity > 0.05) {
+      const stormTint = new THREE.Color('#09101d');
+      topCol.lerp(stormTint, weatherState.rainIntensity * 0.65);
+      baseHor.lerp(stormTint, weatherState.rainIntensity * 0.55);
     }
-
-    // 5. Hemisphere light (sky irradiance + ground bounce) with GI quality scaling
-    const giScale =
-      quality.GIQuality === 'HIGH' ? 1.0 : quality.GIQuality === 'MEDIUM' ? 0.85 : quality.GIQuality === 'LOW' ? 0.65 : 0.45;
-
-    if (hemiLightRef.current) {
-      const hemiDim = 1.0 - weather.skyDarkness * 0.45;
-      hemiLightRef.current.color.set(lighting.hemiSkyColor);
-      hemiLightRef.current.groundColor.set(lighting.hemiGroundColor);
-      hemiLightRef.current.intensity =
-        ((lighting.isNight ? 0.85 : 1.25) * hemiDim + weather.lightningIntensity * 1.2) * giScale * (cityEvent.type === 'POWER_OUTAGE' ? 0.82 : 1);
-    }
-
-    // 6. Ambient fill light
-    if (ambientLightRef.current) {
-      ambientLightRef.current.color.set(lighting.isNight ? '#9bb5d8' : '#d8e3f0');
-      const ambDim = 1.0 - weather.skyDarkness * 0.5;
-      ambientLightRef.current.intensity =
-        ((lighting.isNight ? 0.75 : lighting.ambientIntensity) * ambDim + weather.lightningIntensity * 1.5) * giScale * (cityEvent.type === 'POWER_OUTAGE' ? 0.72 : 1);
-    }
-
-    // 7. Smoothly glide night lights group across chunk boundaries
-    if (nightLightsGroupRef.current) {
-      const snapX = Math.round(pPos.x / 40) * 40;
-      const snapZ = Math.round(pPos.z / 40) * 40;
-      nightLightsGroupRef.current.position.x = THREE.MathUtils.lerp(nightLightsGroupRef.current.position.x, snapX, 0.15);
-      nightLightsGroupRef.current.position.z = THREE.MathUtils.lerp(nightLightsGroupRef.current.position.z, snapZ, 0.15);
-    }
+    skyUniforms.topColor.value.copy(topCol);
+    skyUniforms.bottomColor.value.copy(baseHor);
   });
 
-  // Calculate local streetlamp illumination points around player
-  const pPos = playerPosRef?.current || origin;
-  const isNightTime = lighting.nightFactor > 0.38;
-  const nightIntensity = lighting.nightFactor > 0.8 ? 2.8 : lighting.nightFactor > 0.6 ? 2.2 : 1.5;
+  const isUltra = quality.name === 'ULTRA';
+
+  const starPositions = useMemo(() => {
+    const count = isUltra ? 1800 : 950;
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const theta = ((i * 137.508) % 360) * (Math.PI / 180);
+      const yRatio = 0.14 + ((i * 7919) % 1000) / 1180;
+      const phi = Math.acos(Math.min(0.99, yRatio));
+      const r = 780;
+      pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      pos[i * 3 + 1] = r * Math.cos(phi);
+      pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    }
+    return pos;
+  }, [isUltra]);
+
+  const fogColorFinal = useMemo(() => {
+    const c = new THREE.Color(timeState.fogColor).lerp(new THREE.Color(district.fogColor), 0.5);
+    if (weatherState.lightningFlash > 0.1) {
+      c.lerp(new THREE.Color('#e0f2fe'), weatherState.lightningFlash * 0.45);
+    }
+    return `#${c.getHexString()}`;
+  }, [timeState.fogColor, district.fogColor, weatherState.lightningFlash]);
+
+  const fogFarFinal = quality.fogEnabled
+    ? Math.max(
+        140,
+        (Math.min(timeState.fogFar * (isUltra ? 1.35 : 1.0), quality.drawDistance) * district.fogDensity) /
+          weatherState.fogDensityMultiplier
+      )
+    : 12000;
+  const fogNearFinal = quality.fogEnabled
+    ? Math.max(18, timeState.fogNear / weatherState.fogDensityMultiplier)
+    : 9000;
+
+  const keyLightIntensity =
+    (timeState.isNight ? timeState.moonIntensity : timeState.sunIntensity) *
+      (1.0 - weatherState.rainIntensity * 0.35) *
+      cityEvent.lightScale +
+    weatherState.lightningFlash * 4.5;
+
+  const shadowCamRange = isUltra ? 125 : 85;
 
   return (
     <>
-      {/* Dynamic sky and distance fog */}
-      <color attach="background" args={[lighting.skyColor]} />
-      <fog ref={fogRef} attach="fog" args={[lighting.fogColor, 120, quality.drawDistance]} />
+      <color attach="background" args={[fogColorFinal]} />
+      <fog attach="fog" args={[fogColorFinal, fogNearFinal, fogFarFinal]} />
 
-      {/* Hemisphere light */}
-      <hemisphereLight
-        ref={hemiLightRef}
-        args={[lighting.hemiSkyColor, lighting.hemiGroundColor, 1.2]}
-      />
+      <mesh scale={[-1, 1, 1]}>
+        <sphereGeometry args={[1280, 32, 16]} />
+        <shaderMaterial
+          vertexShader={`
+            varying vec3 vWorldPosition;
+            void main() {
+              vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `}
+          fragmentShader={`
+            uniform vec3 topColor;
+            uniform vec3 bottomColor;
+            uniform float offset;
+            uniform float exponent;
+            varying vec3 vWorldPosition;
+            void main() {
+              float h = normalize(vWorldPosition + offset).y;
+              gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+            }
+          `}
+          uniforms={skyUniforms}
+          side={THREE.BackSide}
+          depthWrite={false}
+        />
+      </mesh>
 
-      {/* Primary directional celestial light (Sun or Moon) with Realtime Dynamic Soft Shadows */}
-      <directionalLight
-        ref={dirLightRef}
-        position={[pPos.x + lighting.celestialPosition.x, lighting.celestialPosition.y, pPos.z + lighting.celestialPosition.z]}
-        intensity={lighting.celestialIntensity}
-        color={lighting.celestialColor}
-        castShadow={quality.shadows}
-        shadow-mapSize-width={quality.shadowMapSize}
-        shadow-mapSize-height={quality.shadowMapSize}
-        shadow-camera-near={1.0}
-        shadow-camera-far={Math.min(900, sDist * 3.5)}
-        shadow-camera-left={-sDist}
-        shadow-camera-right={sDist}
-        shadow-camera-top={sDist}
-        shadow-camera-bottom={-sDist}
-        shadow-bias={-0.0003}
-        shadow-normalBias={0.035}
-      />
-
-      {/* Night Streetlamp & Neon Ground Bounce Arrays (smoothly lerped group) */}
-      {isNightTime && quality.nightLightsEnabled && quality.maxLights >= 4 && (
-        <group ref={nightLightsGroupRef}>
-          {/* Central road wash light */}
-          <pointLight
-            position={[0, 8.5, 0]}
-            intensity={nightIntensity * 1.2}
-            distance={55}
-            color="#ffe2a8"
-            decay={2}
-          />
-
-          {/* Primary streetlamp pair (if maxLights >= 6) */}
-          {quality.maxLights >= 6 && (
-            <>
-              <pointLight
-                position={[-16, 7.5, -16]}
-                intensity={nightIntensity}
-                distance={45}
-                color="#ffbe6b"
-                decay={2}
-              />
-              <pointLight
-                position={[16, 7.5, 16]}
-                intensity={nightIntensity}
-                distance={45}
-                color="#ffbe6b"
-                decay={2}
-              />
-            </>
-          )}
-
-          {/* Secondary streetlamp pair with cyber accents (if maxLights >= 10) */}
-          {quality.maxLights >= 10 && (
-            <>
-              <pointLight
-                position={[-16, 7.5, 16]}
-                intensity={nightIntensity * 0.85}
-                distance={45}
-                color="#00f0ff"
-                decay={2}
-              />
-              <pointLight
-                position={[16, 7.5, -16]}
-                intensity={nightIntensity * 0.85}
-                distance={45}
-                color="#ff007f"
-                decay={2}
-              />
-            </>
-          )}
-
-        </group>
-      )}
-
-      {isNightTime && quality.nightLightsEnabled && quality.maxLights >= 12 && (
-        <pointLight position={[75, 4.5, 75]} intensity={3.2} distance={65} color="#00ffcc" decay={2} />
-      )}
-
-      {/* Realtime Visible Radiant Celestial Orb in Sky (Sun / Moon) */}
-      <group ref={celestialOrbRef}>
-        {/* Core Celestial Sphere */}
-        <mesh>
-          <sphereGeometry args={[lighting.isNight ? 16 : 24, 32, 32]} />
+      {/* Horizon Atmospheric Haze Band */}
+      {quality.horizonHazeEnabled && (
+        <mesh position={[0, 32, 0]}>
+          <cylinderGeometry args={[1180, 1180, 140, 36, 1, true]} />
           <meshBasicMaterial
-            color={lighting.isNight ? '#dbeafe' : '#fffdf0'}
-            fog={false}
+            color={district.accentColor}
+            transparent
+            opacity={isUltra ? 0.055 : 0.03}
+            side={THREE.BackSide}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
           />
         </mesh>
+      )}
 
-          {/* Inner Coronal Glow Aura */}
-          <mesh>
-            <sphereGeometry args={[lighting.isNight ? 26 : 40, 16, 16]} />
-            <meshBasicMaterial
-              color={lighting.isNight ? '#60a5fa' : '#ffaa22'}
-              transparent
-              opacity={lighting.isNight ? 0.3 : 0.45}
-              side={THREE.BackSide}
-              fog={false}
-            />
-          </mesh>
+      {quality.starsEnabled && timeState.starOpacity > 0.05 && weatherState.rainIntensity < 0.5 && (
+        <points>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[starPositions, 3]} />
+          </bufferGeometry>
+          <pointsMaterial
+            color="#e2e8f0"
+            size={isUltra ? 2.4 : 2.0}
+            sizeAttenuation={false}
+            transparent
+            opacity={timeState.starOpacity * (1.0 - weatherState.rainIntensity * 2)}
+          />
+        </points>
+      )}
 
-          {/* Outer Radiant Atmospheric Flare */}
-          <mesh>
-            <sphereGeometry args={[lighting.isNight ? 42 : 68, 16, 16]} />
-            <meshBasicMaterial
-              color={lighting.isNight ? '#3b82f6' : '#ff6600'}
-              transparent
-              opacity={lighting.isNight ? 0.15 : 0.25}
-              side={THREE.BackSide}
-              fog={false}
-            />
-          </mesh>
-        </group>
+      {quality.volumetricRaysEnabled && (
+        <CelestialVolumetricRays timeState={timeState} weatherState={weatherState} />
+      )}
 
-      {/* Ambient fill light */}
-      <ambientLight ref={ambientLightRef} intensity={lighting.ambientIntensity} color={lighting.hemiSkyColor} />
+      <ambientLight
+        color={timeState.isNight ? '#1e293b' : '#cbd5e1'}
+        intensity={timeState.ambientIntensity * cityEvent.lightScale}
+      />
+      <hemisphereLight
+        args={[
+          timeState.isNight ? '#38bdf8' : '#fef3c7',
+          '#090d16',
+          timeState.hemiIntensity * cityEvent.lightScale,
+        ]}
+      />
 
-      {/* Celestial Volumetric Light Rays (God Rays / Moonbeams) */}
-      <CelestialVolumetricRays quality={quality} playerPosRef={playerPosRef} />
+      <directionalLight
+        ref={dirLightRef}
+        position={[60, 120, 45]}
+        intensity={keyLightIntensity}
+        color={weatherState.lightningFlash > 0.2 ? '#e0f2fe' : timeState.sunColor}
+        castShadow={quality.shadows}
+        shadow-mapSize-width={safeShadowMapSize}
+        shadow-mapSize-height={safeShadowMapSize}
+        shadow-camera-near={10}
+        shadow-camera-far={340}
+        shadow-camera-left={-shadowCamRange}
+        shadow-camera-right={shadowCamRange}
+        shadow-camera-top={shadowCamRange}
+        shadow-camera-bottom={-shadowCamRange}
+        shadow-bias={-0.0004}
+      />
+
+      {quality.nightLightsEnabled && quality.maxLights >= 4 && (
+        <pointLight
+          position={[0, 16, 0]}
+          intensity={(0.65 + timeState.nightFactor * 2.6) * cityEvent.lightScale}
+          distance={105}
+          color={district.primaryLightColor}
+          decay={2}
+        />
+      )}
     </>
   );
 };

@@ -1,195 +1,66 @@
 import * as THREE from 'three';
 
-export type TimeOfDayPhase = 'DAWN' | 'DAY' | 'GOLDEN_HOUR' | 'SUNSET' | 'BLUE_HOUR' | 'DUSK' | 'NIGHT';
+export type DayPhase = 'SUNRISE' | 'DAY' | 'SUNSET' | 'NIGHT';
 
 export interface TimeLightingState {
-  hour: number;
-  formattedTime: string;
-  phase: TimeOfDayPhase;
+  hours: number;
+  timeString: string;
+  phase: DayPhase;
+  sunDirection: THREE.Vector3;
+  moonDirection: THREE.Vector3;
+  sunIntensity: number;
+  moonIntensity: number;
+  ambientIntensity: number;
+  hemiIntensity: number;
+  sunColor: string;
+  skyTopColor: string;
+  skyHorizonColor: string;
+  fogColor: string;
+  fogNear: number;
+  fogFar: number;
   isNight: boolean;
-  nightFactor: number; // 0 (day) .. 1 (night)
-  celestialPosition: THREE.Vector3;
-  celestialColor: string;
-  celestialIntensity: number;
-  skyColor: string;
-  fogColor: string;
-  hemiSkyColor: string;
-  hemiGroundColor: string;
-  ambientIntensity: number;
-}
-
-interface TimeKeyframe {
-  hour: number;
-  phase: TimeOfDayPhase;
-  skyColor: string;
-  fogColor: string;
-  celestialColor: string;
-  hemiSkyColor: string;
-  hemiGroundColor: string;
-  celestialIntensity: number;
-  ambientIntensity: number;
   nightFactor: number;
+  starOpacity: number;
+  cloudColor: string;
 }
 
-const TIME_KEYFRAMES: TimeKeyframe[] = [
-  {
-    hour: 0.0,
-    phase: 'NIGHT',
-    skyColor: '#030612',
-    fogColor: '#030612',
-    celestialColor: '#93c5fd',
-    hemiSkyColor: '#101726',
-    hemiGroundColor: '#060912',
-    celestialIntensity: 0.85,
-    ambientIntensity: 0.24,
-    nightFactor: 1.0,
-  },
-  {
-    hour: 4.5,
-    phase: 'NIGHT',
-    skyColor: '#040816',
-    fogColor: '#040816',
-    celestialColor: '#a5b4fc',
-    hemiSkyColor: '#121a2d',
-    hemiGroundColor: '#080c18',
-    celestialIntensity: 0.9,
-    ambientIntensity: 0.26,
-    nightFactor: 0.9,
-  },
-  {
-    hour: 5.75,
-    phase: 'DAWN',
-    skyColor: '#343653',
-    fogColor: '#3d3d5b',
-    celestialColor: '#fb923c',
-    hemiSkyColor: '#ffc078',
-    hemiGroundColor: '#35435e',
-    celestialIntensity: 2.35,
-    ambientIntensity: 0.62,
-    nightFactor: 0.32,
-  },
-  {
-    hour: 6.75,
-    phase: 'DAWN',
-    skyColor: '#5b6f99',
-    fogColor: '#66779e',
-    celestialColor: '#fed7aa',
-    hemiSkyColor: '#ffe0ad',
-    hemiGroundColor: '#56677e',
-    celestialIntensity: 2.8,
-    ambientIntensity: 0.74,
-    nightFactor: 0.08,
-  },
-  {
-    hour: 9.0,
-    phase: 'DAY',
-    skyColor: '#132548',
-    fogColor: '#132548',
-    celestialColor: '#fffdf5',
-    hemiSkyColor: '#60a5fa',
-    hemiGroundColor: '#1e293b',
-    celestialIntensity: 2.5,
-    ambientIntensity: 0.48,
-    nightFactor: 0.0,
-  },
-  {
-    hour: 12.0,
-    phase: 'DAY',
-    skyColor: '#0f2244',
-    fogColor: '#0f2244',
-    celestialColor: '#fffbf0',
-    hemiSkyColor: '#6fa4db',
-    hemiGroundColor: '#202c3f',
-    celestialIntensity: 2.6,
-    ambientIntensity: 0.50,
-    nightFactor: 0.0,
-  },
-  {
-    hour: 16.25,
-    phase: 'DAY',
-    skyColor: '#172545',
-    fogColor: '#172545',
-    celestialColor: '#fef3c7',
-    hemiSkyColor: '#6ba6e8',
-    hemiGroundColor: '#1e283a',
-    celestialIntensity: 2.45,
-    ambientIntensity: 0.47,
-    nightFactor: 0.05,
-  },
-  {
-    hour: 17.25,
-    phase: 'GOLDEN_HOUR',
-    skyColor: '#2c182c',
-    fogColor: '#361a32',
-    celestialColor: '#ffa834',
-    hemiSkyColor: '#fb923c',
-    hemiGroundColor: '#c2410c',
-    celestialIntensity: 2.35,
-    ambientIntensity: 0.44,
-    nightFactor: 0.22,
-  },
-  {
-    hour: 18.25,
-    phase: 'SUNSET',
-    skyColor: '#241026',
-    fogColor: '#2e122d',
-    celestialColor: '#ff5500',
-    hemiSkyColor: '#d946ef',
-    hemiGroundColor: '#991b1b',
-    celestialIntensity: 2.15,
-    ambientIntensity: 0.40,
-    nightFactor: 0.45,
-  },
-  {
-    hour: 19.15,
-    phase: 'BLUE_HOUR',
-    skyColor: '#141838',
-    fogColor: '#141838',
-    celestialColor: '#6366f1',
-    hemiSkyColor: '#3b82f6',
-    hemiGroundColor: '#1e1b4b',
-    celestialIntensity: 1.6,
-    ambientIntensity: 0.35,
-    nightFactor: 0.72,
-  },
-  {
-    hour: 20.25,
-    phase: 'DUSK',
-    skyColor: '#0b0e22',
-    fogColor: '#0b0e22',
-    celestialColor: '#60a5fa',
-    hemiSkyColor: '#253350',
-    hemiGroundColor: '#0f172a',
-    celestialIntensity: 1.2,
-    ambientIntensity: 0.30,
-    nightFactor: 0.88,
-  },
-  {
-    hour: 24.0,
-    phase: 'NIGHT',
-    skyColor: '#030612',
-    fogColor: '#030612',
-    celestialColor: '#93c5fd',
-    hemiSkyColor: '#101726',
-    hemiGroundColor: '#060912',
-    celestialIntensity: 0.85,
-    ambientIntensity: 0.24,
-    nightFactor: 1.0,
-  },
-];
-
-type TimeChangeListener = (state: TimeLightingState) => void;
+type TimeListener = (state: TimeLightingState) => void;
 
 export class TimeSystem {
   private static instance: TimeSystem;
+  private hours = 22.0;
+  private speedMultiplier = 1.0;
+  private isPaused = false;
+  private listeners = new Set<TimeListener>();
+  private state: TimeLightingState;
 
-  // 17.5 = 17:30 (approaching golden hour by default)
-  private currentHour: number = 17.5;
-  private timeScale: number = 0.05; // ~1 real second = 3 game minutes
-  private isPaused: boolean = false;
-  private listeners: Set<TimeChangeListener> = new Set();
+  private readonly cNightTop = new THREE.Color('#04070f');
+  private readonly cNightHorizon = new THREE.Color('#0b1326');
+  private readonly cNightFog = new THREE.Color('#080d1a');
+  private readonly cNightSun = new THREE.Color('#38bdf8');
+  private readonly cNightCloud = new THREE.Color('#1e293b');
 
-  private constructor() {}
+  private readonly cDawnTop = new THREE.Color('#171836');
+  private readonly cDawnHorizon = new THREE.Color('#ea580c');
+  private readonly cDawnFog = new THREE.Color('#7c2d12');
+  private readonly cDawnSun = new THREE.Color('#fb923c');
+  private readonly cDawnCloud = new THREE.Color('#fdba74');
+
+  private readonly cDayTop = new THREE.Color('#0284c7');
+  private readonly cDayHorizon = new THREE.Color('#bae6fd');
+  private readonly cDayFog = new THREE.Color('#93c5fd');
+  private readonly cDaySun = new THREE.Color('#fef9c3');
+  private readonly cDayCloud = new THREE.Color('#f8fafc');
+
+  private readonly cDuskTop = new THREE.Color('#0f172a');
+  private readonly cDuskHorizon = new THREE.Color('#d97706');
+  private readonly cDuskFog = new THREE.Color('#451a03');
+  private readonly cDuskSun = new THREE.Color('#f59e0b');
+  private readonly cDuskCloud = new THREE.Color('#fcd34d');
+
+  private constructor() {
+    this.state = this.computeState(this.hours);
+  }
 
   public static getInstance(): TimeSystem {
     if (!TimeSystem.instance) {
@@ -199,121 +70,146 @@ export class TimeSystem {
   }
 
   public update(delta: number): void {
-    if (!this.isPaused) {
-      this.currentHour = (this.currentHour + delta * this.timeScale) % 24;
-      this.notify();
-    }
-  }
-
-  public setHour(hour: number): void {
-    this.currentHour = ((hour % 24) + 24) % 24;
+    if (this.isPaused) return;
+    this.hours = (this.hours + delta * 0.04 * this.speedMultiplier) % 24;
+    if (this.hours < 0) this.hours += 24;
+    this.state = this.computeState(this.hours);
     this.notify();
   }
 
-  public getHour(): number {
-    return this.currentHour;
+  public setTime(hours: number): void {
+    this.hours = ((hours % 24) + 24) % 24;
+    this.state = this.computeState(this.hours);
+    this.notify();
   }
 
-  public togglePause(): boolean {
-    this.isPaused = !this.isPaused;
+  public setSpeed(multiplier: number): void {
+    this.speedMultiplier = multiplier;
+    this.notify();
+  }
+
+  public getSpeed(): number {
+    return this.speedMultiplier;
+  }
+
+  public togglePause(force?: boolean): void {
+    this.isPaused = force !== undefined ? force : !this.isPaused;
+    this.notify();
+  }
+
+  public getIsPaused(): boolean {
     return this.isPaused;
   }
 
-  public setTimeScale(scale: number): void {
-    this.timeScale = scale;
+  public getState(): TimeLightingState {
+    return this.state;
   }
 
-  public getState(): TimeLightingState {
-    const h = this.currentHour;
+  private computeState(h: number): TimeLightingState {
+    const hrs = Math.floor(h);
+    const mins = Math.floor((h - hrs) * 60);
+    const timeString = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
 
-    // Find bounding keyframes for smooth continuous interpolation
-    let k0 = TIME_KEYFRAMES[0];
-    let k1 = TIME_KEYFRAMES[1];
+    const sunAngle = ((h - 6) / 24) * Math.PI * 2;
+    const sunY = Math.sin(sunAngle);
+    const sunX = Math.cos(sunAngle);
 
-    for (let i = 0; i < TIME_KEYFRAMES.length - 1; i++) {
-      if (h >= TIME_KEYFRAMES[i].hour && h <= TIME_KEYFRAMES[i + 1].hour) {
-        k0 = TIME_KEYFRAMES[i];
-        k1 = TIME_KEYFRAMES[i + 1];
-        break;
+    const sunDirection = new THREE.Vector3(sunX * 120, sunY * 140, 45).normalize();
+    const moonDirection = sunDirection.clone().negate();
+
+    let phase: DayPhase = 'NIGHT';
+    if (h >= 5.0 && h < 8.0) phase = 'SUNRISE';
+    else if (h >= 8.0 && h < 17.5) phase = 'DAY';
+    else if (h >= 17.5 && h < 20.5) phase = 'SUNSET';
+
+    const nightFactor = THREE.MathUtils.clamp(1.0 - (sunY + 0.2) / 0.65, 0.0, 1.0);
+    const isNight = nightFactor > 0.55;
+    const starOpacity = THREE.MathUtils.clamp((nightFactor - 0.35) * 1.6, 0.0, 1.0);
+
+    const topCol = new THREE.Color();
+    const horCol = new THREE.Color();
+    const fogCol = new THREE.Color();
+    const sunCol = new THREE.Color();
+    const cldCol = new THREE.Color();
+
+    if (h >= 5.0 && h < 8.0) {
+      const t = (h - 5.0) / 3.0;
+      if (t < 0.5) {
+        const k = t * 2;
+        topCol.lerpColors(this.cNightTop, this.cDawnTop, k);
+        horCol.lerpColors(this.cNightHorizon, this.cDawnHorizon, k);
+        fogCol.lerpColors(this.cNightFog, this.cDawnFog, k);
+        sunCol.lerpColors(this.cNightSun, this.cDawnSun, k);
+        cldCol.lerpColors(this.cNightCloud, this.cDawnCloud, k);
+      } else {
+        const k = (t - 0.5) * 2;
+        topCol.lerpColors(this.cDawnTop, this.cDayTop, k);
+        horCol.lerpColors(this.cDawnHorizon, this.cDayHorizon, k);
+        fogCol.lerpColors(this.cDawnFog, this.cDayFog, k);
+        sunCol.lerpColors(this.cDawnSun, this.cDaySun, k);
+        cldCol.lerpColors(this.cDawnCloud, this.cDayCloud, k);
       }
-    }
-
-    const span = k1.hour - k0.hour;
-    const rawT = span > 0 ? (h - k0.hour) / span : 0;
-    // Smooth cosine S-curve interpolation between keyframes
-    const t = 0.5 - 0.5 * Math.cos(rawT * Math.PI);
-
-    // Interpolate colors smoothly
-    const cSky = new THREE.Color(k0.skyColor).lerp(new THREE.Color(k1.skyColor), t);
-    const cFog = new THREE.Color(k0.fogColor).lerp(new THREE.Color(k1.fogColor), t);
-    const cCelestial = new THREE.Color(k0.celestialColor).lerp(new THREE.Color(k1.celestialColor), t);
-    const cHemiSky = new THREE.Color(k0.hemiSkyColor).lerp(new THREE.Color(k1.hemiSkyColor), t);
-    const cHemiGround = new THREE.Color(k0.hemiGroundColor).lerp(new THREE.Color(k1.hemiGroundColor), t);
-
-    // Interpolate scalar intensities
-    const celestialIntensity = THREE.MathUtils.lerp(k0.celestialIntensity, k1.celestialIntensity, t);
-    const ambientIntensity = THREE.MathUtils.lerp(k0.ambientIntensity, k1.ambientIntensity, t);
-    const nightFactor = THREE.MathUtils.lerp(k0.nightFactor, k1.nightFactor, t);
-
-    // Determine descriptive phase from current hour
-    let phase: TimeOfDayPhase = 'DAY';
-    if (h >= 5.0 && h < 7.25) phase = 'DAWN';
-    else if (h >= 7.25 && h < 16.75) phase = 'DAY';
-    else if (h >= 16.75 && h < 17.75) phase = 'GOLDEN_HOUR';
-    else if (h >= 17.75 && h < 18.75) phase = 'SUNSET';
-    else if (h >= 18.75 && h < 19.75) phase = 'BLUE_HOUR';
-    else if (h >= 19.75 && h < 21.0) phase = 'DUSK';
-    else phase = 'NIGHT';
-
-    // Format HH:MM
-    const hours = Math.floor(h);
-    const minutes = Math.floor((h % 1) * 60);
-    const formattedTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-
-    // Continuous 360-degree celestial orbit
-    // Sun rises East (+x) at 06:00, zenith at 12:00, sets West (-x) at 18:00
-    // Moon rises East at 18:00, zenith at 00:00, sets West at 06:00
-    const celestialPos = new THREE.Vector3();
-    const isDaytime = h >= 6.0 && h <= 18.0;
-
-    if (isDaytime) {
-      const sunAngle = ((h - 6.0) / 12.0) * Math.PI;
-      const height = Math.sin(sunAngle) * 140;
-      const x = Math.cos(sunAngle) * 110;
-      celestialPos.set(x, Math.max(8, height), 45);
+    } else if (h >= 8.0 && h < 17.5) {
+      topCol.copy(this.cDayTop);
+      horCol.copy(this.cDayHorizon);
+      fogCol.copy(this.cDayFog);
+      sunCol.copy(this.cDaySun);
+      cldCol.copy(this.cDayCloud);
+    } else if (h >= 17.5 && h < 20.5) {
+      const t = (h - 17.5) / 3.0;
+      if (t < 0.5) {
+        const k = t * 2;
+        topCol.lerpColors(this.cDayTop, this.cDuskTop, k);
+        horCol.lerpColors(this.cDayHorizon, this.cDuskHorizon, k);
+        fogCol.lerpColors(this.cDayFog, this.cDuskFog, k);
+        sunCol.lerpColors(this.cDaySun, this.cDuskSun, k);
+        cldCol.lerpColors(this.cDayCloud, this.cDuskCloud, k);
+      } else {
+        const k = (t - 0.5) * 2;
+        topCol.lerpColors(this.cDuskTop, this.cNightTop, k);
+        horCol.lerpColors(this.cDuskHorizon, this.cNightHorizon, k);
+        fogCol.lerpColors(this.cDuskFog, this.cNightFog, k);
+        sunCol.lerpColors(this.cDuskSun, this.cNightSun, k);
+        cldCol.lerpColors(this.cDuskCloud, this.cNightCloud, k);
+      }
     } else {
-      const moonHour = h > 18.0 ? h - 18.0 : h + 6.0;
-      const moonAngle = (moonHour / 12.0) * Math.PI;
-      const height = Math.sin(moonAngle) * 115;
-      const x = Math.cos(moonAngle) * 95;
-      celestialPos.set(x, Math.max(8, height), -45);
+      topCol.copy(this.cNightTop);
+      horCol.copy(this.cNightHorizon);
+      fogCol.copy(this.cNightFog);
+      sunCol.copy(this.cNightSun);
+      cldCol.copy(this.cNightCloud);
     }
 
     return {
-      hour: h,
-      formattedTime,
+      hours: h,
+      timeString,
       phase,
-      isNight: nightFactor > 0.5,
+      sunDirection,
+      moonDirection,
+      sunIntensity: THREE.MathUtils.lerp(3.4, 0.2, nightFactor),
+      moonIntensity: THREE.MathUtils.lerp(0.15, 2.2, nightFactor),
+      ambientIntensity: THREE.MathUtils.lerp(1.4, 0.85, nightFactor),
+      hemiIntensity: THREE.MathUtils.lerp(1.6, 1.15, nightFactor),
+      sunColor: `#${sunCol.getHexString()}`,
+      skyTopColor: `#${topCol.getHexString()}`,
+      skyHorizonColor: `#${horCol.getHexString()}`,
+      fogColor: `#${fogCol.getHexString()}`,
+      fogNear: THREE.MathUtils.lerp(160, 120, nightFactor),
+      fogFar: THREE.MathUtils.lerp(720, 560, nightFactor),
+      isNight,
       nightFactor,
-      celestialPosition: celestialPos,
-      celestialColor: `#${cCelestial.getHexString()}`,
-      celestialIntensity,
-      skyColor: `#${cSky.getHexString()}`,
-      fogColor: `#${cFog.getHexString()}`,
-      hemiSkyColor: `#${cHemiSky.getHexString()}`,
-      hemiGroundColor: `#${cHemiGround.getHexString()}`,
-      ambientIntensity,
+      starOpacity,
+      cloudColor: `#${cldCol.getHexString()}`,
     };
   }
 
-  public subscribe(listener: TimeChangeListener): () => void {
+  public subscribe(listener: TimeListener): () => void {
     this.listeners.add(listener);
-    listener(this.getState());
+    listener(this.state);
     return () => this.listeners.delete(listener);
   }
 
   private notify(): void {
-    const state = this.getState();
-    this.listeners.forEach((l) => l(state));
+    this.listeners.forEach((l) => l(this.state));
   }
 }

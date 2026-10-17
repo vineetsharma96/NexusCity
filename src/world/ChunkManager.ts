@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { DistrictGenerator, DistrictInfo } from '../city/DistrictGenerator';
+import { DistrictGenerator, DistrictInfo, DistrictType } from '../city/DistrictGenerator';
 import { QualityManager } from '../rendering/QualityManager';
+import { SaveSystem } from '../core/SaveSystem';
 
 export type ChunkLOD = 'HIGH' | 'MEDIUM' | 'LOW' | 'UNLOADED';
 
@@ -9,82 +10,55 @@ export interface ChunkInfo {
   cx: number;
   cz: number;
   center: THREE.Vector3;
-  district: DistrictInfo;
   lod: ChunkLOD;
+  district: DistrictInfo;
   distanceToPlayer: number;
 }
 
 export interface ChunkManagerState {
+  currentDistrict: DistrictInfo;
+  activeChunkCount: number;
+  highLodCount: number;
+  mediumLodCount: number;
+  lowLodCount: number;
   chunks: ChunkInfo[];
-  activeDistrict: DistrictInfo;
-  discoveredDistricts: Set<string>;
+  recentDiscovery: DistrictInfo | null;
   discoveredChunks: Set<string>;
   exploredPercent: number;
-  recentDiscovery: DistrictInfo | null;
 }
 
-type ChunkChangeListener = (state: ChunkManagerState) => void;
+type ChunkListener = (state: ChunkManagerState) => void;
+
+function cloneChunk(chunk: ChunkInfo): ChunkInfo {
+  return { ...chunk, center: chunk.center.clone() };
+}
 
 export class ChunkManager {
   private static instance: ChunkManager;
+  public static readonly GRID_RADIUS = 12;
+  public readonly CHUNK_SIZE = 120;
+  public readonly GRID_RADIUS = 12;
 
-  public static readonly CHUNK_SIZE = 120; // meters
-  public static readonly GRID_RADIUS = 12; // -12 .. 11 (24x24 grid = 2880m x 2880m, roughly 3km wide)
+  private chunks = new Map<string, ChunkInfo>();
+  private currentDistrict: DistrictInfo;
+  private discoveredDistricts = new Set<DistrictType>(['CENTRAL_CITY']);
+  private discoveredChunks = new Set<string>(['0_0', '0_-1', '-1_0', '-1_-1']);
+  private recentDiscovery: DistrictInfo | null;
+  private discoveryTime = 0;
 
-  private chunks: Map<string, ChunkInfo> = new Map();
-  private activeDistrict: DistrictInfo = DistrictGenerator.getDistrictAt(0, 0);
-  private discoveredDistricts: Set<string> = new Set(['CENTRAL_CITY']);
-  private discoveredChunks: Set<string> = new Set();
-  private recentDiscovery: DistrictInfo | null = null;
-  private listeners: Set<ChunkChangeListener> = new Set();
+  private lastPlayerChunkX = -999;
+  private lastPlayerChunkZ = -999;
+  private lastQualitySignature = '';
+  private listeners = new Set<ChunkListener>();
 
   constructor() {
-    this.loadExploredChunks();
-    this.initGrid();
-    this.discoveredChunks.forEach((key) => {
-      const chunk = this.chunks.get(key);
-      if (chunk) this.discoveredDistricts.add(chunk.district.type);
-      else this.discoveredChunks.delete(key);
-    });
-  }
-
-  private loadExploredChunks(): void {
-    try {
-      if (typeof localStorage !== 'undefined') {
-        const saved = localStorage.getItem('nexus_city_explored_chunks_v1');
-        if (saved) {
-          const arr = JSON.parse(saved);
-          if (Array.isArray(arr)) {
-            arr.forEach((key: unknown) => {
-              if (typeof key === 'string' && /^-?\d+_-?\d+$/.test(key)) this.discoveredChunks.add(key);
-            });
-          }
-        }
-      }
-    } catch (e) {}
-
-    // Ensure core 3x3 plaza chunks are always explored
-    for (let cx = -1; cx <= 1; cx++) {
-      for (let cz = -1; cz <= 1; cz++) {
-        this.discoveredChunks.add(`${cx}_${cz}`);
-      }
+    this.currentDistrict = DistrictGenerator.getDistrictAt(0, 0);
+    this.recentDiscovery = null;
+    const saved = SaveSystem.getInstance().getData().discoveredDistricts;
+    if (Array.isArray(saved)) {
+      saved.forEach((d) => this.discoveredDistricts.add(d as DistrictType));
     }
-  }
-
-  private saveTimer: ReturnType<typeof setTimeout> | null = null;
-  private saveExploredChunks(): void {
-    if (this.saveTimer) return;
-    this.saveTimer = setTimeout(() => {
-      this.saveTimer = null;
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(
-            'nexus_city_explored_chunks_v1',
-            JSON.stringify(Array.from(this.discoveredChunks))
-          );
-        }
-      } catch (e) {}
-    }, 1200);
+    this.initGrid();
   }
 
   public static getInstance(): ChunkManager {
@@ -95,147 +69,158 @@ export class ChunkManager {
   }
 
   private initGrid(): void {
-    const size = ChunkManager.CHUNK_SIZE;
-    const r = ChunkManager.GRID_RADIUS;
-
-    for (let cx = -r; cx < r; cx++) {
-      for (let cz = -r; cz < r; cz++) {
+    for (let cx = -this.GRID_RADIUS; cx < this.GRID_RADIUS; cx++) {
+      for (let cz = -this.GRID_RADIUS; cz < this.GRID_RADIUS; cz++) {
         const key = `${cx}_${cz}`;
-        const centerX = (cx + 0.5) * size;
-        const centerZ = (cz + 0.5) * size;
+        const centerX = (cx + 0.5) * this.CHUNK_SIZE;
+        const centerZ = (cz + 0.5) * this.CHUNK_SIZE;
         const center = new THREE.Vector3(centerX, 0, centerZ);
         const district = DistrictGenerator.getDistrictAt(centerX, centerZ);
+        const dist = Math.hypot(centerX, centerZ);
 
         this.chunks.set(key, {
           key,
           cx,
           cz,
           center,
+          lod: dist < 190 ? 'HIGH' : dist < 380 ? 'MEDIUM' : dist < 650 ? 'LOW' : 'UNLOADED',
           district,
-          lod: 'UNLOADED',
-          distanceToPlayer: Infinity,
+          distanceToPlayer: dist,
         });
       }
     }
-  }
-
-  private lastCheckedPos: THREE.Vector3 = new THREE.Vector3(999999, 0, 999999);
-  private lastQualityKey = '';
-
-  public updatePlayerPosition(playerPos: THREE.Vector3): void {
-    // 1. Resolve Active District at player position
-    let stateChanged = false;
-    const currentDistrict = DistrictGenerator.getDistrictAt(playerPos.x, playerPos.z);
-    if (currentDistrict.type !== this.activeDistrict.type) {
-      this.activeDistrict = currentDistrict;
-      stateChanged = true;
-      if (!this.discoveredDistricts.has(currentDistrict.type)) {
-        this.discoveredDistricts.add(currentDistrict.type);
-        this.recentDiscovery = currentDistrict;
-        // Auto-clear discovery banner after 4.5 seconds
-        setTimeout(() => {
-          if (this.recentDiscovery?.type === currentDistrict.type) {
-            this.recentDiscovery = null;
-            this.notify();
-          }
-        }, 4500);
-      }
-    }
-
-    const quality = QualityManager.current;
-    const qualityKey = `${quality.drawDistance}:${quality.LODQuality}:${quality.maxActiveChunks}`;
-    // Quality changes must refresh visible chunks even when the player is standing still.
-    if (playerPos.distanceToSquared(this.lastCheckedPos) < 16 && !stateChanged && qualityKey === this.lastQualityKey) {
-      return;
-    }
-    this.lastCheckedPos.copy(playerPos);
-    this.lastQualityKey = qualityKey;
-
-    // 2. Evaluate Distance, Discovery & LOD for Each Chunk using active Quality Preset
-    const maxDrawDist = quality.drawDistance || 900;
-    const highCutoff = quality.LODQuality === 'HIGH' ? 200 : quality.LODQuality === 'MEDIUM' ? 140 : 100;
-    const medCutoff = quality.LODQuality === 'HIGH' ? 380 : quality.LODQuality === 'MEDIUM' ? 260 : 180;
-    const lowCutoff = Math.min(maxDrawDist, quality.LODQuality === 'HIGH' ? 1200 : quality.LODQuality === 'MEDIUM' ? 800 : 500);
-
-    const candidateChunks: { chunk: ChunkInfo; dist: number; lod: ChunkLOD }[] = [];
-
-    this.chunks.forEach((chunk) => {
-      const dist = Math.hypot(playerPos.x - chunk.center.x, playerPos.z - chunk.center.z);
-      chunk.distanceToPlayer = dist;
-
-      // Mark chunk as explored when player approaches within 260m
-      if (dist < 260 && !this.discoveredChunks.has(chunk.key)) {
-        this.discoveredChunks.add(chunk.key);
-        stateChanged = true;
-        this.saveExploredChunks();
-      }
-
-      if (dist < lowCutoff) {
-        let newLod: ChunkLOD = 'LOW';
-        if (dist < highCutoff) {
-          newLod = 'HIGH';
-        } else if (dist < medCutoff) {
-          newLod = 'MEDIUM';
-        }
-        candidateChunks.push({ chunk, dist, lod: newLod });
-      } else {
-        if (chunk.lod !== 'UNLOADED') {
-          chunk.lod = 'UNLOADED';
-          stateChanged = true;
-        }
-      }
-    });
-
-    // Enforce hard cap on active chunks to protect mobile / PRoot memory limits
-    const maxActive = Math.max(1, Math.floor(quality.maxActiveChunks || 45));
-    if (candidateChunks.length > maxActive) {
-      candidateChunks.sort((a, b) => a.dist - b.dist);
-      for (let i = maxActive; i < candidateChunks.length; i++) {
-        candidateChunks[i].lod = 'UNLOADED';
-      }
-    }
-
-    candidateChunks.forEach(({ chunk, lod }) => {
-      if (chunk.lod !== lod) {
-        chunk.lod = lod;
-        stateChanged = true;
-      }
-    });
-
-    if (stateChanged) {
-      this.notify();
-    }
-  }
-
-  public getActiveChunks(): ChunkInfo[] {
-    return Array.from(this.chunks.values())
-      .filter((chunk) => chunk.lod !== 'UNLOADED')
-      .map((chunk) => ({ ...chunk }));
   }
 
   public isChunkExplored(cx: number, cz: number): boolean {
     return this.discoveredChunks.has(`${cx}_${cz}`);
   }
 
-  public getExploredPercent(): number {
-    const totalChunks = (ChunkManager.GRID_RADIUS * 2) * (ChunkManager.GRID_RADIUS * 2);
-    return parseFloat(((this.discoveredChunks.size / totalChunks) * 100).toFixed(1));
+  public updatePlayerPosition(playerPos: THREE.Vector3, elapsedSeconds: number = 0): void {
+    const cx = Math.floor(playerPos.x / this.CHUNK_SIZE);
+    const cz = Math.floor(playerPos.z / this.CHUNK_SIZE);
+    let changed = false;
+
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const rKey = `${cx + dx}_${cz + dz}`;
+        if (this.chunks.has(rKey) && !this.discoveredChunks.has(rKey)) {
+          this.discoveredChunks.add(rKey);
+          changed = true;
+        }
+      }
+    }
+
+    if (this.recentDiscovery && elapsedSeconds - this.discoveryTime > 4.5) {
+      this.recentDiscovery = null;
+      changed = true;
+    }
+
+    const districtNow = DistrictGenerator.getDistrictAt(playerPos.x, playerPos.z);
+    if (districtNow.type !== this.currentDistrict.type) {
+      this.currentDistrict = districtNow;
+      changed = true;
+      const isNewSave = SaveSystem.getInstance().updateDistrict(districtNow.type);
+      if (!this.discoveredDistricts.has(districtNow.type) || isNewSave) {
+        this.discoveredDistricts.add(districtNow.type);
+        this.recentDiscovery = districtNow;
+        this.discoveryTime = elapsedSeconds;
+      }
+    }
+
+    const quality = QualityManager.current;
+    const maxBudget = Math.max(0, Math.floor(quality.maxActiveChunks || 75));
+    const qualitySig = `${quality.name}:${quality.LODQuality}:${quality.drawDistance}:${maxBudget}`;
+
+    if (cx !== this.lastPlayerChunkX || cz !== this.lastPlayerChunkZ || qualitySig !== this.lastQualitySignature) {
+      this.lastPlayerChunkX = cx;
+      this.lastPlayerChunkZ = cz;
+      this.lastQualitySignature = qualitySig;
+      changed = true;
+
+      const isUltra = quality.name === 'ULTRA' || quality.drawDistance >= 950;
+      const lodScale =
+        quality.LODQuality === 'LOW'
+          ? 0.65
+          : quality.LODQuality === 'MEDIUM'
+          ? 0.85
+          : isUltra
+          ? 1.45
+          : 1.0;
+      const highLimit = 185 * lodScale;
+      const medLimit = 380 * lodScale;
+      const lowLimit = Math.min(quality.drawDistance * 1.15, (isUltra ? 960 : 780) * lodScale);
+      const candidates: ChunkInfo[] = [];
+
+      for (const chunk of this.chunks.values()) {
+        const dist = Math.hypot(chunk.center.x - playerPos.x, chunk.center.z - playerPos.z);
+        chunk.distanceToPlayer = dist;
+        if (dist <= highLimit) {
+          chunk.lod = 'HIGH';
+          candidates.push(chunk);
+        } else if (dist <= medLimit) {
+          chunk.lod = 'MEDIUM';
+          candidates.push(chunk);
+        } else if (dist <= lowLimit) {
+          chunk.lod = 'LOW';
+          candidates.push(chunk);
+        } else {
+          chunk.lod = 'UNLOADED';
+        }
+      }
+
+      if (candidates.length > maxBudget) {
+        candidates.sort((a, b) => a.distanceToPlayer - b.distanceToPlayer);
+        for (let i = maxBudget; i < candidates.length; i++) {
+          candidates[i].lod = 'UNLOADED';
+        }
+      }
+    }
+
+    if (changed) this.notify();
   }
 
   public getState(): ChunkManagerState {
+    let activeChunkCount = 0;
+    let highLodCount = 0;
+    let mediumLodCount = 0;
+    let lowLodCount = 0;
+    const list: ChunkInfo[] = [];
+
+    for (const c of this.chunks.values()) {
+      list.push(cloneChunk(c));
+      if (c.lod !== 'UNLOADED') {
+        activeChunkCount++;
+        if (c.lod === 'HIGH') highLodCount++;
+        else if (c.lod === 'MEDIUM') mediumLodCount++;
+        else if (c.lod === 'LOW') lowLodCount++;
+      }
+    }
+
+    const total = Math.max(1, this.chunks.size);
+    const exploredPercent = Math.min(100, Math.round((this.discoveredChunks.size / total) * 100));
+
     return {
-      // React.memo consumers need new chunk props when LOD changes. Keep published
-      // snapshots independent of the internal records updated by the frame loop.
-      chunks: Array.from(this.chunks.values(), (chunk) => ({ ...chunk })),
-      activeDistrict: this.activeDistrict,
-      discoveredDistricts: new Set(this.discoveredDistricts),
-      discoveredChunks: new Set(this.discoveredChunks),
-      exploredPercent: this.getExploredPercent(),
+      currentDistrict: this.currentDistrict,
+      activeChunkCount,
+      highLodCount,
+      mediumLodCount,
+      lowLodCount,
+      chunks: list,
       recentDiscovery: this.recentDiscovery,
+      discoveredChunks: new Set(this.discoveredChunks),
+      exploredPercent,
     };
   }
 
-  public subscribe(listener: ChunkChangeListener): () => void {
+  public getActiveChunks(): ChunkInfo[] {
+    const active: ChunkInfo[] = [];
+    for (const c of this.chunks.values()) {
+      if (c.lod !== 'UNLOADED') active.push(cloneChunk(c));
+    }
+    return active;
+  }
+
+  public subscribe(listener: ChunkListener): () => void {
     this.listeners.add(listener);
     listener(this.getState());
     return () => this.listeners.delete(listener);

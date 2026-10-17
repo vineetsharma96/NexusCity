@@ -12,8 +12,10 @@ export const LoadingScreen: React.FC = () => {
       CinematicManager.getInstance().finishLoading();
     };
     window.addEventListener('nexus:world-ready', finish, { once: true });
-    if ((window as Window & { __NEXUS_WORLD_READY__?: boolean }).__NEXUS_WORLD_READY__) finish();
-    const timeout = window.setTimeout(() => setIsTakingLonger(true), 15000);
+    if ((window as Window & { __NEXUS_WORLD_READY__?: boolean }).__NEXUS_WORLD_READY__) {
+      finish();
+    }
+    const timeout = window.setTimeout(() => setIsTakingLonger(true), 14000);
     return () => {
       window.removeEventListener('nexus:world-ready', finish);
       window.clearTimeout(timeout);
@@ -25,15 +27,30 @@ export const LoadingScreen: React.FC = () => {
   return (
     <div className="loading-screen" role="status" aria-live="polite">
       <div className="loading-panel">
-        <span className="menu-section-label">PROCEDURAL WORLD / SEED 847291</span>
+        <span className="menu-section-label">METROPOLITAN DIGITAL TWIN // SEED 847291</span>
         <h1>NEXUS CITY</h1>
-        <p>{isTakingLonger ? 'The city is still preparing its first frame. Larger worlds can take a moment on this device.' : 'Building the city and preparing your view.'}</p>
-        <div className="loading-track" aria-hidden="true"><span /></div>
-        <span className="loading-caption">{isTakingLonger ? 'Preparing graphics…' : 'Architecture · streets · atmosphere'}</span>
-        {isTakingLonger && <button className="cyber-btn" onClick={() => {
-          QualityManager.setPreset('LITE');
-          window.location.reload();
-        }}>Restart in Lite mode</button>}
+        <p>
+          {isTakingLonger
+            ? 'Synthesizing procedural sectors and atmospheric shaders. High-density worlds may take an extra moment on this device.'
+            : 'Initializing 3km procedural urban matrix, diurnal lighting, and autonomous transit corridors.'}
+        </p>
+        <div className="loading-track" aria-hidden="true">
+          <span />
+        </div>
+        <span className="loading-caption">
+          {isTakingLonger ? 'Compiling WebGL pipelines…' : 'Architecture · Illumination · Acoustics'}
+        </span>
+        {isTakingLonger && (
+          <button
+            className="cyber-btn"
+            onClick={() => {
+              QualityManager.setPreset('LITE');
+              window.location.reload();
+            }}
+          >
+            Launch in Lite Performance Mode
+          </button>
+        )}
       </div>
     </div>
   );

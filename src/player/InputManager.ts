@@ -3,32 +3,54 @@ export interface InputState {
   backward: boolean;
   left: boolean;
   right: boolean;
-  jump: boolean;
   sprint: boolean;
+  jump: boolean;
   interact: boolean;
   map: boolean;
-  menu: boolean;
-  // Normalized analog axis [-1 .. 1]
   moveX: number;
   moveZ: number;
-  // Mouse / Touch rotation deltas
   lookDeltaX: number;
   lookDeltaY: number;
   zoomDelta: number;
   isPointerLocked: boolean;
 }
 
-class InputManagerClass {
+type InputListener = (state: InputState) => void;
+
+type KeyAction = 'forward' | 'backward' | 'left' | 'right' | 'sprint' | 'jump' | 'interact';
+
+const KEY_TO_ACTION: Record<string, KeyAction> = {
+  KeyW: 'forward',
+  ArrowUp: 'forward',
+  KeyS: 'backward',
+  ArrowDown: 'backward',
+  KeyA: 'left',
+  ArrowLeft: 'left',
+  KeyD: 'right',
+  ArrowRight: 'right',
+  ShiftLeft: 'sprint',
+  ShiftRight: 'sprint',
+  Space: 'jump',
+  KeyE: 'interact',
+};
+
+function isEditableElement(target: EventTarget | null): boolean {
+  if (!target || typeof target !== 'object') return false;
+  const el = target as HTMLElement;
+  const tag = (el.tagName || '').toUpperCase();
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || Boolean(el.isContentEditable);
+}
+
+class InputManagerImpl {
   private state: InputState = {
     forward: false,
     backward: false,
     left: false,
     right: false,
-    jump: false,
     sprint: false,
+    jump: false,
     interact: false,
     map: false,
-    menu: false,
     moveX: 0,
     moveZ: 0,
     lookDeltaX: 0,
@@ -37,86 +59,261 @@ class InputManagerClass {
     isPointerLocked: false,
   };
 
-  private listeners: Set<(s: InputState) => void> = new Set();
-  private initialized = false;
-  private canvasElement?: HTMLElement;
-  private uiBlocking = false;
-  private pressedKeys = new Set<string>();
+  private heldCodes = new Set<string>();
+  private virtualActions: Record<'sprint' | 'jump' | 'interact', boolean> = {
+    sprint: false,
+    jump: false,
+    interact: false,
+  };
+  private virtualMapPressed = false;
+  private virtualMoveX = 0;
+  private virtualMoveZ = 0;
+  private uiBlocked = false;
+  private domElement: HTMLElement | null = null;
+  private isDraggingLook = false;
+  private lastMouseX = 0;
+  private lastMouseY = 0;
+  private listeners = new Set<InputListener>();
 
-  public init(canvasElement?: HTMLElement): void {
-    if (this.initialized || typeof window === 'undefined') return;
-    this.initialized = true;
-    this.canvasElement = canvasElement;
-
-    window.addEventListener('keydown', this.handleKeyDown);
-    window.addEventListener('keyup', this.handleKeyUp);
-    window.addEventListener('mousemove', this.handleMouseMove);
-    window.addEventListener('blur', this.reset);
-    document.addEventListener('visibilitychange', this.handleVisibilityChange);
-    document.addEventListener('focusin', this.handleFocusIn);
-    document.addEventListener('pointerlockchange', this.handlePointerLockChange);
-
-    if (canvasElement) {
-      canvasElement.addEventListener('click', this.requestPointerLock);
-    }
+  private cloneState(): InputState {
+    return { ...this.state };
   }
 
-  public dispose(): void {
-    if (typeof window === 'undefined') return;
-    window.removeEventListener('keydown', this.handleKeyDown);
-    window.removeEventListener('keyup', this.handleKeyUp);
-    window.removeEventListener('mousemove', this.handleMouseMove);
-    window.removeEventListener('blur', this.reset);
-    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
-    document.removeEventListener('focusin', this.handleFocusIn);
-    document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
-    this.canvasElement?.removeEventListener('click', this.requestPointerLock);
-    this.reset();
-    this.canvasElement = undefined;
-    this.state.isPointerLocked = false;
+  private syncActionsFromHeld(): void {
+    if (this.uiBlocked) {
+      this.state.forward = false;
+      this.state.backward = false;
+      this.state.left = false;
+      this.state.right = false;
+      this.state.sprint = false;
+      this.state.jump = false;
+      this.state.interact = false;
+      this.state.moveX = 0;
+      this.state.moveZ = 0;
+      return;
+    }
+
+    const hasAction = (act: KeyAction): boolean => {
+      for (const code of this.heldCodes) {
+        if (KEY_TO_ACTION[code] === act) return true;
+      }
+      return false;
+    };
+
+    this.state.forward = hasAction('forward');
+    this.state.backward = hasAction('backward');
+    this.state.left = hasAction('left');
+    this.state.right = hasAction('right');
+    this.state.sprint = hasAction('sprint') || this.virtualActions.sprint;
+    this.state.jump = hasAction('jump') || this.virtualActions.jump;
+    this.state.interact = hasAction('interact') || this.virtualActions.interact;
+    this.recomputeAxes();
+  }
+
+  private releaseGameplayInputs(): void {
+    this.heldCodes.clear();
+    this.virtualActions = { sprint: false, jump: false, interact: false };
+    this.virtualMapPressed = false;
+    this.virtualMoveX = 0;
+    this.virtualMoveZ = 0;
+    this.isDraggingLook = false;
     this.state.lookDeltaX = 0;
     this.state.lookDeltaY = 0;
     this.state.zoomDelta = 0;
-    this.initialized = false;
+    this.syncActionsFromHeld();
   }
 
-  public getState(): InputState {
-    return this.state;
-  }
+  private onKeyDown = (e: KeyboardEvent) => {
+    if (isEditableElement(e.target)) return;
+    if (e.code === 'KeyM') {
+      if (!e.repeat) {
+        this.state.map = !this.state.map;
+        this.notify();
+      }
+      return;
+    }
+    if (this.uiBlocked) return;
+    if (KEY_TO_ACTION[e.code]) {
+      this.heldCodes.add(e.code);
+      this.syncActionsFromHeld();
+      this.notify();
+    }
+  };
 
-  public isUIBlocked(): boolean {
-    return this.uiBlocking;
-  }
+  private onKeyUp = (e: KeyboardEvent) => {
+    if (KEY_TO_ACTION[e.code]) {
+      this.heldCodes.delete(e.code);
+      this.syncActionsFromHeld();
+      this.notify();
+    }
+  };
 
-  public setUIBlocking(blocked: boolean): void {
-    if (this.uiBlocking === blocked) return;
-    this.uiBlocking = blocked;
-    this.reset();
-    if (blocked) this.exitPointerLock();
-  }
-
-  public reset = (): void => {
-    this.pressedKeys.clear();
-    Object.assign(this.state, {
-      forward: false, backward: false, left: false, right: false,
-      jump: false, sprint: false, interact: false, menu: false,
-      moveX: 0, moveZ: 0, lookDeltaX: 0, lookDeltaY: 0, zoomDelta: 0,
-    });
+  private onWindowBlur = () => {
+    this.releaseGameplayInputs();
     this.notify();
   };
 
-  private isEditable(target: EventTarget | null): boolean {
-    return target instanceof HTMLElement &&
-      (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+  private onVisibilityChange = () => {
+    if (typeof document !== 'undefined' && document.hidden) {
+      this.releaseGameplayInputs();
+      this.notify();
+    }
+  };
+
+  private onFocusIn = (e: FocusEvent) => {
+    if (isEditableElement(e.target)) {
+      this.releaseGameplayInputs();
+      this.notify();
+    }
+  };
+
+  private onMouseDown = (e: MouseEvent) => {
+    if (this.uiBlocked) return;
+    if (e.button === 0 && !this.state.isPointerLocked) {
+      this.isDraggingLook = true;
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+    }
+  };
+
+  private onMouseUp = () => {
+    this.isDraggingLook = false;
+  };
+
+  private onMouseMove = (e: MouseEvent) => {
+    if (this.uiBlocked) return;
+    if (this.state.isPointerLocked) {
+      this.state.lookDeltaX += e.movementX;
+      this.state.lookDeltaY += e.movementY;
+    } else if (this.isDraggingLook) {
+      this.state.lookDeltaX += e.clientX - this.lastMouseX;
+      this.state.lookDeltaY += e.clientY - this.lastMouseY;
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+    }
+  };
+
+  private onPointerLockChange = () => {
+    this.state.isPointerLocked = document.pointerLockElement === this.domElement;
+    if (this.state.isPointerLocked) this.isDraggingLook = false;
+    this.notify();
+  };
+
+  private recomputeAxes(): void {
+    if (this.uiBlocked) {
+      this.state.moveX = 0;
+      this.state.moveZ = 0;
+      return;
+    }
+    const kbX = (this.state.right ? 1 : 0) - (this.state.left ? 1 : 0);
+    const kbZ = (this.state.forward ? 1 : 0) - (this.state.backward ? 1 : 0);
+
+    if (Math.abs(this.virtualMoveX) > 0.01 || Math.abs(this.virtualMoveZ) > 0.01) {
+      this.state.moveX = this.virtualMoveX;
+      this.state.moveZ = this.virtualMoveZ;
+    } else {
+      this.state.moveX = kbX;
+      this.state.moveZ = kbZ;
+    }
   }
 
-  private handleVisibilityChange = (): void => {
-    if (document.hidden) this.reset();
+  public init(domElement: HTMLElement): void {
+    this.dispose();
+    this.domElement = domElement;
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.onWindowBlur);
+    window.addEventListener('mousemove', this.onMouseMove);
+    window.addEventListener('mouseup', this.onMouseUp);
+    domElement.addEventListener('mousedown', this.onMouseDown);
+    document.addEventListener('pointerlockchange', this.onPointerLockChange);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+    document.addEventListener('focusin', this.onFocusIn);
+  }
+
+  public dispose(): void {
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.onWindowBlur);
+    window.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('mouseup', this.onMouseUp);
+    if (this.domElement) {
+      this.domElement.removeEventListener('mousedown', this.onMouseDown);
+    }
+    document.removeEventListener('pointerlockchange', this.onPointerLockChange);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    document.removeEventListener('focusin', this.onFocusIn);
+    this.domElement = null;
+  }
+
+  public requestPointerLock = (): void => {
+    if (this.uiBlocked || !this.domElement?.requestPointerLock) return;
+    try {
+      const p = this.domElement.requestPointerLock() as unknown as Promise<void>;
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch {}
   };
 
-  private handleFocusIn = (event: FocusEvent): void => {
-    if (this.isEditable(event.target)) this.reset();
-  };
+  public setUIBlocking(blocked: boolean): void {
+    if (this.uiBlocked === blocked) return;
+    this.uiBlocked = blocked;
+    this.releaseGameplayInputs();
+    if (blocked && typeof document !== 'undefined' && document.pointerLockElement === this.domElement) {
+      document.exitPointerLock?.();
+    }
+    this.notify();
+  }
+
+  public isUIBlocked(): boolean {
+    return this.uiBlocked;
+  }
+
+  public reset(): void {
+    this.releaseGameplayInputs();
+    this.state.map = false;
+    this.notify();
+  }
+
+  public setVirtualMovement(x: number, z: number): void {
+    if (this.uiBlocked) {
+      this.virtualMoveX = 0;
+      this.virtualMoveZ = 0;
+      this.recomputeAxes();
+      return;
+    }
+    this.virtualMoveX = Math.max(-1, Math.min(1, x));
+    this.virtualMoveZ = Math.max(-1, Math.min(1, z));
+    this.recomputeAxes();
+    this.notify();
+  }
+
+  public addLookDelta(dx: number, dy: number): void {
+    if (this.uiBlocked) return;
+    this.state.lookDeltaX += dx;
+    this.state.lookDeltaY += dy;
+  }
+
+  public addZoomDelta(dz: number): void {
+    if (this.uiBlocked) return;
+    this.state.zoomDelta += dz;
+  }
+
+  public setVirtualAction(action: 'sprint' | 'jump' | 'interact' | 'map', pressed: boolean): void {
+    if (action === 'map') {
+      if (pressed && !this.virtualMapPressed) {
+        this.state.map = !this.state.map;
+        this.virtualMapPressed = true;
+        this.notify();
+      } else if (!pressed) {
+        this.virtualMapPressed = false;
+      }
+      return;
+    }
+    if (this.uiBlocked && pressed) return;
+    this.virtualActions[action] = pressed;
+    this.syncActionsFromHeld();
+    this.notify();
+  }
 
   public consumeLookDelta(): { dx: number; dy: number } {
     const dx = this.state.lookDeltaX;
@@ -132,152 +329,20 @@ class InputManagerClass {
     return dz;
   }
 
-  public addVirtualZoomDelta(dz: number): void {
-    if (this.uiBlocking) return;
-    this.state.zoomDelta += dz;
+  public getState(): InputState {
+    return this.cloneState();
   }
 
-  public requestPointerLock = (): void => {
-    if (!this.uiBlocking && typeof document !== 'undefined' && !document.pointerLockElement) {
-      const request = this.canvasElement?.requestPointerLock?.();
-      request?.catch(() => { /* The browser can refuse lock after Escape or without a user gesture. */ });
-    }
-  };
-
-  public exitPointerLock = (): void => {
-    if (typeof document !== 'undefined' && document.pointerLockElement) {
-      document.exitPointerLock?.();
-    }
-  };
-
-  private handlePointerLockChange = (): void => {
-    this.state.isPointerLocked = document.pointerLockElement === this.canvasElement;
-    this.state.lookDeltaX = 0;
-    this.state.lookDeltaY = 0;
-    this.notify();
-  };
-
-  private handleKeyDown = (e: KeyboardEvent): void => {
-    if (e.repeat || this.isEditable(e.target)) return;
-    if (this.uiBlocking && e.code !== 'KeyM' && e.code !== 'Escape') return;
-    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-    this.updateKey(e.code, true);
-  };
-
-  private handleKeyUp = (e: KeyboardEvent): void => {
-    this.updateKey(e.code, false);
-  };
-
-  private updateKey(code: string, isDown: boolean): void {
-    if (isDown) this.pressedKeys.add(code);
-    else this.pressedKeys.delete(code);
-    switch (code) {
-      case 'KeyW':
-      case 'ArrowUp':
-        this.state.forward = isDown;
-        break;
-      case 'KeyS':
-      case 'ArrowDown':
-        this.state.backward = isDown;
-        break;
-      case 'KeyA':
-      case 'ArrowLeft':
-        this.state.left = isDown;
-        break;
-      case 'KeyD':
-      case 'ArrowRight':
-        this.state.right = isDown;
-        break;
-      case 'Space':
-        this.state.jump = isDown;
-        break;
-      case 'ShiftLeft':
-      case 'ShiftRight':
-        this.state.sprint = isDown;
-        break;
-      case 'KeyE':
-        this.state.interact = isDown;
-        break;
-      case 'KeyM':
-        if (isDown) this.state.map = !this.state.map;
-        break;
-      case 'Escape':
-        this.state.menu = isDown;
-        break;
-    }
-
-    // Keep aliases independent: releasing an arrow must not release a held WASD key.
-    this.state.forward = this.pressedKeys.has('KeyW') || this.pressedKeys.has('ArrowUp');
-    this.state.backward = this.pressedKeys.has('KeyS') || this.pressedKeys.has('ArrowDown');
-    this.state.left = this.pressedKeys.has('KeyA') || this.pressedKeys.has('ArrowLeft');
-    this.state.right = this.pressedKeys.has('KeyD') || this.pressedKeys.has('ArrowRight');
-    this.state.sprint = this.pressedKeys.has('ShiftLeft') || this.pressedKeys.has('ShiftRight');
-
-    // Recompute digital move axis
-    let z = 0;
-    let x = 0;
-    if (this.state.forward) z -= 1;
-    if (this.state.backward) z += 1;
-    if (this.state.left) x -= 1;
-    if (this.state.right) x += 1;
-
-    // Normalize if diagonal
-    if (x !== 0 && z !== 0) {
-      const invLen = 1 / Math.SQRT2;
-      x *= invLen;
-      z *= invLen;
-    }
-
-    this.state.moveX = x;
-    this.state.moveZ = z;
-    this.notify();
-  }
-
-  private handleMouseMove = (e: MouseEvent): void => {
-    if (this.state.isPointerLocked && !this.uiBlocking) {
-      this.state.lookDeltaX += e.movementX;
-      this.state.lookDeltaY += e.movementY;
-    }
-  };
-
-  // Direct injection for mobile touch joystick
-  public setVirtualMovement(moveX: number, moveZ: number): void {
-    if (this.uiBlocking) return;
-    this.state.moveX = moveX;
-    this.state.moveZ = moveZ;
-    this.state.forward = moveZ < -0.15;
-    this.state.backward = moveZ > 0.15;
-    this.state.left = moveX < -0.15;
-    this.state.right = moveX > 0.15;
-    this.notify();
-  }
-
-  public addVirtualLookDelta(dx: number, dy: number): void {
-    if (this.uiBlocking) return;
-    this.state.lookDeltaX += dx;
-    this.state.lookDeltaY += dy;
-  }
-
-  public setVirtualAction(action: 'jump' | 'sprint' | 'interact' | 'map', active: boolean): void {
-    if (this.uiBlocking && action !== 'map') return;
-    if (action === 'map') {
-      if (active) this.state.map = !this.state.map;
-    } else {
-      this.state[action] = active;
-    }
-    this.notify();
-  }
-
-  public subscribe(listener: (s: InputState) => void): () => void {
+  public subscribe(listener: InputListener): () => void {
     this.listeners.add(listener);
-    listener({ ...this.state });
+    listener(this.cloneState());
     return () => this.listeners.delete(listener);
   }
 
   private notify(): void {
-    const snapshot = { ...this.state };
-    this.listeners.forEach((l) => l(snapshot));
+    const snap = this.cloneState();
+    this.listeners.forEach((l) => l({ ...snap }));
   }
 }
 
-export const InputManager = new InputManagerClass();
+export const InputManager = new InputManagerImpl();

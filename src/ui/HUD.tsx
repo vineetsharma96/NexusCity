@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { PerformanceMonitor, PerformanceMetrics } from '../rendering/PerformanceMonitor';
+import { PerformanceMetrics, PerformanceMonitor } from '../rendering/PerformanceMonitor';
 import { InputManager, InputState } from '../player/InputManager';
 import { MobileControls } from './MobileControls';
 import { DialogueBox } from './DialogueBox';
@@ -8,12 +8,13 @@ import { WorldHUDMarkers } from './WorldHUDMarkers';
 import { CityMapModal } from './CityMapModal';
 import { CyberSideMenu } from './CyberSideMenu';
 import { NavigationSystem } from '../map/NavigationSystem';
-import { InteractionSystem, InteractiveEntity } from '../interaction/InteractionSystem';
+import { InteractiveEntity, InteractionSystem } from '../interaction/InteractionSystem';
 import { ChunkManager, ChunkManagerState } from '../world/ChunkManager';
 import { AudioManager } from '../audio/AudioManager';
 import { CinematicManager, CinematicPhase } from '../cinematics/CinematicManager';
 import { VehicleInteractionSystem, VehicleState } from '../vehicle/VehicleInteractionSystem';
 import { DialogueSystem } from '../npc/DialogueSystem';
+import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 
 export interface HUDProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -31,46 +32,51 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     geometries: 0,
     textures: 0,
   });
+  const [timeState, setTimeState] = useState<TimeLightingState>(() => TimeSystem.getInstance().getState());
   const [inputState, setInputState] = useState<InputState>(InputManager.getState());
   const [activeInteractable, setActiveInteractable] = useState<InteractiveEntity | null>(null);
-  const [chunkState, setChunkState] = useState<ChunkManagerState>(() =>
-    ChunkManager.getInstance().getState()
-  );
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [chunkState, setChunkState] = useState<ChunkManagerState>(() => ChunkManager.getInstance().getState());
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [cinematicPhase, setCinematicPhase] = useState<CinematicPhase>(() =>
-    CinematicManager.getInstance().getState().phase
+  const [cinematicPhase, setCinematicPhase] = useState<CinematicPhase>(
+    () => CinematicManager.getInstance().getState().phase
   );
   const [activeToast, setActiveToast] = useState<{ title: string; message: string } | null>(null);
-  const [vehicleState, setVehicleState] = useState<VehicleState>(() => VehicleInteractionSystem.getInstance().getState());
+  const [vehicleState, setVehicleState] = useState<VehicleState>(() =>
+    VehicleInteractionSystem.getInstance().getState()
+  );
   const [isMapOpen, setIsMapOpen] = useState(() => NavigationSystem.getInstance().getState().isMapOpen);
   const [hasDialogue, setHasDialogue] = useState(false);
-  const overlayOpen = isMobileMenuOpen || isMapOpen || hasDialogue;
+
+  const overlayOpen = isMenuOpen || isMapOpen || hasDialogue;
   const overlayOpenRef = useRef(overlayOpen);
   overlayOpenRef.current = overlayOpen;
 
   useEffect(() => {
     InputManager.setUIBlocking(overlayOpen);
   }, [overlayOpen]);
+
   useEffect(() => () => InputManager.setUIBlocking(false), []);
 
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(
-        window.innerWidth < 768 ||
-        'ontouchstart' in window ||
-        navigator.maxTouchPoints > 0
-      );
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window || navigator.maxTouchPoints > 0);
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
 
-    const onOpenMenuEvent = () => {
-      setIsMobileMenuOpen(true);
-    };
-    window.addEventListener('nexus:open-menu', onOpenMenuEvent);
+    const onOpenMenu = () => setIsMenuOpen(true);
+    window.addEventListener('nexus:open-menu', onOpenMenu);
 
     const unsubPerf = PerformanceMonitor.getInstance().subscribe(setMetrics);
+    let lastMinute = '';
+    const unsubTime = TimeSystem.getInstance().subscribe((t) => {
+      if (t.timeString !== lastMinute) {
+        lastMinute = t.timeString;
+        setTimeState(t);
+      }
+    });
+
     let prevMapKey = InputManager.getState().map;
     let prevInteract = false;
 
@@ -81,7 +87,6 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       if (interactPressed && !overlayOpenRef.current) {
         InteractionSystem.getInstance().triggerInteract();
       }
-      // Toggle map on press
       if (state.map !== prevMapKey) {
         prevMapKey = state.map;
         if (!overlayOpenRef.current || NavigationSystem.getInstance().getState().isMapOpen) {
@@ -90,7 +95,6 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       }
     });
 
-    // Audio resume on first user interaction
     const handleUserGesture = () => {
       AudioManager.getInstance().ensureContext();
     };
@@ -101,15 +105,16 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     const unsubChunks = ChunkManager.getInstance().subscribe(setChunkState);
     const unsubCinematic = CinematicManager.getInstance().subscribe((s) => setCinematicPhase(s.phase));
     const unsubVehicle = VehicleInteractionSystem.getInstance().subscribe(setVehicleState);
-    const unsubNavigation = NavigationSystem.getInstance().subscribe((state) => setIsMapOpen(state.isMapOpen));
+    const unsubNavigation = NavigationSystem.getInstance().subscribe((s) => setIsMapOpen(s.isMapOpen));
     const unsubDialogue = DialogueSystem.getInstance().subscribe((node) => setHasDialogue(Boolean(node)));
 
     return () => {
       window.removeEventListener('resize', checkMobile);
-      window.removeEventListener('nexus:open-menu', onOpenMenuEvent);
+      window.removeEventListener('nexus:open-menu', onOpenMenu);
       window.removeEventListener('click', handleUserGesture);
       window.removeEventListener('touchstart', handleUserGesture);
       unsubPerf();
+      unsubTime();
       unsubInput();
       unsubInteract();
       unsubChunks();
@@ -120,36 +125,31 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     };
   }, []);
 
-  // Return to the cinematic vista when the player has been inactive for 30s.
-  // Any keyboard, pointer, touch, or wheel input counts as active control.
   useEffect(() => {
     const enterVista = () => {
       if (!overlayOpenRef.current && CinematicManager.getInstance().getState().phase === 'GAMEPLAY') {
         window.dispatchEvent(new CustomEvent('nexus:vista'));
       }
     };
-    let timeoutId = window.setTimeout(enterVista, 30000);
+    let timeoutId = window.setTimeout(enterVista, 35000);
     const resetIdleTimer = () => {
       window.clearTimeout(timeoutId);
-      timeoutId = window.setTimeout(enterVista, 30000);
+      timeoutId = window.setTimeout(enterVista, 35000);
     };
     const events: Array<keyof WindowEventMap> = ['keydown', 'pointerdown', 'touchstart', 'wheel', 'mousemove'];
-    events.forEach((eventName) => window.addEventListener(eventName, resetIdleTimer, { passive: true }));
+    events.forEach((ev) => window.addEventListener(ev, resetIdleTimer, { passive: true }));
     return () => {
       window.clearTimeout(timeoutId);
-      events.forEach((eventName) => window.removeEventListener(eventName, resetIdleTimer));
+      events.forEach((ev) => window.removeEventListener(ev, resetIdleTimer));
     };
   }, []);
 
-  // Trigger cyber discovery chime on new district detection
   useEffect(() => {
     if (chunkState.recentDiscovery) {
       AudioManager.getInstance().playDiscoveryChime();
     }
   }, [chunkState.recentDiscovery?.name]);
 
-
-  // Listen to interactive object / terminal notifications
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const handleNotification = (event: Event) => {
@@ -157,12 +157,10 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       if (e.detail) {
         clearTimeout(timer);
         setActiveToast({
-          title: e.detail.title || 'SYSTEM TELEMETRY',
+          title: e.detail.title || 'SECTOR TELEMETRY',
           message: e.detail.message || '',
         });
-        timer = setTimeout(() => {
-          setActiveToast(null);
-        }, e.detail.duration ?? 3800);
+        timer = setTimeout(() => setActiveToast(null), e.detail.duration ?? 3800);
       }
     };
     window.addEventListener('nexus:notification', handleNotification as EventListener);
@@ -183,59 +181,113 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
 
   return (
     <>
-      {/* District Discovery Notification Banner */}
+      {/* Top-Left Architectural Sector Readout */}
+      {!overlayOpen && (
+        <div
+          className="glass-panel"
+          style={{
+            position: 'absolute',
+            top: 18,
+            left: 18,
+            zIndex: 35,
+            padding: '10px 16px',
+            borderLeft: `3px solid ${chunkState.currentDistrict.accentColor}`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.66rem',
+              letterSpacing: '0.16em',
+              color: 'var(--neon-amber)',
+              fontWeight: 600,
+            }}
+          >
+            {timeState.timeString} // {timeState.phase}
+          </div>
+          <div
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '0.96rem',
+              fontWeight: 800,
+              letterSpacing: '0.06em',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {chunkState.currentDistrict.name}
+          </div>
+          {vehicleState.mode !== 'ON_FOOT' && (
+            <div
+              style={{
+                marginTop: 4,
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.66rem',
+                color: 'var(--neon-emerald)',
+                letterSpacing: '0.1em',
+              }}
+            >
+              {vehicleState.mode === 'RIDING' ? 'HOVER-COUPE ENGAGED [E TO EXIT]' : 'SHUTTLE LINKED [E TO RELEASE]'}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* District Discovery Banner */}
       {chunkState.recentDiscovery && (
         <div
           className="district-discovery"
           role="status"
           style={{
             position: 'absolute',
-            top: 62,
+            top: 68,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 90,
             pointerEvents: 'none',
-            animation: 'fadeIn 0.4s ease',
+            animation: 'fadeIn 0.35s ease',
           }}
         >
           <div
             className="glass-panel"
             style={{
               padding: '12px 28px',
-              border: `2px solid ${chunkState.recentDiscovery.accentColor}`,
-              boxShadow: `0 0 32px ${chunkState.recentDiscovery.accentColor}`,
+              borderTop: `2px solid ${chunkState.recentDiscovery.accentColor}`,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: 4,
+              gap: 3,
             }}
           >
             <div
               style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: '0.75rem',
+                fontSize: '0.68rem',
                 color: 'var(--neon-amber)',
-                letterSpacing: '2px',
-                fontWeight: 900,
+                letterSpacing: '0.2em',
+                fontWeight: 600,
               }}
             >
-              ★ NEW DISTRICT DISCOVERED ★
+              SECTOR ENTERED
             </div>
             <div
               style={{
                 fontFamily: 'var(--font-display)',
-                fontSize: '1.25rem',
-                color: chunkState.recentDiscovery.accentColor,
-                letterSpacing: '2px',
-                fontWeight: 900,
+                fontSize: '1.2rem',
+                color: 'var(--text-primary)',
+                letterSpacing: '0.08em',
+                fontWeight: 800,
               }}
             >
               {chunkState.recentDiscovery.name}
             </div>
             <div
               style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.78rem',
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.76rem',
                 color: 'var(--text-secondary)',
               }}
             >
@@ -245,85 +297,72 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         </div>
       )}
 
-
-      {/* Visual Overlay Scanlines & Vignette */}
-      <div className="scanlines-overlay" />
+      {/* Subtle Vignette & Precision Reticle */}
       <div className="vignette-overlay" />
       {!overlayOpen && <div className="center-reticle" />}
 
-      {vehicleState.mode !== 'ON_FOOT' && (
-        <div style={{ position: 'absolute', top: 18, left: 18, zIndex: 35, padding: '8px 12px', border: '1px solid #00ffaa', background: 'rgba(3, 8, 20, 0.86)', color: '#00ffaa', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', letterSpacing: 1.2 }}>
-          {vehicleState.mode === 'RIDING' ? 'HOVER VEHICLE // CONTROL LINKED' : 'TRANSIT NODE // LINKED'}
-          <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: '0.62rem' }}>E {vehicleState.mode === 'RIDING' ? 'EXIT' : 'RELEASE'} · SPEED {vehicleState.upgrades.speed ? `LV${vehicleState.upgrades.speed}` : 'STD'} · NEON {vehicleState.upgrades.neon ? `LV${vehicleState.upgrades.neon}` : 'OFF'}</div>
-        </div>
-      )}
-
-      {/* Low-profile performance meter, kept out of the play-space */}
+      {/* Discrete Frame Telemetry */}
       <div
         style={{
           position: 'absolute',
-          right: 14,
-          bottom: isMobile ? 150 : 14,
+          right: 16,
+          bottom: isMobile ? 150 : 16,
           zIndex: 30,
-          padding: '4px 8px',
-          color: metrics.fps >= 50 ? '#00ffaa' : metrics.fps >= 30 ? '#ffaa00' : '#ff6688',
-          background: 'rgba(3, 8, 20, 0.68)',
-          border: '1px solid rgba(0, 240, 255, 0.2)',
-          borderRadius: 3,
+          padding: '4px 9px',
+          color: metrics.fps >= 50 ? 'var(--neon-emerald)' : metrics.fps >= 30 ? 'var(--neon-amber)' : 'var(--neon-magenta)',
+          background: 'rgba(11, 15, 25, 0.72)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 4,
           fontFamily: 'var(--font-mono)',
-          fontSize: '0.68rem',
-          letterSpacing: 1,
+          fontSize: '0.66rem',
+          letterSpacing: '0.08em',
           pointerEvents: 'none',
         }}
       >
-        FPS {metrics.fps}{!isMobile && ` // ${metrics.frameTimeMs}ms`}
+        {metrics.fps} FPS{!isMobile && ` · ${metrics.frameTimeMs}ms`}
       </div>
 
-      {/* Dynamic Contextual Terminal / Object Notification Toast */}
+      {/* Contextual Telemetry Toast */}
       {activeToast && (
         <div
           role="status"
           style={{
             position: 'absolute',
-            bottom: isMobile ? 185 : 160,
+            bottom: isMobile ? 185 : 155,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 42,
             pointerEvents: 'none',
-            animation: 'fadeIn 0.3s ease',
-            width: 'min(90vw, 480px)',
+            animation: 'fadeIn 0.25s ease',
+            width: 'min(90vw, 460px)',
           }}
         >
           <div
             className="glass-panel"
             style={{
               padding: '10px 18px',
-              border: '1.5px solid var(--neon-cyan)',
-              boxShadow: '0 0 24px rgba(0, 240, 255, 0.35)',
+              borderLeft: '3px solid var(--neon-cyan)',
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
               gap: 3,
-              backgroundColor: 'rgba(3, 8, 20, 0.94)',
-              textAlign: 'center',
             }}
           >
             <div
               style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: '0.7rem',
+                fontSize: '0.68rem',
                 color: 'var(--neon-amber)',
-                letterSpacing: '1.5px',
-                fontWeight: 800,
+                letterSpacing: '0.14em',
+                fontWeight: 600,
               }}
             >
-              ◆ {activeToast.title} ◆
+              {activeToast.title}
             </div>
             <div
               style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.74rem',
-                color: '#e2e8f0',
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.78rem',
+                color: 'var(--text-primary)',
                 lineHeight: 1.4,
               }}
             >
@@ -333,42 +372,42 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         </div>
       )}
 
-      {/* Dynamic Contextual Interaction Prompt */}
+      {/* Contextual Interaction Prompt */}
       {activeInteractable && !overlayOpen && (
         <button
           className="interaction-prompt"
           style={{
             position: 'absolute',
-            bottom: isMobile ? 245 : 105,
+            bottom: isMobile ? 245 : 96,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 35,
             pointerEvents: 'auto',
             cursor: 'pointer',
-            maxWidth: '90vw',
+            background: 'none',
+            border: 'none',
           }}
           onClick={() => InteractionSystem.getInstance().triggerInteract()}
         >
           <div
             className="glass-panel"
             style={{
-              padding: isMobile ? '6px 14px' : '8px 20px',
-              border: '1px solid rgba(0, 240, 255, 0.55)',
-              boxShadow: '0 0 22px rgba(0, 240, 255, 0.4)',
+              padding: '8px 18px',
+              border: '1px solid var(--neon-cyan)',
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              gap: 10,
             }}
           >
             <span
               style={{
-                backgroundColor: 'var(--neon-cyan)',
-                color: '#050811',
-                fontWeight: 900,
+                backgroundColor: 'var(--neon-amber)',
+                color: '#07090e',
+                fontWeight: 700,
                 fontFamily: 'var(--font-mono)',
                 padding: '2px 7px',
                 borderRadius: 3,
-                fontSize: isMobile ? '0.75rem' : '0.85rem',
+                fontSize: '0.76rem',
               }}
             >
               {isMobile ? 'TAP' : 'E'}
@@ -376,8 +415,9 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
             <span
               style={{
                 fontFamily: 'var(--font-display)',
-                fontSize: isMobile ? '0.78rem' : '0.85rem',
-                letterSpacing: '1px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
                 color: 'var(--text-primary)',
               }}
             >
@@ -387,85 +427,105 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         </button>
       )}
 
-      {/* Cyberpunk Interactive Dialogue Modal */}
       <DialogueBox />
 
-      {/* Bottom Left: Controls Guide (Desktop Only — Hidden completely on mobile to eliminate clutter) */}
+      {/* Desktop Controls Legend */}
       {!isMobile && !overlayOpen && (
         <div
           className="glass-panel hud-controls-guide"
           style={{
             position: 'absolute',
-            bottom: 20,
-            left: 20,
+            bottom: 18,
+            left: 18,
             zIndex: 30,
-            padding: '10px 16px',
+            padding: '10px 14px',
             display: 'flex',
             flexDirection: 'column',
-            gap: 6,
-            fontSize: '0.78rem',
+            gap: 5,
+            fontSize: '0.72rem',
             fontFamily: 'var(--font-mono)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>CONTROLS GUIDE</span>
+            <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>NAVIGATION</span>
             {!inputState.isPointerLocked ? (
               <button
                 onClick={InputManager.requestPointerLock}
                 className="cyber-btn"
-                style={{ fontSize: '0.7rem', padding: '3px 8px' }}
+                style={{ fontSize: '0.64rem', padding: '2px 7px' }}
               >
-                LOCK MOUSE LOOK
+                LOCK LOOK
               </button>
             ) : (
-              <span style={{ color: '#00ffaa', fontSize: '0.72rem' }}>● MOUSE LOOK ENGAGED (ESC TO EXIT)</span>
+              <span style={{ color: 'var(--neon-emerald)', fontSize: '0.66rem' }}>● MOUSE LOCKED</span>
             )}
           </div>
-          <div style={{ color: 'var(--text-muted)', lineHeight: '1.5' }}>
-            <div><strong style={{ color: 'var(--text-primary)' }}>WASD</strong> move · <strong style={{ color: 'var(--text-primary)' }}>SPACE</strong> jump · <strong style={{ color: 'var(--text-primary)' }}>E</strong> interact</div>
-            <div><strong style={{ color: 'var(--text-primary)' }}>M</strong> map · <strong style={{ color: 'var(--text-primary)' }}>V</strong> vista · <strong style={{ color: 'var(--text-primary)' }}>SHIFT</strong> sprint</div>
+          <div style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            <div>
+              <strong style={{ color: 'var(--text-primary)' }}>WASD</strong> Move ·{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>SPACE</strong> Jump ·{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>E</strong> Interact
+            </div>
+            <div>
+              <strong style={{ color: 'var(--text-primary)' }}>M</strong> Atlas ·{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>V</strong> Vista ·{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>SHIFT</strong> Sprint
+            </div>
           </div>
         </div>
       )}
 
-      {/* Floating 3D World Landmark / Objective HUD Markers */}
       {!overlayOpen && <WorldHUDMarkers playerPosRef={playerPosRef} />}
 
-      {/* Fullscreen Holographic Vector Map Modal */}
       <CityMapModal playerPosRef={playerPosRef} />
 
-      {/* Compact world-control side menu */}
-      <CyberSideMenu
-        isOpen={isMobileMenuOpen}
-        onClose={() => setIsMobileMenuOpen(false)}
-      />
+      <CyberSideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
 
-      {/* Single universal menu control, kept at the bottom on every device */}
-      {!overlayOpen && <button
-        className="cyber-btn"
-        aria-label="Open world menu"
-        onClick={() => {
-          setIsMobileMenuOpen(true);
-          AudioManager.getInstance().playUI('click');
-        }}
-        style={{
-          position: 'fixed',
-          left: '50%',
-          bottom: 'max(16px, env(safe-area-inset-bottom))',
-          transform: 'translateX(-50%)',
-          zIndex: 60,
-          minWidth: 92,
-          padding: '9px 16px',
-          color: 'var(--neon-cyan)',
-          borderColor: 'var(--neon-cyan)',
-          background: 'rgba(3, 8, 20, 0.9)',
-          boxShadow: '0 0 14px rgba(0, 240, 255, 0.28)',
-        }}
-      >
-        MENU
-      </button>}
+      {/* Bottom Console Trigger */}
+      {!overlayOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            left: '50%',
+            bottom: 'max(16px, env(safe-area-inset-bottom))',
+            transform: 'translateX(-50%)',
+            zIndex: 60,
+            display: 'flex',
+            gap: 8,
+          }}
+        >
+          <button
+            className="cyber-btn"
+            aria-label="Open world menu"
+            onClick={() => {
+              setIsMenuOpen(true);
+              AudioManager.getInstance().playUI('open');
+            }}
+            style={{
+              minWidth: 96,
+              padding: '8px 16px',
+              background: 'rgba(11, 15, 25, 0.9)',
+            }}
+          >
+            CONSOLE
+          </button>
+          <button
+            className="cyber-btn cyber-btn-primary"
+            aria-label="Open metropolitan atlas"
+            onClick={() => {
+              NavigationSystem.getInstance().setMapOpen(true);
+              AudioManager.getInstance().playUI('open');
+            }}
+            style={{
+              minWidth: 96,
+              padding: '8px 16px',
+            }}
+          >
+            ATLAS [M]
+          </button>
+        </div>
+      )}
 
-      {/* Mobile Touch Controller Layer */}
       <MobileControls disabled={overlayOpen} />
     </>
   );

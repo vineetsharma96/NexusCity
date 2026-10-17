@@ -1,254 +1,82 @@
-import React, { useEffect, useState } from 'react';
+import React, { useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { TrafficLightSystem, IntersectionSignalState, SignalColor } from './TrafficLightSystem';
+import { TrafficLightSystem } from './TrafficLightSystem';
 
 interface TrafficLightGantryProps {
-  position: [number, number, number];
+  position?: [number, number, number];
 }
 
-export const TrafficLightGantry: React.FC<TrafficLightGantryProps> = ({ position }) => {
-  const [signalState, setSignalState] = useState<IntersectionSignalState>(() =>
-    TrafficLightSystem.getInstance().getState()
-  );
+const CROSSWALKS = [
+  { pos: [0, 0.04, -14] as [number, number, number], rot: 0 },
+  { pos: [0, 0.04, 14] as [number, number, number], rot: 0 },
+  { pos: [14, 0.04, 0] as [number, number, number], rot: Math.PI / 2 },
+  { pos: [-14, 0.04, 0] as [number, number, number], rot: Math.PI / 2 },
+];
 
-  useEffect(() => {
-    return TrafficLightSystem.getInstance().subscribe(setSignalState);
-  }, []);
+export const TrafficLightGantry: React.FC<TrafficLightGantryProps> = ({ position = [0, 0, 0] }) => {
+  const nsMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const ewMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const system = TrafficLightSystem.getInstance();
 
   useFrame((_, delta) => {
-    // Drive the cycle update
-    TrafficLightSystem.getInstance().update(delta);
+    system.update(delta);
+    const st = system.getState();
+
+    const getColor = (sig: 'GREEN' | 'YELLOW' | 'RED') =>
+      sig === 'GREEN' ? '#10b981' : sig === 'YELLOW' ? '#f59e0b' : '#f43f5e';
+
+    if (nsMatRef.current) nsMatRef.current.color.set(getColor(st.nsSignal));
+    if (ewMatRef.current) ewMatRef.current.color.set(getColor(st.ewSignal));
   });
 
-  const getLensColor = (lightType: 'RED' | 'AMBER' | 'GREEN', activeColor: SignalColor) => {
-    if (lightType === activeColor) {
-      if (lightType === 'RED') return '#ff1133';
-      if (lightType === 'AMBER') return '#ffaa00';
-      if (lightType === 'GREEN') return '#00ff66';
-    }
-    // Inactive dim glass
-    if (lightType === 'RED') return '#3a080e';
-    if (lightType === 'AMBER') return '#3a2408';
-    return '#083318';
-  };
-
-  const nsActive = signalState.northSouth;
-  const ewActive = signalState.eastWest;
+  const gantries = [
+    { pos: [0, 0, -14] as [number, number, number], rot: 0, isNS: true },
+    { pos: [0, 0, 14] as [number, number, number], rot: Math.PI, isNS: true },
+    { pos: [-14, 0, 0] as [number, number, number], rot: Math.PI / 2, isNS: false },
+    { pos: [14, 0, 0] as [number, number, number], rot: -Math.PI / 2, isNS: false },
+  ];
 
   return (
-    <group position={position}>
-      {/* 1. North-South Gantry Overhead Mast (Over Z-axis Road) */}
-      <group position={[7.5, 0, 16]}>
-        {/* Vertical Steel Column */}
-        <mesh position={[0, 4.2, 0]} castShadow>
-          <cylinderGeometry args={[0.22, 0.28, 8.4, 8]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.3} />
-        </mesh>
-        {/* Cantilever Horizontal Arm over roadway */}
-        <mesh position={[-5.5, 8.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.16, 0.2, 11, 8]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.3} />
-        </mesh>
-
-        {/* Traffic Signal Head (Facing North-bound traffic, -Z direction) */}
-        <group position={[-5.5, 7.6, 0.3]} rotation={[0, Math.PI, 0]}>
-          {/* Signal Housing Box */}
-          <mesh castShadow>
-            <boxGeometry args={[0.7, 2.2, 0.4]} />
-            <meshStandardMaterial color="#030712" metalness={0.8} />
+    <group position={position} name="IntersectionGantriesAndCrosswalks">
+      {gantries.map((g, idx) => (
+        <group key={idx} position={g.pos} rotation={[0, g.rot, 0]}>
+          <mesh position={[-7.8, 3.4, 0]} castShadow>
+            <cylinderGeometry args={[0.14, 0.18, 6.8, 8]} />
+            <meshStandardMaterial color="#0b0f19" metalness={0.9} roughness={0.25} />
           </mesh>
-          {/* Top Visor Hood */}
-          <mesh position={[0, 1.15, 0.2]}>
-            <boxGeometry args={[0.72, 0.1, 0.35]} />
-            <meshStandardMaterial color="#030712" />
+          <mesh position={[7.8, 3.4, 0]} castShadow>
+            <cylinderGeometry args={[0.14, 0.18, 6.8, 8]} />
+            <meshStandardMaterial color="#0b0f19" metalness={0.9} roughness={0.25} />
           </mesh>
-
-          {/* Red Lens */}
-          <mesh position={[0, 0.65, 0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('RED', nsActive)}
-              emissive={getLensColor('RED', nsActive)}
-              emissiveIntensity={nsActive === 'RED' ? 2.5 : 0.05}
-              roughness={0.2}
-            />
+          <mesh position={[0, 6.6, 0]} castShadow>
+            <boxGeometry args={[16.0, 0.28, 0.28]} />
+            <meshStandardMaterial color="#111827" metalness={0.88} roughness={0.25} />
           </mesh>
-          {/* Amber Lens */}
-          <mesh position={[0, 0, 0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('AMBER', nsActive)}
-              emissive={getLensColor('AMBER', nsActive)}
-              emissiveIntensity={nsActive === 'AMBER' ? 2.5 : 0.05}
-              roughness={0.2}
-            />
-          </mesh>
-          {/* Green Lens */}
-          <mesh position={[0, -0.65, 0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('GREEN', nsActive)}
-              emissive={getLensColor('GREEN', nsActive)}
-              emissiveIntensity={nsActive === 'GREEN' ? 2.5 : 0.05}
-              roughness={0.2}
-            />
+          <mesh position={[0, 6.45, 0.18]}>
+            <boxGeometry args={[3.6, 0.22, 0.08]} />
+            <meshBasicMaterial ref={g.isNS ? (idx === 0 ? nsMatRef : undefined) : idx === 2 ? ewMatRef : undefined} color={g.isNS ? '#10b981' : '#f43f5e'} />
           </mesh>
         </group>
+      ))}
 
-        {/* Pedestrian Crossing Signal Post on Sidewalk */}
-        <group position={[0, 2.8, 0]}>
-          <mesh position={[0, 0, 0.4]}>
-            <boxGeometry args={[0.45, 0.9, 0.35]} />
-            <meshStandardMaterial color="#030712" />
+      {CROSSWALKS.map((cw, idx) => (
+        <group key={`cw-${idx}`} position={cw.pos} rotation={[0, cw.rot, 0]}>
+          <mesh position={[0, 0.01, 2.0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[12.8, 0.35]} />
+            <meshBasicMaterial color="#f59e0b" />
           </mesh>
-          {/* Pedestrian Symbol */}
-          <mesh position={[0, 0, 0.58]}>
-            <planeGeometry args={[0.35, 0.7]} />
-            <meshBasicMaterial
-              color={signalState.pedestrianNorthSouth === 'WALK' ? '#00ffaa' : '#ff2244'}
-            />
-          </mesh>
+          {Array.from({ length: 9 }).map((_, sIdx) => {
+            const x = -5.6 + sIdx * 1.4;
+            return (
+              <mesh key={sIdx} position={[x, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[0.68, 3.0]} />
+                <meshStandardMaterial color="#cbd5e1" emissive="#38bdf8" emissiveIntensity={0.12} roughness={0.4} />
+              </mesh>
+            );
+          })}
         </group>
-      </group>
-
-      {/* 2. Opposite North-South Gantry Mast (Facing South-bound traffic, +Z direction) */}
-      <group position={[-7.5, 0, -16]}>
-        <mesh position={[0, 4.2, 0]} castShadow>
-          <cylinderGeometry args={[0.22, 0.28, 8.4, 8]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.3} />
-        </mesh>
-        <mesh position={[5.5, 8.2, 0]} rotation={[0, 0, -Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.16, 0.2, 11, 8]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.3} />
-        </mesh>
-
-        <group position={[5.5, 7.6, -0.3]}>
-          <mesh castShadow>
-            <boxGeometry args={[0.7, 2.2, 0.4]} />
-            <meshStandardMaterial color="#030712" metalness={0.8} />
-          </mesh>
-          {/* Red Lens */}
-          <mesh position={[0, 0.65, -0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('RED', nsActive)}
-              emissive={getLensColor('RED', nsActive)}
-              emissiveIntensity={nsActive === 'RED' ? 2.5 : 0.05}
-            />
-          </mesh>
-          {/* Amber Lens */}
-          <mesh position={[0, 0, -0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('AMBER', nsActive)}
-              emissive={getLensColor('AMBER', nsActive)}
-              emissiveIntensity={nsActive === 'AMBER' ? 2.5 : 0.05}
-            />
-          </mesh>
-          {/* Green Lens */}
-          <mesh position={[0, -0.65, -0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('GREEN', nsActive)}
-              emissive={getLensColor('GREEN', nsActive)}
-              emissiveIntensity={nsActive === 'GREEN' ? 2.5 : 0.05}
-            />
-          </mesh>
-        </group>
-      </group>
-
-      {/* 3. East-West Gantry Mast (Over X-axis Road) */}
-      <group position={[16, 0, -7.5]}>
-        <mesh position={[0, 4.2, 0]} castShadow>
-          <cylinderGeometry args={[0.22, 0.28, 8.4, 8]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.3} />
-        </mesh>
-        <mesh position={[0, 8.2, 5.5]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <cylinderGeometry args={[0.16, 0.2, 11, 8]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.3} />
-        </mesh>
-
-        <group position={[0.3, 7.6, 5.5]} rotation={[0, -Math.PI / 2, 0]}>
-          <mesh castShadow>
-            <boxGeometry args={[0.7, 2.2, 0.4]} />
-            <meshStandardMaterial color="#030712" metalness={0.8} />
-          </mesh>
-          {/* Red Lens */}
-          <mesh position={[0, 0.65, 0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('RED', ewActive)}
-              emissive={getLensColor('RED', ewActive)}
-              emissiveIntensity={ewActive === 'RED' ? 2.5 : 0.05}
-            />
-          </mesh>
-          {/* Amber Lens */}
-          <mesh position={[0, 0, 0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('AMBER', ewActive)}
-              emissive={getLensColor('AMBER', ewActive)}
-              emissiveIntensity={ewActive === 'AMBER' ? 2.5 : 0.05}
-            />
-          </mesh>
-          {/* Green Lens */}
-          <mesh position={[0, -0.65, 0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('GREEN', ewActive)}
-              emissive={getLensColor('GREEN', ewActive)}
-              emissiveIntensity={ewActive === 'GREEN' ? 2.5 : 0.05}
-            />
-          </mesh>
-        </group>
-      </group>
-
-      {/* 4. Opposite East-West Gantry Mast (Facing West-bound traffic) */}
-      <group position={[-16, 0, 7.5]}>
-        <mesh position={[0, 4.2, 0]} castShadow>
-          <cylinderGeometry args={[0.22, 0.28, 8.4, 8]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.3} />
-        </mesh>
-        <mesh position={[0, 8.2, -5.5]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <cylinderGeometry args={[0.16, 0.2, 11, 8]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.3} />
-        </mesh>
-
-        <group position={[-0.3, 7.6, -5.5]} rotation={[0, Math.PI / 2, 0]}>
-          <mesh castShadow>
-            <boxGeometry args={[0.7, 2.2, 0.4]} />
-            <meshStandardMaterial color="#030712" metalness={0.8} />
-          </mesh>
-          {/* Red Lens */}
-          <mesh position={[0, 0.65, 0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('RED', ewActive)}
-              emissive={getLensColor('RED', ewActive)}
-              emissiveIntensity={ewActive === 'RED' ? 2.5 : 0.05}
-            />
-          </mesh>
-          {/* Amber Lens */}
-          <mesh position={[0, 0, 0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('AMBER', ewActive)}
-              emissive={getLensColor('AMBER', ewActive)}
-              emissiveIntensity={ewActive === 'AMBER' ? 2.5 : 0.05}
-            />
-          </mesh>
-          {/* Green Lens */}
-          <mesh position={[0, -0.65, 0.18]}>
-            <sphereGeometry args={[0.24, 16, 16]} />
-            <meshStandardMaterial
-              color={getLensColor('GREEN', ewActive)}
-              emissive={getLensColor('GREEN', ewActive)}
-              emissiveIntensity={ewActive === 'GREEN' ? 2.5 : 0.05}
-            />
-          </mesh>
-        </group>
-      </group>
+      ))}
     </group>
   );
 };

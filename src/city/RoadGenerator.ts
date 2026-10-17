@@ -1,115 +1,78 @@
 import * as THREE from 'three';
 
-export interface RoadSegment {
-  id: string;
-  start: THREE.Vector2;
-  end: THREE.Vector2;
-  width: number;
-}
-
-export interface SidewalkSegment {
-  box: THREE.Box3;
-}
-
 export class RoadGenerator {
   private static asphaltTexture: THREE.CanvasTexture | null = null;
   private static sidewalkTexture: THREE.CanvasTexture | null = null;
 
-  /**
-   * Generates a procedural asphalt texture with painted highway stripes and wet road specularity.
-   */
   public static getAsphaltTexture(): THREE.CanvasTexture {
     if (this.asphaltTexture) return this.asphaltTexture;
 
-    const size = 512;
     const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = 512;
+    canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
 
-    // Dark asphalt base
-    ctx.fillStyle = '#0a0d14';
-    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(0, 0, 512, 512);
 
-    // Micro-gravel aggregate noise
-    const imgData = ctx.getImageData(0, 0, size, size);
-    const data = imgData.data;
-    for (let i = 0; i < data.length; i += 4) {
-      const n = (Math.random() - 0.5) * 16;
-      data[i] = Math.max(0, Math.min(255, data[i] + n));
-      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + n));
-      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + n));
-    }
-    ctx.putImageData(imgData, 0, 0);
-
-    // Subtle tire wear streaks
-    ctx.fillStyle = 'rgba(5, 7, 10, 0.4)';
-    ctx.fillRect(size * 0.15, 0, size * 0.2, size);
-    ctx.fillRect(size * 0.65, 0, size * 0.2, size);
-
-    // Center divider dash lines (glowing cyber amber)
-    ctx.fillStyle = '#ffaa00';
-    ctx.shadowColor = '#ffaa00';
-    ctx.shadowBlur = 6;
-    const dashH = 40;
-    const gapH = 24;
-    for (let y = 0; y < size; y += dashH + gapH) {
-      ctx.fillRect(size / 2 - 2, y, 4, dashH);
+    // Subtle aggregate texture
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+    for (let i = 0; i < 900; i++) {
+      ctx.fillRect((i * 73) % 512, (i * 139) % 512, 2, 2);
     }
 
-    // Outer lane boundary stripes (cyan neon)
-    ctx.fillStyle = '#00f0ff';
-    ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = 4;
-    ctx.fillRect(16, 0, 3, size);
-    ctx.fillRect(size - 19, 0, 3, size);
+    // Curbside ice-cyan edge guides
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(10, 0, 3, 512);
+    ctx.fillRect(499, 0, 3, 512);
 
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(1, 8);
-    this.asphaltTexture = texture;
-    return texture;
+    // Solar-amber dual center divider
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(251, 0, 3, 512);
+    ctx.fillRect(258, 0, 3, 512);
+
+    // Dashed lane markers
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.45)';
+    for (let y = 16; y < 512; y += 64) {
+      ctx.fillRect(128, y, 3, 32);
+      ctx.fillRect(381, y, 3, 32);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 16);
+    this.asphaltTexture = tex;
+    return tex;
   }
 
-  /**
-   * Generates a sleek concrete sidewalk slab texture.
-   */
   public static getSidewalkTexture(): THREE.CanvasTexture {
     if (this.sidewalkTexture) return this.sidewalkTexture;
 
-    const size = 256;
     const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = 256;
+    canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
 
-    // Concrete pavement
-    ctx.fillStyle = '#182032';
-    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(0, 0, 256, 256);
 
-    // Panel slab joints
-    ctx.strokeStyle = '#0d1320';
-    ctx.lineWidth = 3;
-    const step = 64;
-    for (let x = 0; x <= size; x += step) {
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 256; i += 32) {
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, size);
-      ctx.stroke();
-    }
-    for (let y = 0; y <= size; y += step) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(size, y);
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, 256);
+      ctx.moveTo(0, i);
+      ctx.lineTo(256, i);
       ctx.stroke();
     }
 
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(4, 4);
-    this.sidewalkTexture = texture;
-    return texture;
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(6, 6);
+    this.sidewalkTexture = tex;
+    return tex;
   }
 }

@@ -6,7 +6,7 @@ export interface CinematicState {
   phase: CinematicPhase;
   caption: string;
   subcaption: string;
-  progress: number; // 0.0 to 1.0 within phase
+  progress: number;
   canSkip: boolean;
 }
 
@@ -22,59 +22,54 @@ interface Waypoint {
 
 export class CinematicManager {
   private static instance: CinematicManager;
-
   private phase: CinematicPhase = 'LOADING';
-  private timer: number = 0;
-  private totalDuration: number = 12.5; // seconds for cinematic intro
+  private timer = 0;
+  private readonly totalDuration = 11.5;
 
-  // Transition to player variables
-  private transitionTimer: number = 0;
-  private transitionDuration: number = 2.2;
-  private startTransitionCamPos: THREE.Vector3 = new THREE.Vector3();
-  private startTransitionLookAt: THREE.Vector3 = new THREE.Vector3();
+  private transitionTimer = 0;
+  private readonly transitionDuration = 2.0;
+  private startTransitionCamPos = new THREE.Vector3();
+  private startTransitionLookAt = new THREE.Vector3();
 
-  // Vista drone tour variables
-  private vistaCenter: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
-  private vistaAngle: number = 0;
-  private vistaRadius: number = 36;
-  private vistaHeight: number = 18;
+  private vistaCenter = new THREE.Vector3(0, 0, 0);
+  private vistaAngle = 0;
+  private readonly vistaRadius = 38;
+  private readonly vistaHeight = 20;
 
-  private currentCamPos: THREE.Vector3 = new THREE.Vector3(0, 240, 280);
-  private currentLookAt: THREE.Vector3 = new THREE.Vector3(0, 30, 0);
+  private currentCamPos = new THREE.Vector3(0, 220, 260);
+  private currentLookAt = new THREE.Vector3(0, 28, 0);
+  private currentCaption = 'NEXUS // ARCHITECTURAL METROPOLIS';
+  private currentSubcaption = 'INITIALIZING SPATIAL TELEMETRY';
+  private listeners = new Set<CinematicListener>();
 
-  private currentCaption: string = 'NEXUS METROPOLIS';
-  private currentSubcaption: string = 'INITIALIZING SYSTEM OVERVIEW';
-
-  private listeners: Set<CinematicListener> = new Set();
-
-  private waypoints: Waypoint[] = [
+  private readonly waypoints: Waypoint[] = [
     {
       time: 0.0,
-      camPos: new THREE.Vector3(0, 240, 280),
-      lookAt: new THREE.Vector3(0, 30, 0),
-      caption: 'NEXUS CITY // SECTOR 01: CENTRAL PLAZA',
-      subcaption: 'POPULATION: 5.8M ENHANCED CITIZENS • 3KM METROPOLITAN GRID',
+      camPos: new THREE.Vector3(0, 220, 260),
+      lookAt: new THREE.Vector3(0, 28, 0),
+      caption: 'SECTOR 01 // CENTRAL CIVIC AXIS',
+      subcaption: '3KM PROCEDURAL METROPOLITAN GRID • SEED #847291',
     },
     {
-      time: 3.8,
-      camPos: new THREE.Vector3(-110, 110, 80),
-      lookAt: new THREE.Vector3(30, 50, -30),
-      caption: 'SKYWAY COMMUTER ARTERY // SKY DISTRICT',
-      subcaption: 'HIGH-ALTITUDE TRANSIT CORRIDORS & DYNAMIC VIDEO MATRICES',
+      time: 3.6,
+      camPos: new THREE.Vector3(-105, 98, 76),
+      lookAt: new THREE.Vector3(28, 46, -28),
+      caption: 'ELEVATED TRANSIT & MONOLITH SPIRES',
+      subcaption: 'REAL-TIME DIURNAL ILLUMINATION & REGIONAL BIOMES',
     },
     {
-      time: 7.5,
-      camPos: new THREE.Vector3(50, 22, 50),
+      time: 7.2,
+      camPos: new THREE.Vector3(48, 22, 48),
       lookAt: new THREE.Vector3(75, 4, 75),
-      caption: 'CENTRAL SANCTUARY // BIOLUMINESCENT POND',
-      subcaption: 'REFLECTIVE WATER OASIS, ARCHING FOOTBRIDGE & FLORA',
+      caption: 'BIOSPHERE SANCTUARY // REFLECTIVE BASIN',
+      subcaption: 'HYDROLOGICAL CAUSTICS, BOTANICAL FLORA & FOOTBRIDGE',
     },
     {
-      time: 10.5,
-      camPos: new THREE.Vector3(0, 55, 35),
+      time: 9.8,
+      camPos: new THREE.Vector3(0, 48, 34),
       lookAt: new THREE.Vector3(0, 1.45, 10),
-      caption: 'NEURAL LINK SYNCHRONIZED',
-      subcaption: 'TRANSFERRING CONTROL TO GROUND OPERATIVE',
+      caption: 'GROUND TELEMETRY SYNCHRONIZED',
+      subcaption: 'TRANSFERRING DIRECT OPERATIVE CONTROL',
     },
   ];
 
@@ -103,8 +98,8 @@ export class CinematicManager {
 
   public triggerVista(
     centerPos: THREE.Vector3,
-    caption: string = 'CINEMATIC DRONE VISTA // RECONNAISSANCE',
-    subcaption: string = 'SWEEPING AERIAL DRONE OVERVIEW • PRESS [V] OR MOVE TO RESUME CONTROL'
+    caption: string = 'AERIAL ORBIT // SECTOR RECONNAISSANCE',
+    subcaption: string = 'PRESS [V] OR INPUT MOVEMENT TO RESUME GROUND CONTROL'
   ): void {
     if (this.phase !== 'GAMEPLAY') return;
     this.phase = 'VISTA_MODE';
@@ -122,11 +117,8 @@ export class CinematicManager {
   }
 
   public toggleVista(centerPos: THREE.Vector3, caption?: string, subcaption?: string): void {
-    if (this.phase === 'VISTA_MODE') {
-      this.exitVista();
-    } else if (this.phase === 'GAMEPLAY') {
-      this.triggerVista(centerPos, caption, subcaption);
-    }
+    if (this.phase === 'VISTA_MODE') this.exitVista();
+    else if (this.phase === 'GAMEPLAY') this.triggerVista(centerPos, caption, subcaption);
   }
 
   private beginTransitionToPlayer(): void {
@@ -134,8 +126,8 @@ export class CinematicManager {
     this.transitionTimer = 0;
     this.startTransitionCamPos.copy(this.currentCamPos);
     this.startTransitionLookAt.copy(this.currentLookAt);
-    this.currentCaption = 'TRANSFERRING NEURAL CONTROL';
-    this.currentSubcaption = 'ALIGNING VISUAL CORTEX...';
+    this.currentCaption = 'TRANSFERRING FIELD CONTROL';
+    this.currentSubcaption = 'LOCKING THIRD-PERSON CAMERA RIG';
     this.notify();
   }
 
@@ -145,45 +137,39 @@ export class CinematicManager {
     outCamPos: THREE.Vector3,
     outLookAt: THREE.Vector3
   ): boolean {
-    delta = Math.min(Math.max(delta, 0), 0.1);
-    if (this.phase === 'GAMEPLAY') {
-      return false; // PlayerCamera handles everything
-    }
+    const dt = Math.min(Math.max(delta, 0), 0.1);
+    if (this.phase === 'GAMEPLAY') return false;
 
     if (this.phase === 'LOADING') {
-      // Hold high overview camera during loading screen
-      this.currentCamPos.set(0, 240, 280);
-      this.currentLookAt.set(0, 30, 0);
+      this.currentCamPos.set(0, 220, 260);
+      this.currentLookAt.set(0, 28, 0);
       outCamPos.copy(this.currentCamPos);
       outLookAt.copy(this.currentLookAt);
       return true;
     }
 
     if (this.phase === 'VISTA_MODE') {
-      this.vistaAngle += delta * 0.22;
-      const targetLookAt = this.vistaCenter.clone().add(new THREE.Vector3(0, 3.5, 0));
+      this.vistaAngle += dt * 0.22;
+      const targetLookAt = this.vistaCenter.clone().add(new THREE.Vector3(0, 3.2, 0));
       const targetCamPos = new THREE.Vector3(
         this.vistaCenter.x + Math.cos(this.vistaAngle) * this.vistaRadius,
         this.vistaCenter.y + this.vistaHeight,
         this.vistaCenter.z + Math.sin(this.vistaAngle) * this.vistaRadius
       );
-
-      this.currentCamPos.lerp(targetCamPos, delta * 2.2);
-      this.currentLookAt.lerp(targetLookAt, delta * 3.0);
-
+      this.currentCamPos.lerp(targetCamPos, dt * 2.4);
+      this.currentLookAt.lerp(targetLookAt, dt * 3.0);
       outCamPos.copy(this.currentCamPos);
       outLookAt.copy(this.currentLookAt);
       return true;
     }
 
     if (this.phase === 'CINEMATIC_INTRO') {
-      this.timer += delta;
+      this.timer += dt;
       if (this.timer >= this.totalDuration) {
         this.beginTransitionToPlayer();
         return true;
       }
 
-      // Interpolate through waypoints
       let wIndex = 0;
       for (let i = 0; i < this.waypoints.length - 1; i++) {
         if (this.timer >= this.waypoints[i].time && this.timer < this.waypoints[i + 1].time) {
@@ -198,11 +184,7 @@ export class CinematicManager {
       if (wIndex < this.waypoints.length - 1) {
         const w0 = this.waypoints[wIndex];
         const w1 = this.waypoints[wIndex + 1];
-        const segDuration = w1.time - w0.time;
-        const rawT = (this.timer - w0.time) / segDuration;
-        // Smooth Hermite ease
-        const t = THREE.MathUtils.smoothstep(rawT, 0, 1);
-
+        const t = THREE.MathUtils.smoothstep((this.timer - w0.time) / (w1.time - w0.time), 0, 1);
         this.currentCamPos.lerpVectors(w0.camPos, w1.camPos, t);
         this.currentLookAt.lerpVectors(w0.lookAt, w1.lookAt, t);
         this.currentCaption = w0.caption;
@@ -222,20 +204,15 @@ export class CinematicManager {
     }
 
     if (this.phase === 'TRANSITION_TO_PLAYER') {
-      this.transitionTimer += delta;
+      this.transitionTimer += dt;
       const progress = Math.min(1.0, this.transitionTimer / this.transitionDuration);
-      // Smooth quintic ease-in-out curve
-      const t = progress < 0.5
-        ? 16 * progress * progress * progress * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 5) / 2;
+      const t = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 
-      // Target camera pose behind player
-      const idealPlayerCamPos = targetPlayerPos.clone().add(new THREE.Vector3(0, 3.2, 7.5));
-      const idealPlayerLookAt = targetPlayerPos.clone().add(new THREE.Vector3(0, 1.45, 0));
+      const idealCamPos = targetPlayerPos.clone().add(new THREE.Vector3(0, 3.2, 7.5));
+      const idealLookAt = targetPlayerPos.clone().add(new THREE.Vector3(0, 1.45, 0));
 
-      this.currentCamPos.lerpVectors(this.startTransitionCamPos, idealPlayerCamPos, t);
-      this.currentLookAt.lerpVectors(this.startTransitionLookAt, idealPlayerLookAt, t);
-
+      this.currentCamPos.lerpVectors(this.startTransitionCamPos, idealCamPos, t);
+      this.currentLookAt.lerpVectors(this.startTransitionLookAt, idealLookAt, t);
       outCamPos.copy(this.currentCamPos);
       outLookAt.copy(this.currentLookAt);
 
@@ -243,7 +220,6 @@ export class CinematicManager {
         this.phase = 'GAMEPLAY';
         this.notify();
       }
-
       return true;
     }
 
@@ -255,11 +231,12 @@ export class CinematicManager {
       phase: this.phase,
       caption: this.currentCaption,
       subcaption: this.currentSubcaption,
-      progress: this.phase === 'CINEMATIC_INTRO'
-        ? this.timer / this.totalDuration
-        : this.phase === 'TRANSITION_TO_PLAYER'
-        ? this.transitionTimer / this.transitionDuration
-        : 1.0,
+      progress:
+        this.phase === 'CINEMATIC_INTRO'
+          ? this.timer / this.totalDuration
+          : this.phase === 'TRANSITION_TO_PLAYER'
+          ? this.transitionTimer / this.transitionDuration
+          : 1.0,
       canSkip: this.phase === 'CINEMATIC_INTRO' || this.phase === 'LOADING' || this.phase === 'VISTA_MODE',
     };
   }

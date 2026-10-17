@@ -1,153 +1,312 @@
 import * as THREE from 'three';
 import { SeedRandom } from '../core/SeedRandom';
-import { BuildingGenerator, BuildingDef } from './BuildingGenerator';
-import { KinematicCollisionSolver } from '../player/KinematicCollision';
+import { KinematicCollisionSolver, CollisionBox } from '../player/KinematicCollision';
+
+export interface BuildingTier {
+  offset: THREE.Vector3;
+  size: THREE.Vector3;
+}
+
+export interface RooftopProp {
+  type: 'ANTENNA' | 'HVAC' | 'COOLING_TOWER' | 'DISH' | 'HELIPAD' | 'SOLAR_ARRAY';
+  position: THREE.Vector3;
+  size: THREE.Vector3;
+}
+
+export interface LightStrip {
+  position: THREE.Vector3;
+  size: THREE.Vector3;
+  color: string;
+}
+
+export interface BuildingDef {
+  id: string;
+  name: string;
+  position: THREE.Vector3;
+  totalSize: THREE.Vector3;
+  tiers: BuildingTier[];
+  rooftopEquipment: RooftopProp[];
+  lightStrips: LightStrip[];
+  storefrontColor: string;
+  collisionBounds: CollisionBox[];
+}
 
 export interface StreetLightDef {
   position: THREE.Vector3;
   rotationY: number;
 }
 
+export interface RoadSegmentDef {
+  position: THREE.Vector3;
+  size: THREE.Vector3;
+  rotationY: number;
+}
+
+export interface SkybridgeDef {
+  id: string;
+  position: THREE.Vector3;
+  size: THREE.Vector3;
+  rotationY: number;
+  accentColor: string;
+}
+
+export interface CentralStreetPropDef {
+  id: string;
+  type: 'TRANSIT_SHELTER' | 'CYBER_KIOSK' | 'BENCH' | 'BOLLARD_CLUSTER' | 'STEAM_GRATE';
+  position: THREE.Vector3;
+  rotationY: number;
+  accentColor: string;
+}
+
 export interface CityData {
   buildings: BuildingDef[];
   streetlights: StreetLightDef[];
-  avenues: { position: THREE.Vector3; size: THREE.Vector3; rotationY: number }[];
+  avenues: RoadSegmentDef[];
   sidewalks: { position: THREE.Vector3; size: THREE.Vector3 }[];
+  skybridges: SkybridgeDef[];
+  streetProps: CentralStreetPropDef[];
 }
 
 export class CityGenerator {
   public static generateDistrict(seed: number = 847291): CityData {
     const rng = new SeedRandom(seed);
-    const buildings: BuildingDef[] = [];
-    const streetlights: StreetLightDef[] = [];
-    const avenues: { position: THREE.Vector3; size: THREE.Vector3; rotationY: number }[] = [];
-    const sidewalks: { position: THREE.Vector3; size: THREE.Vector3 }[] = [];
-
-    // Clear prior collision data
     KinematicCollisionSolver.clear();
 
-    // 1. Road Avenues (North-South Main Blvd & East-West Cross Blvd)
-    // Main North-South Boulevard (20m wide, 900m long)
+    const buildings: BuildingDef[] = [];
+    const streetlights: StreetLightDef[] = [];
+    const avenues: RoadSegmentDef[] = [];
+    const sidewalks: { position: THREE.Vector3; size: THREE.Vector3 }[] = [];
+    const skybridges: SkybridgeDef[] = [];
+    const streetProps: CentralStreetPropDef[] = [];
+
+    // Primary Arterial Avenues
     avenues.push({
       position: new THREE.Vector3(0, 0.02, 0),
-      size: new THREE.Vector3(20, 0.05, 900),
+      size: new THREE.Vector3(14, 0.05, 360),
       rotationY: 0,
     });
-    // Secondary East-West Cross Boulevard (16m wide, 900m long)
     avenues.push({
       position: new THREE.Vector3(0, 0.025, 0),
-      size: new THREE.Vector3(16, 0.05, 900),
-      rotationY: Math.PI / 2,
+      size: new THREE.Vector3(360, 0.05, 14),
+      rotationY: 0,
     });
-    // North Cross Street (14m wide)
     avenues.push({
       position: new THREE.Vector3(0, 0.025, -75),
-      size: new THREE.Vector3(14, 0.05, 900),
-      rotationY: Math.PI / 2,
+      size: new THREE.Vector3(360, 0.05, 12),
+      rotationY: 0,
     });
-    // South Cross Street (14m wide)
     avenues.push({
       position: new THREE.Vector3(0, 0.025, 75),
-      size: new THREE.Vector3(14, 0.05, 900),
-      rotationY: Math.PI / 2,
+      size: new THREE.Vector3(360, 0.05, 12),
+      rotationY: 0,
     });
 
-    // 2. City Blocks Partitioning (8 Macro Blocks)
-    // Blocks are bounded by roads: x = [-140..-14], [14..140], z = [-140..-82], [-68..-10], [10..68], [82..140]
-    const blockXSpans = [
-      { min: -130, max: -15 }, // West side
-      { min: 15, max: 130 },   // East side
+    const blockCenters: { x: number; z: number; w: number; d: number; name: string; minH: number; maxH: number }[] = [
+      { x: -38, z: -38, w: 42, d: 42, name: 'Helix Data Citadel', minH: 68, maxH: 105 },
+      { x: 38, z: -38, w: 42, d: 42, name: 'Twin Spire Skybridge', minH: 74, maxH: 115 },
+      { x: -38, z: 38, w: 42, d: 42, name: 'Cyber-Synth Lounge', minH: 48, maxH: 82 },
+      { x: 38, z: 38, w: 42, d: 42, name: 'Apex Monolith Tower', minH: 92, maxH: 132 },
+
+      { x: -38, z: -115, w: 44, d: 48, name: 'North-West Arcology', minH: 52, maxH: 95 },
+      { x: 38, z: -115, w: 44, d: 48, name: 'North-East Exchange', minH: 58, maxH: 98 },
+      { x: -38, z: 115, w: 44, d: 48, name: 'South-West Terminal', minH: 45, maxH: 85 },
+      { x: 38, z: 115, w: 44, d: 48, name: 'South-East Foundry', minH: 60, maxH: 102 },
+
+      { x: -95, z: -38, w: 44, d: 42, name: 'West Neural Annex', minH: 50, maxH: 88 },
+      { x: 95, z: -38, w: 44, d: 42, name: 'East Orbital Tower', minH: 62, maxH: 108 },
+      { x: -95, z: 38, w: 44, d: 42, name: 'West Transit Hub', minH: 42, maxH: 76 },
+      // Note: (75, 75) is dedicated to Central Park Sanctuary (bounds 39..111 in X and Z), so we keep it clear!
+      { x: 136, z: 38, w: 36, d: 40, name: 'East Sanctuary Overlook', minH: 54, maxH: 92 },
     ];
 
-    const blockZSpans = [
-      { min: -130, max: -82 },
-      { min: -68, max: -12 },
-      { min: 12, max: 68 },
-      { min: 82, max: 130 },
-    ];
+    const neonPalette = ['#38bdf8', '#f59e0b', '#10b981', '#f43f5e', '#a855f7'];
 
-    let bldgCounter = 0;
+    blockCenters.forEach((blk, idx) => {
+      sidewalks.push({
+        position: new THREE.Vector3(blk.x, 0.1, blk.z),
+        size: new THREE.Vector3(blk.w + 8, 0.2, blk.d + 8),
+      });
 
-    blockXSpans.forEach((xSpan, colIdx) => {
-      blockZSpans.forEach((zSpan, rowIdx) => {
-        const blockW = xSpan.max - xSpan.min;
-        const blockD = zSpan.max - zSpan.min;
-        const blockCenterX = (xSpan.min + xSpan.max) / 2;
-        const blockCenterZ = (zSpan.min + zSpan.max) / 2;
+      const baseW = blk.w * rng.range(0.76, 0.9);
+      const baseD = blk.d * rng.range(0.76, 0.9);
+      const totalH = rng.range(blk.minH, blk.maxH);
 
-        // Sidewalk slab for this block (raised 0.18m)
-        sidewalks.push({
-          position: new THREE.Vector3(blockCenterX, 0.09, blockCenterZ),
-          size: new THREE.Vector3(blockW, 0.18, blockD),
-        });
+      // Ensure no collision overlap with Park Sanctuary [39..111, 39..111]
+      const minX = blk.x - baseW / 2;
+      const maxX = blk.x + baseW / 2;
+      const minZ = blk.z - baseD / 2;
+      const maxZ = blk.z + baseD / 2;
+      if (!(maxX <= 39 || minX >= 111 || maxZ <= 39 || minZ >= 111)) {
+        return;
+      }
 
-        // Streetlights along the avenue edge of the sidewalk
-        const streetSideX = colIdx === 0 ? xSpan.max - 1.2 : xSpan.min + 1.2;
-        const rotY = colIdx === 0 ? -Math.PI / 2 : Math.PI / 2;
+      const tiers: BuildingTier[] = [];
+      const h1 = totalH * rng.range(0.45, 0.6);
+      tiers.push({
+        offset: new THREE.Vector3(0, h1 / 2, 0),
+        size: new THREE.Vector3(baseW, h1, baseD),
+      });
 
-        streetlights.push({
-          position: new THREE.Vector3(streetSideX, 0.18, zSpan.min + 8),
-          rotationY: rotY,
-        });
-        streetlights.push({
-          position: new THREE.Vector3(streetSideX, 0.18, (zSpan.min + zSpan.max) / 2),
-          rotationY: rotY,
-        });
-        streetlights.push({
-          position: new THREE.Vector3(streetSideX, 0.18, zSpan.max - 8),
-          rotationY: rotY,
-        });
+      const w2 = baseW * rng.range(0.72, 0.84);
+      const d2 = baseD * rng.range(0.72, 0.84);
+      const h2 = (totalH - h1) * 0.65;
+      tiers.push({
+        offset: new THREE.Vector3(0, h1 + h2 / 2, 0),
+        size: new THREE.Vector3(w2, h2, d2),
+      });
 
-        // Subdivide block into 2 building lots
-        const lotW = (blockW - 8) / 2;
-        const lotD = blockD - 6;
+      const w3 = w2 * rng.range(0.65, 0.78);
+      const d3 = d2 * rng.range(0.65, 0.78);
+      const h3 = totalH - h1 - h2;
+      tiers.push({
+        offset: new THREE.Vector3(0, h1 + h2 + h3 / 2, 0),
+        size: new THREE.Vector3(w3, h3, d3),
+      });
 
-        // Lot 1 (Inner, closer to avenue)
-        const lot1CenterX = colIdx === 0 ? xSpan.max - lotW / 2 - 3 : xSpan.min + lotW / 2 + 3;
-        const bldg1 = BuildingGenerator.generateBuilding(
-          `bldg-${++bldgCounter}`,
-          new THREE.Vector3(lot1CenterX, 0, blockCenterZ),
-          lotW,
-          lotD,
-          rng
-        );
-        buildings.push(bldg1);
+      const rooftopEquipment: RooftopProp[] = [
+        {
+          type: 'ANTENNA',
+          position: new THREE.Vector3(0, totalH + 7, 0),
+          size: new THREE.Vector3(0.4, 14, 0.4),
+        },
+        {
+          type: idx % 2 === 0 ? 'COOLING_TOWER' : 'HVAC',
+          position: new THREE.Vector3(w3 * 0.22, totalH + 1.2, d3 * 0.22),
+          size: new THREE.Vector3(2.6, 2.4, 2.6),
+        },
+        {
+          type: idx % 3 === 0 ? 'HELIPAD' : 'SOLAR_ARRAY',
+          position: new THREE.Vector3(-w3 * 0.18, totalH + 0.25, -d3 * 0.18),
+          size: new THREE.Vector3(w3 * 0.42, 0.35, d3 * 0.42),
+        },
+      ];
 
-        // Lot 2 (Outer)
-        const lot2CenterX = colIdx === 0 ? xSpan.min + lotW / 2 + 3 : xSpan.max - lotW / 2 - 3;
-        const bldg2 = BuildingGenerator.generateBuilding(
-          `bldg-${++bldgCounter}`,
-          new THREE.Vector3(lot2CenterX, 0, blockCenterZ),
-          lotW,
-          lotD,
-          rng
-        );
-        buildings.push(bldg2);
+      const stripColor = neonPalette[idx % neonPalette.length];
+      const lightStrips: LightStrip[] = [
+        {
+          position: new THREE.Vector3(baseW / 2 + 0.06, h1 / 2, 0),
+          size: new THREE.Vector3(0.12, h1 * 0.88, 0.35),
+          color: stripColor,
+        },
+        {
+          position: new THREE.Vector3(-baseW / 2 - 0.06, h1 / 2, 0),
+          size: new THREE.Vector3(0.12, h1 * 0.88, 0.35),
+          color: stripColor,
+        },
+        {
+          position: new THREE.Vector3(0, h1 / 2, baseD / 2 + 0.06),
+          size: new THREE.Vector3(0.35, h1 * 0.88, 0.12),
+          color: stripColor,
+        },
+        {
+          position: new THREE.Vector3(0, h1 / 2, -baseD / 2 - 0.06),
+          size: new THREE.Vector3(0.35, h1 * 0.88, 0.12),
+          color: stripColor,
+        },
+        // Horizontal tier cornice light bands
+        {
+          position: new THREE.Vector3(0, h1, 0),
+          size: new THREE.Vector3(baseW + 0.22, 0.4, baseD + 0.22),
+          color: stripColor,
+        },
+        {
+          position: new THREE.Vector3(0, h1 + h2, 0),
+          size: new THREE.Vector3(w2 + 0.2, 0.35, d2 + 0.2),
+          color: stripColor,
+        },
+      ];
+
+      const bldgPos = new THREE.Vector3(blk.x, 0, blk.z);
+      const bldgSize = new THREE.Vector3(baseW, totalH, baseD);
+      const box = KinematicCollisionSolver.addBox(
+        new THREE.Vector3(blk.x, totalH / 2, blk.z),
+        bldgSize
+      );
+
+      buildings.push({
+        id: `bldg_${idx}`,
+        name: blk.name,
+        position: bldgPos,
+        totalSize: bldgSize,
+        tiers,
+        rooftopEquipment,
+        lightStrips,
+        storefrontColor: stripColor,
+        collisionBounds: [box],
       });
     });
 
-    // Keep the dedicated sanctuary clear of generated towers and their colliders.
-    const sanctuary = new THREE.Box3(new THREE.Vector3(39, -1, 39), new THREE.Vector3(111, 300, 111));
-    for (let index = buildings.length - 1; index >= 0; index--) {
-      if (buildings[index].collisionBounds.some((bounds) => bounds.intersectsBox(sanctuary))) buildings.splice(index, 1);
+    // Elevated Glazed Skybridges connecting high-rise monoliths across avenues
+    skybridges.push(
+      {
+        id: 'skybridge_north_core',
+        position: new THREE.Vector3(0, 32, -38),
+        size: new THREE.Vector3(46, 3.8, 5.2),
+        rotationY: 0,
+        accentColor: '#38bdf8',
+      },
+      {
+        id: 'skybridge_west_core',
+        position: new THREE.Vector3(-38, 28, 0),
+        size: new THREE.Vector3(46, 3.6, 5.0),
+        rotationY: Math.PI / 2,
+        accentColor: '#f59e0b',
+      },
+      {
+        id: 'skybridge_far_north',
+        position: new THREE.Vector3(0, 36, -115),
+        size: new THREE.Vector3(46, 3.8, 5.0),
+        rotationY: 0,
+        accentColor: '#10b981',
+      }
+    );
+
+    // Streetscape Furniture & Sidewalk Props along Central Avenues
+    const propCoords: {
+      type: CentralStreetPropDef['type'];
+      pos: [number, number, number];
+      rot: number;
+      accent: string;
+    }[] = [
+      { type: 'TRANSIT_SHELTER', pos: [-11.5, 0.2, -28], rot: Math.PI / 2, accent: '#38bdf8' },
+      { type: 'TRANSIT_SHELTER', pos: [11.5, 0.2, 28], rot: -Math.PI / 2, accent: '#f59e0b' },
+      { type: 'TRANSIT_SHELTER', pos: [-28, 0.2, -11.5], rot: 0, accent: '#10b981' },
+      { type: 'CYBER_KIOSK', pos: [-12.5, 0.2, -16], rot: Math.PI / 4, accent: '#38bdf8' },
+      { type: 'CYBER_KIOSK', pos: [12.5, 0.2, -16], rot: -Math.PI / 4, accent: '#f59e0b' },
+      { type: 'CYBER_KIOSK', pos: [-12.5, 0.2, 16], rot: (3 * Math.PI) / 4, accent: '#f43f5e' },
+      { type: 'BENCH', pos: [-11.2, 0.2, -36], rot: Math.PI / 2, accent: '#f59e0b' },
+      { type: 'BENCH', pos: [11.2, 0.2, -36], rot: -Math.PI / 2, accent: '#38bdf8' },
+      { type: 'BENCH', pos: [-11.2, 0.2, 36], rot: Math.PI / 2, accent: '#10b981' },
+      { type: 'BOLLARD_CLUSTER', pos: [-9.5, 0.2, -14], rot: 0, accent: '#f59e0b' },
+      { type: 'BOLLARD_CLUSTER', pos: [9.5, 0.2, -14], rot: 0, accent: '#f59e0b' },
+      { type: 'BOLLARD_CLUSTER', pos: [-9.5, 0.2, 14], rot: 0, accent: '#38bdf8' },
+      { type: 'BOLLARD_CLUSTER', pos: [9.5, 0.2, 14], rot: 0, accent: '#38bdf8' },
+      { type: 'STEAM_GRATE', pos: [-5.2, 0.03, -22], rot: 0, accent: '#38bdf8' },
+      { type: 'STEAM_GRATE', pos: [5.2, 0.03, 22], rot: 0, accent: '#f59e0b' },
+    ];
+
+    propCoords.forEach((p, idx) => {
+      streetProps.push({
+        id: `central_prop_${idx}`,
+        type: p.type,
+        position: new THREE.Vector3(...p.pos),
+        rotationY: p.rot,
+        accentColor: p.accent,
+      });
+    });
+
+    for (let z = -150; z <= 150; z += 30) {
+      if (Math.abs(z) < 12 || Math.abs(Math.abs(z) - 75) < 10) continue;
+      streetlights.push({ position: new THREE.Vector3(-8.5, 0, z), rotationY: 0 });
+      streetlights.push({ position: new THREE.Vector3(8.5, 0, z), rotationY: Math.PI });
     }
 
-    // 3. Register All Building Footprints in KinematicCollisionSolver
-    buildings.forEach((bldg) => {
-      bldg.collisionBounds.forEach((box) => {
-        const center = new THREE.Vector3();
-        const size = new THREE.Vector3();
-        box.getCenter(center);
-        box.getSize(size);
-        KinematicCollisionSolver.addBox(center, size);
-      });
-    });
+    for (let x = -150; x <= 150; x += 30) {
+      if (Math.abs(x) < 12) continue;
+      streetlights.push({ position: new THREE.Vector3(x, 0, -8.5), rotationY: -Math.PI / 2 });
+      streetlights.push({ position: new THREE.Vector3(x, 0, 8.5), rotationY: Math.PI / 2 });
+    }
 
-    return {
-      buildings,
-      streetlights,
-      avenues,
-      sidewalks,
-    };
+    return { buildings, streetlights, avenues, sidewalks, skybridges, streetProps };
   }
 }

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { NavigationSystem, NavigationState, LandmarkDef } from '../map/NavigationSystem';
+import { Landmark, NavigationState, NavigationSystem } from '../map/NavigationSystem';
 import { ChunkManager, ChunkManagerState } from '../world/ChunkManager';
 import { DistrictGenerator } from '../city/DistrictGenerator';
 import { AudioManager } from '../audio/AudioManager';
@@ -13,25 +13,20 @@ interface CityMapModalProps {
 type CategoryFilter = 'ALL' | 'LANDMARKS' | 'TRANSIT';
 
 export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
-  const [navState, setNavState] = useState<NavigationState>(() =>
-    NavigationSystem.getInstance().getState()
-  );
-  const [chunkState, setChunkState] = useState<ChunkManagerState>(() =>
-    ChunkManager.getInstance().getState()
-  );
-  const [selectedLandmark, setSelectedLandmark] = useState<LandmarkDef | null>(
+  const [navState, setNavState] = useState<NavigationState>(() => NavigationSystem.getInstance().getState());
+  const [chunkState, setChunkState] = useState<ChunkManagerState>(() => ChunkManager.getInstance().getState());
+  const [selectedLandmark, setSelectedLandmark] = useState<Landmark | null>(
     navState.activeLandmark || NavigationSystem.getInstance().landmarks[0]
   );
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
 
-  // Map viewport transform (Pan & Zoom)
   const [zoom, setZoom] = useState(0.85);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const panStartRef = useRef({ x: 0, y: 0 });
 
-  const [playerCoord, setPlayerCoord] = useState<{ x: number; z: number }>({ x: 0, z: 0 });
+  const [playerCoord, setPlayerCoord] = useState({ x: 0, z: 0 });
   const [headingDeg, setHeadingDeg] = useState(0);
   const mapRef = useModalFocus(navState.isMapOpen, () => NavigationSystem.getInstance().setMapOpen(false));
 
@@ -43,14 +38,12 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
       }
     });
     const unsubChunks = ChunkManager.getInstance().subscribe(setChunkState);
-
     return () => {
       unsubNav();
       unsubChunks();
     };
   }, []);
 
-  // Update telemetry and camera heading while map is open
   useEffect(() => {
     if (!navState.isMapOpen) return;
     const dir = new THREE.Vector3();
@@ -58,46 +51,42 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
       if (playerPosRef?.current) {
         const x = Math.round(playerPosRef.current.x);
         const z = Math.round(playerPosRef.current.z);
-        setPlayerCoord((previous) => previous.x === x && previous.z === z ? previous : { x, z });
+        setPlayerCoord((prev) => (prev.x === x && prev.z === z ? prev : { x, z }));
       }
-
-      const cam = (window as any).__NEXUS_CAMERA__ as THREE.Camera | undefined;
+      const cam = (window as unknown as { __NEXUS_CAMERA__?: THREE.Camera }).__NEXUS_CAMERA__;
       if (cam) {
         cam.getWorldDirection(dir);
         let deg = Math.atan2(dir.x, -dir.z) * (180 / Math.PI);
         if (deg < 0) deg += 360;
-        setHeadingDeg((previous) => Math.abs(previous - deg) < 0.5 ? previous : deg);
+        setHeadingDeg((prev) => (Math.abs(prev - deg) < 0.5 ? prev : deg));
       }
     };
     updateTelemetry();
     const interval = setInterval(updateTelemetry, 100);
-
     return () => clearInterval(interval);
   }, [navState.isMapOpen, playerPosRef]);
 
   if (!navState.isMapOpen) return null;
 
-  // City scale: 24x24 grid, 120m per chunk -> 2880m total world (-1440 to +1440)
   const WORLD_EXTENT = 2880;
-  const SVG_SIZE = 2400; // 100 SVG units per chunk
-  const CHUNK_SVG_SIZE = SVG_SIZE / 24; // 100 units
+  const SVG_SIZE = 2400;
+  const CHUNK_SVG_SIZE = SVG_SIZE / 24;
 
-  const worldToSvg = (x: number, z: number) => {
-    const sx = ((x + 1440) / WORLD_EXTENT) * SVG_SIZE;
-    const sy = ((z + 1440) / WORLD_EXTENT) * SVG_SIZE;
-    return { x: sx, y: sy };
-  };
+  const worldToSvg = (x: number, z: number) => ({
+    x: ((x + 1440) / WORLD_EXTENT) * SVG_SIZE,
+    y: ((z + 1440) / WORLD_EXTENT) * SVG_SIZE,
+  });
 
   const pPos = playerPosRef.current;
   const playerSvg = worldToSvg(pPos.x, pPos.z);
 
   const handleClose = () => {
-    AudioManager.getInstance().playUI('click');
+    AudioManager.getInstance().playUI('close');
     NavigationSystem.getInstance().setMapOpen(false);
   };
 
-  const handleSelectDestination = (landmark: LandmarkDef) => {
-    AudioManager.getInstance().playUI('click');
+  const handleSelectDestination = (landmark: Landmark) => {
+    AudioManager.getInstance().playUI('waypoint');
     NavigationSystem.getInstance().setDestination(landmark.id, playerPosRef.current);
   };
 
@@ -106,7 +95,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
     NavigationSystem.getInstance().setDestination(null);
   };
 
-  const handleFastTravel = (landmark: LandmarkDef) => {
+  const handleFastTravel = (landmark: Landmark) => {
     AudioManager.getInstance().playDiscoveryChime();
     window.dispatchEvent(new CustomEvent('nexus:teleport', { detail: landmark.position.clone() }));
     handleClose();
@@ -114,7 +103,6 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
 
   const handleCenterOnPlayer = () => {
     AudioManager.getInstance().playUI('click');
-    // Center SVG around player
     const centerOffset = SVG_SIZE / 2;
     setPan({
       x: (centerOffset - playerSvg.x) * 1.1,
@@ -123,7 +111,6 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
     setZoom(1.1);
   };
 
-  // Drag pan handlers
   const handleMouseDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || (e.target instanceof Element && e.target.closest('[role="button"]'))) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -134,17 +121,13 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
 
   const handleMouseMove = (e: React.PointerEvent) => {
     if (!isDragging) return;
-    const dx = e.clientX - dragStartRef.current.x;
-    const dy = e.clientY - dragStartRef.current.y;
     setPan({
-      x: panStartRef.current.x + dx,
-      y: panStartRef.current.y + dy,
+      x: panStartRef.current.x + (e.clientX - dragStartRef.current.x),
+      y: panStartRef.current.y + (e.clientY - dragStartRef.current.y),
     });
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+  const handleMouseUp = () => setIsDragging(false);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.stopPropagation();
@@ -152,31 +135,20 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
     setZoom((prev) => Math.min(2.5, Math.max(0.4, prev + zoomDelta)));
   };
 
-  // Filter landmarks
   const allLandmarks = NavigationSystem.getInstance().landmarks;
   const filteredLandmarks = allLandmarks.filter((lm) => {
     if (categoryFilter === 'ALL') return true;
-    if (categoryFilter === 'TRANSIT') {
-      return lm.category === 'TRANSIT' || lm.category === 'CROSSWAY';
-    }
-    if (categoryFilter === 'LANDMARKS') {
-      return lm.category === 'TOWER' || lm.category === 'PLAZA' || lm.category === 'SANCTUARY';
-    }
-    return true;
+    if (categoryFilter === 'TRANSIT') return lm.category === 'TRANSIT' || lm.category === 'INFRASTRUCTURE';
+    return lm.category === 'TOWER' || lm.category === 'PLAZA' || lm.category === 'ARCADE';
   });
 
-  const selectedDist = selectedLandmark
-    ? Math.round(pPos.distanceTo(selectedLandmark.position))
-    : 0;
-  const selectedEta = Math.round(selectedDist / 5.5);
-
+  const selectedDist = selectedLandmark ? Math.round(pPos.distanceTo(selectedLandmark.position)) : 0;
+  const selectedEta = Math.round(selectedDist / 6.8);
   const exploredPercent = chunkState.exploredPercent;
-  const totalChunks = 576;
   const exploredCount = chunkState.discoveredChunks.size;
 
-  // Render 24x24 chunk grid tiles
   const chunkTiles: React.ReactNode[] = [];
-  const r = ChunkManager.GRID_RADIUS; // 12
+  const r = ChunkManager.GRID_RADIUS;
   for (let cx = -r; cx < r; cx++) {
     for (let cz = -r; cz < r; cz++) {
       const tileX = (cx + r) * CHUNK_SVG_SIZE;
@@ -188,7 +160,6 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
       chunkTiles.push(
         <g key={key}>
           {isExplored ? (
-            // Explored Sector: Detailed district background with clear road grids
             <>
               <rect
                 x={tileX}
@@ -196,17 +167,16 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 width={CHUNK_SVG_SIZE}
                 height={CHUNK_SVG_SIZE}
                 fill={district.accentColor}
-                fillOpacity="0.08"
-                stroke="rgba(0, 240, 255, 0.12)"
+                fillOpacity="0.09"
+                stroke="rgba(56, 189, 248, 0.14)"
                 strokeWidth="0.8"
               />
-              {/* Intra-chunk secondary road cross lines */}
               <line
                 x1={tileX}
                 y1={tileY + CHUNK_SVG_SIZE / 2}
                 x2={tileX + CHUNK_SVG_SIZE}
                 y2={tileY + CHUNK_SVG_SIZE / 2}
-                stroke="rgba(0, 240, 255, 0.09)"
+                stroke="rgba(56, 189, 248, 0.08)"
                 strokeWidth="0.7"
                 strokeDasharray="2 2"
               />
@@ -215,37 +185,22 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 y1={tileY}
                 x2={tileX + CHUNK_SVG_SIZE / 2}
                 y2={tileY + CHUNK_SVG_SIZE}
-                stroke="rgba(0, 240, 255, 0.09)"
+                stroke="rgba(56, 189, 248, 0.08)"
                 strokeWidth="0.7"
                 strokeDasharray="2 2"
               />
             </>
           ) : (
-            // Unexplored Sector: Dark "Fog of War" hexagonal shrouded grid
-            <>
-              <rect
-                x={tileX}
-                y={tileY}
-                width={CHUNK_SVG_SIZE}
-                height={CHUNK_SVG_SIZE}
-                fill="#020612"
-                fillOpacity="0.88"
-                stroke="rgba(0, 240, 255, 0.05)"
-                strokeWidth="0.6"
-              />
-              {/* Encrypted Sector Hex Icon */}
-              <text
-                aria-hidden="true"
-                x={tileX + CHUNK_SVG_SIZE / 2}
-                y={tileY + CHUNK_SVG_SIZE / 2 + 3}
-                fill="rgba(255, 255, 255, 0.12)"
-                fontSize="8"
-                fontFamily="var(--font-mono)"
-                textAnchor="middle"
-              >
-                ⬡
-              </text>
-            </>
+            <rect
+              x={tileX}
+              y={tileY}
+              width={CHUNK_SVG_SIZE}
+              height={CHUNK_SVG_SIZE}
+              fill="#05070c"
+              fillOpacity="0.9"
+              stroke="rgba(255, 255, 255, 0.04)"
+              strokeWidth="0.6"
+            />
           )}
         </g>
       );
@@ -263,13 +218,10 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
       data-component="CityMapModalContainer"
       style={{
         position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100dvh',
-        backgroundColor: 'rgba(3, 7, 18, 0.94)',
-        backdropFilter: 'blur(18px)',
-        WebkitBackdropFilter: 'blur(18px)',
+        inset: 0,
+        backgroundColor: 'rgba(7, 9, 14, 0.95)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
         zIndex: 160,
         display: 'flex',
         flexDirection: 'column',
@@ -277,70 +229,52 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
         userSelect: 'none',
       }}
     >
-      {/* 1. Header Bar with Exploration Progress Bar */}
+      {/* Top Cartographic Bar */}
       <div
         className="city-map-header"
         style={{
-          padding: '12px 24px',
-          borderBottom: '1px solid rgba(0, 240, 255, 0.25)',
+          padding: '14px 24px',
+          borderBottom: '1px solid var(--border-glass)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 8,
-          backgroundColor: 'rgba(6, 12, 28, 0.9)',
+          gap: 10,
+          backgroundColor: 'rgba(11, 15, 25, 0.92)',
         }}
       >
-        <div className="city-map-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div
+          className="city-map-toolbar"
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}
+        >
           <div className="city-map-title-row" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <h2
               id="city-map-title"
               style={{
                 fontFamily: 'var(--font-display)',
-                fontSize: '1.25rem',
-                letterSpacing: '2.5px',
-                color: 'var(--neon-cyan)',
-                textShadow: '0 0 16px rgba(0, 240, 255, 0.6)',
+                fontSize: '1.2rem',
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                color: 'var(--text-primary)',
                 margin: 0,
               }}
             >
-              CITY MAP
+              METROPOLITAN ATLAS
             </h2>
-            <span
-              className="cyber-badge"
-              style={{
-                color: 'var(--neon-amber)',
-                borderColor: 'rgba(255, 170, 0, 0.4)',
-                backgroundColor: 'rgba(255, 170, 0, 0.08)',
-              }}
-            >
-              3KM GRID // SECTOR MATRIX 24×24
-            </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: '#94a3b8' }}>
-              OPERATIVE GPS: [{playerCoord.x >= 0 ? `+${playerCoord.x}` : playerCoord.x},{' '}
+            <span className="cyber-badge">SECTOR MATRIX 24×24</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+              COORDINATES [{playerCoord.x >= 0 ? `+${playerCoord.x}` : playerCoord.x},{' '}
               {playerCoord.z >= 0 ? `+${playerCoord.z}` : playerCoord.z}]
             </span>
           </div>
 
           <div className="city-map-actions" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-            {/* Viewport Zoom & Center Controls */}
-            <button
-              onClick={handleCenterOnPlayer}
-              className="cyber-btn"
-              style={{
-                fontSize: '0.7rem',
-                padding: '4px 10px',
-                color: 'var(--neon-cyan)',
-                borderColor: 'var(--neon-cyan)',
-              }}
-              title="Recenter Map on Player"
-            >
+            <button onClick={handleCenterOnPlayer} className="cyber-btn" style={{ fontSize: '0.7rem', padding: '5px 10px' }}>
               ◎ RECENTER
             </button>
             <div style={{ display: 'flex', gap: 4 }}>
               <button
                 onClick={() => setZoom((z) => Math.min(2.5, z + 0.2))}
                 className="cyber-btn"
-                style={{ padding: '3px 9px', fontSize: '0.8rem' }}
-                title="Zoom In"
+                style={{ padding: '4px 10px', fontSize: '0.8rem' }}
                 aria-label="Zoom in"
               >
                 +
@@ -348,8 +282,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
               <button
                 onClick={() => setZoom((z) => Math.max(0.4, z - 0.2))}
                 className="cyber-btn"
-                style={{ padding: '3px 9px', fontSize: '0.8rem' }}
-                title="Zoom Out"
+                style={{ padding: '4px 10px', fontSize: '0.8rem' }}
                 aria-label="Zoom out"
               >
                 -
@@ -360,8 +293,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                   setPan({ x: 0, y: 0 });
                 }}
                 className="cyber-btn"
-                style={{ padding: '3px 8px', fontSize: '0.68rem' }}
-                title="Reset View"
+                style={{ padding: '4px 9px', fontSize: '0.68rem' }}
               >
                 RESET
               </button>
@@ -369,41 +301,35 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
             <button
               onClick={handleClose}
               className="cyber-btn"
-              style={{
-                borderColor: 'var(--neon-magenta)',
-                color: 'var(--neon-magenta)',
-                fontWeight: 800,
-              }}
+              style={{ borderColor: 'var(--neon-magenta)', color: 'var(--neon-magenta)' }}
             >
               CLOSE [ESC]
             </button>
           </div>
         </div>
 
-        {/* Exploration Metric & Glowing Progress Bar */}
+        {/* Exploration Progress & Category Filter */}
         <div className="city-map-metrics" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
           <div
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '0.72rem',
-              color: 'var(--neon-cyan)',
+              color: 'var(--neon-amber)',
               display: 'flex',
               gap: 8,
             }}
           >
             <span>
-              EXPLORATION: <strong>{exploredPercent}%</strong>
+              SURVEYED: <strong>{exploredPercent}%</strong>
             </span>
-            <span style={{ color: 'var(--text-muted)' }}>
-              ({exploredCount} / {totalChunks} SECTORS REVEALED)
-            </span>
+            <span style={{ color: 'var(--text-muted)' }}>({exploredCount} / 576 SECTORS)</span>
           </div>
 
           <div
             style={{
               flex: 1,
-              height: 4,
-              backgroundColor: 'rgba(0, 240, 255, 0.12)',
+              height: 3,
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
               borderRadius: 2,
               overflow: 'hidden',
             }}
@@ -412,14 +338,12 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
               style={{
                 width: `${Math.min(100, Math.max(0, exploredPercent))}%`,
                 height: '100%',
-                backgroundColor: 'var(--neon-cyan)',
-                boxShadow: '0 0 10px var(--neon-cyan)',
+                backgroundColor: 'var(--neon-amber)',
                 transition: 'width 0.3s ease',
               }}
             />
           </div>
 
-          {/* Category Filter Tabs */}
           <div style={{ display: 'flex', gap: 4 }}>
             {(['ALL', 'LANDMARKS', 'TRANSIT'] as CategoryFilter[]).map((tab) => (
               <button
@@ -431,10 +355,9 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 }}
                 className="cyber-btn"
                 style={{
-                  padding: '2px 8px',
+                  padding: '3px 9px',
                   fontSize: '0.65rem',
-                  borderColor: categoryFilter === tab ? 'var(--neon-cyan)' : 'rgba(255, 255, 255, 0.15)',
-                  backgroundColor: categoryFilter === tab ? 'rgba(0, 240, 255, 0.15)' : 'transparent',
+                  borderColor: categoryFilter === tab ? 'var(--neon-cyan)' : 'var(--border-subtle)',
                   color: categoryFilter === tab ? 'var(--neon-cyan)' : 'var(--text-muted)',
                 }}
               >
@@ -445,9 +368,9 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
         </div>
       </div>
 
-      {/* 2. Main Body: Vector Map + Details Side Panel */}
+      {/* Main Split Body */}
       <div className="city-map-body" style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        {/* Left Side: Interactive SVG Map Container */}
+        {/* Interactive Vector Canvas */}
         <div
           className="city-map-viewport"
           style={{
@@ -457,7 +380,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
             position: 'relative',
             overflow: 'hidden',
             cursor: isDragging ? 'grabbing' : 'grab',
-            backgroundColor: '#040714',
+            backgroundColor: '#05070c',
             touchAction: 'none',
           }}
           onPointerDown={handleMouseDown}
@@ -467,7 +390,6 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
           onLostPointerCapture={handleMouseUp}
           onWheel={handleWheel}
         >
-          {/* Transforming SVG Viewport */}
           <div
             style={{
               position: 'absolute',
@@ -480,98 +402,42 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
               transition: isDragging ? 'none' : 'transform 0.08s ease-out',
             }}
           >
-            <svg
-              width={SVG_SIZE}
-              height={SVG_SIZE}
-              viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`}
-              style={{ display: 'block' }}
-            >
-              <defs>
-                {/* Subtle Hexagon Pattern */}
-                <pattern id="hexPattern" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path
-                    d="M 20 0 L 40 10 L 40 30 L 20 40 L 0 30 L 0 10 Z"
-                    fill="none"
-                    stroke="rgba(0, 240, 255, 0.05)"
-                    strokeWidth="0.8"
-                  />
-                </pattern>
-                {/* Linear Glow for Active Route */}
-                <filter id="routeGlow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="4" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-
-              {/* 1. Render All 576 Chunks (Explored vs Shrouded Fog-of-War) */}
+            <svg width={SVG_SIZE} height={SVG_SIZE} viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`} style={{ display: 'block' }}>
               {chunkTiles}
 
-              {/* 2. Primary Arterial Avenues (Across entire 2.88km city) */}
-              {/* North-South Central Spine (x = 0 -> svgX = 1200) */}
+              {/* North-South & East-West Arterial Axes */}
               <rect
                 x={1192}
                 y={0}
                 width={16}
                 height={SVG_SIZE}
-                fill="#070c18"
-                stroke="rgba(255, 170, 0, 0.4)"
+                fill="#090d16"
+                stroke="rgba(245, 158, 11, 0.35)"
                 strokeWidth="1"
               />
-              <line
-                x1={1200}
-                y1={0}
-                x2={1200}
-                y2={SVG_SIZE}
-                stroke="#ffaa00"
-                strokeWidth="1.5"
-                strokeDasharray="8 6"
-              />
-
-              {/* East-West Cross Boulevard (z = 0 -> svgY = 1200) */}
               <rect
                 x={0}
                 y={1192}
                 width={SVG_SIZE}
                 height={16}
-                fill="#070c18"
-                stroke="rgba(0, 240, 255, 0.35)"
+                fill="#090d16"
+                stroke="rgba(56, 189, 248, 0.35)"
                 strokeWidth="1"
               />
-              <line
-                x1={0}
-                y1={1200}
-                x2={SVG_SIZE}
-                y2={1200}
-                stroke="#00f0ff"
-                strokeWidth="1.2"
-                strokeDasharray="8 6"
-              />
 
-              {/* Central Plaza Monument Square (x: -90..90, z: -90..90) */}
+              {/* Central Civic Core */}
               <rect
-                x={1200 - 75}
-                y={1200 - 75}
+                x={1125}
+                y={1125}
                 width={150}
                 height={150}
-                fill="#0a152e"
+                fill="rgba(15, 23, 42, 0.65)"
                 stroke="var(--neon-cyan)"
-                strokeWidth="2"
-                rx="6"
-              />
-              <circle
-                cx={1200}
-                cy={1200}
-                r={40}
-                fill="none"
-                stroke="#ffaa00"
                 strokeWidth="1.5"
-                strokeDasharray="5 5"
+                rx="4"
               />
 
-              {/* 3. Active Waypoint Route Line */}
+              {/* Active Wayfinding Polyline */}
               {navState.routeWaypoints.length > 1 && (
                 <polyline
                   points={navState.routeWaypoints
@@ -582,15 +448,14 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                     .join(' ')}
                   fill="none"
                   stroke="var(--neon-amber)"
-                  strokeWidth="4"
+                  strokeWidth="3.5"
                   strokeDasharray="8 6"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  filter="url(#routeGlow)"
                 />
               )}
 
-              {/* 4. Landmark Destination Markers */}
+              {/* Landmarks */}
               {filteredLandmarks.map((lm) => {
                 const lp = worldToSvg(lm.position.x, lm.position.z);
                 const isSelected = selectedLandmark?.id === lm.id;
@@ -614,114 +479,77 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                     }}
                     style={{ cursor: 'pointer' }}
                   >
-                    {/* Pulsing Target Ring */}
                     {isTarget && (
                       <circle
                         cx={lp.x}
                         cy={lp.y}
-                        r="24"
+                        r="22"
                         fill="none"
                         stroke="var(--neon-amber)"
-                        strokeWidth="2.5"
+                        strokeWidth="2"
                         strokeDasharray="4 4"
                       />
                     )}
-
-                    {/* Outer Selection Highlight Ring */}
                     {isSelected && (
-                      <circle
-                        cx={lp.x}
-                        cy={lp.y}
-                        r="18"
-                        fill="none"
-                        stroke="var(--neon-cyan)"
-                        strokeWidth="2"
-                      />
+                      <circle cx={lp.x} cy={lp.y} r="16" fill="none" stroke="var(--neon-cyan)" strokeWidth="1.8" />
                     )}
-
-                    {/* Pin Shape */}
                     <circle
                       cx={lp.x}
                       cy={lp.y}
-                      r="8"
-                      fill={isTarget ? 'var(--neon-amber)' : isSelected ? 'var(--neon-cyan)' : '#38bdf8'}
+                      r="7"
+                      fill={isTarget ? 'var(--neon-amber)' : isSelected ? 'var(--neon-cyan)' : lm.color}
                       stroke="#ffffff"
                       strokeWidth="1.2"
                     />
-
-                    {/* Landmark Name Label */}
-                    {isSelected && <text
-                      x={lp.x}
-                      y={lp.y - 26}
-                      textAnchor="middle"
-                      fill={isTarget ? 'var(--neon-amber)' : '#ffffff'}
-                      fontSize="12"
-                      fontFamily="var(--font-mono)"
-                      fontWeight="700"
-                      stroke="#050811"
-                      strokeWidth="2.5"
-                      paintOrder="stroke"
-                    >
-                      {lm.name}
-                    </text>}
+                    {isSelected && (
+                      <text
+                        x={lp.x}
+                        y={lp.y - 22}
+                        textAnchor="middle"
+                        fill="#ffffff"
+                        fontSize="11"
+                        fontFamily="var(--font-mono)"
+                        fontWeight="600"
+                        stroke="#07090e"
+                        strokeWidth="3"
+                        paintOrder="stroke"
+                      >
+                        {lm.name}
+                      </text>
+                    )}
                   </g>
                 );
               })}
 
-              {/* 5. Player Operative Marker & Heading FOV Cone */}
+              {/* Operative Marker */}
               <g transform={`translate(${playerSvg.x}, ${playerSvg.y})`}>
-                {/* Heading FOV Cone */}
                 <g transform={`rotate(${headingDeg})`}>
                   <path
-                    d="M 0 0 L -35 -85 A 90 90 0 0 1 35 -85 Z"
-                    fill="rgba(0, 240, 255, 0.22)"
-                    stroke="rgba(0, 240, 255, 0.4)"
+                    d="M 0 0 L -32 -80 A 85 85 0 0 1 32 -80 Z"
+                    fill="rgba(56, 189, 248, 0.18)"
+                    stroke="rgba(56, 189, 248, 0.35)"
                     strokeWidth="1"
                   />
-                  <line x1="0" y1="0" x2="0" y2="-90" stroke="var(--neon-cyan)" strokeWidth="1.5" strokeDasharray="3 3" />
                 </g>
-
-                {/* Player Radar Aura Ring */}
-                <circle r="22" fill="none" stroke="var(--neon-cyan)" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.6" />
-                <circle r="12" fill="rgba(0, 240, 255, 0.3)" />
-
-                {/* Player Directional Chevron */}
+                <circle r="18" fill="none" stroke="var(--neon-cyan)" strokeWidth="1.2" strokeDasharray="3 3" />
                 <polygon
-                  points="0,-10 6,7 0,3 -6,7"
+                  points="0,-9 6,7 0,3 -6,7"
                   fill="var(--neon-cyan)"
                   stroke="#ffffff"
-                  strokeWidth="1.2"
+                  strokeWidth="1"
                   transform={`rotate(${headingDeg})`}
                 />
-
-                <text
-                  x="0"
-                  y="24"
-                  textAnchor="middle"
-                  fill="var(--neon-cyan)"
-                  fontSize="10"
-                  fontFamily="var(--font-mono)"
-                  fontWeight="bold"
-                  stroke="#050811"
-                  strokeWidth="3"
-                  paintOrder="stroke"
-                >
-                  YOU [OPERATIVE]
-                </text>
               </g>
             </svg>
           </div>
 
-          {/* Minimap Compass Rose Overlay */}
           <div
+            className="glass-panel"
             style={{
               position: 'absolute',
               bottom: 16,
               left: 16,
-              backgroundColor: 'rgba(5, 10, 24, 0.85)',
-              border: '1px solid rgba(0, 240, 255, 0.3)',
-              borderRadius: 6,
-              padding: '6px 12px',
+              padding: '8px 12px',
               fontFamily: 'var(--font-mono)',
               fontSize: '0.68rem',
               color: 'var(--text-secondary)',
@@ -734,20 +562,19 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
               HEADING: <strong style={{ color: 'var(--neon-cyan)' }}>{Math.round(headingDeg)}°</strong>
             </div>
             <div>
-              MAP ZOOM: <strong style={{ color: 'var(--text-primary)' }}>{Math.round(zoom * 100)}%</strong>
+              ZOOM: <strong style={{ color: 'var(--text-primary)' }}>{Math.round(zoom * 100)}%</strong>
             </div>
-            <div style={{ color: 'var(--neon-amber)' }}>DRAG TO PAN • SCROLL TO ZOOM</div>
           </div>
         </div>
 
-        {/* Right Side: Landmark Inspector & Action Card */}
+        {/* Landmark Inspector Sidebar */}
         <div
           className="city-map-inspector"
           style={{
             width: 340,
             flexShrink: 0,
-            borderLeft: '1px solid rgba(0, 240, 255, 0.2)',
-            backgroundColor: 'rgba(5, 10, 24, 0.96)',
+            borderLeft: '1px solid var(--border-glass)',
+            backgroundColor: 'rgba(11, 15, 25, 0.96)',
             padding: '20px 24px',
             display: 'flex',
             flexDirection: 'column',
@@ -756,36 +583,33 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
           }}
         >
           <label className="map-landmark-picker">
-            <span className="menu-section-label">INSPECT LANDMARK</span>
-            <select className="cyber-select" value={selectedLandmark?.id ?? ''} onChange={(event) => setSelectedLandmark(allLandmarks.find((landmark) => landmark.id === event.target.value) ?? null)}>
-              {allLandmarks.map((landmark) => <option key={landmark.id} value={landmark.id}>{landmark.name}</option>)}
+            <span className="menu-section-label">SELECT SECTOR LANDMARK</span>
+            <select
+              className="cyber-select"
+              value={selectedLandmark?.id ?? ''}
+              onChange={(event) =>
+                setSelectedLandmark(allLandmarks.find((landmark) => landmark.id === event.target.value) ?? null)
+              }
+            >
+              {allLandmarks.map((landmark) => (
+                <option key={landmark.id} value={landmark.id}>
+                  {landmark.name}
+                </option>
+              ))}
             </select>
           </label>
-          {selectedLandmark ? (
+
+          {selectedLandmark && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Category & Badge */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span
-                  style={{
-                    backgroundColor: 'rgba(0, 240, 255, 0.15)',
-                    color: 'var(--neon-cyan)',
-                    padding: '2px 8px',
-                    borderRadius: 3,
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.72rem',
-                    fontWeight: 800,
-                  }}
-                >
-                  {selectedLandmark.category}
-                </span>
+              <div>
+                <span className="cyber-badge">{selectedLandmark.category}</span>
               </div>
 
-              {/* Title */}
               <h3
                 style={{
                   fontFamily: 'var(--font-display)',
-                  fontSize: '1.3rem',
-                  letterSpacing: '1px',
+                  fontSize: '1.25rem',
+                  fontWeight: 800,
                   color: 'var(--text-primary)',
                   margin: 0,
                 }}
@@ -793,41 +617,54 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 {selectedLandmark.name}
               </h3>
 
-              {/* Distance & Traversal ETA */}
               <div
                 style={{
-                  display: 'flex',
-                  gap: 12,
-                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                  padding: '10px 14px',
-                  borderRadius: 6,
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  padding: '10px 12px',
+                  borderRadius: 4,
+                  border: '1px solid var(--border-subtle)',
                 }}
               >
                 <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: 'var(--text-muted)' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.64rem', color: 'var(--text-muted)' }}>
                     DISTANCE
                   </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', color: 'var(--neon-cyan)', fontWeight: 800 }}>
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '1.05rem',
+                      color: 'var(--neon-cyan)',
+                      fontWeight: 700,
+                    }}
+                  >
                     {selectedDist}m
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: 'var(--text-muted)' }}>
-                    EST. TRAVERSAL
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.64rem', color: 'var(--text-muted)' }}>
+                    EST. WALK
                   </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', color: 'var(--neon-amber)', fontWeight: 800 }}>
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '1.05rem',
+                      color: 'var(--neon-amber)',
+                      fontWeight: 700,
+                    }}
+                  >
                     ~{selectedEta}s
                   </div>
                 </div>
               </div>
 
-              {/* Description */}
               <p
                 style={{
                   fontFamily: 'var(--font-body)',
-                  fontSize: '0.85rem',
-                  lineHeight: '1.5',
+                  fontSize: '0.84rem',
+                  lineHeight: 1.55,
                   color: 'var(--text-secondary)',
                   margin: 0,
                 }}
@@ -835,81 +672,45 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 {selectedLandmark.description}
               </p>
 
-              {/* Coordinates Readout */}
               <div
                 style={{
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '0.74rem',
+                  fontSize: '0.72rem',
                   color: 'var(--text-muted)',
-                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderTop: '1px solid var(--border-subtle)',
                   paddingTop: 8,
                 }}
               >
-                COORDINATES: [{selectedLandmark.position.x.toFixed(0)}, {selectedLandmark.position.z.toFixed(0)}]
+                GRID REF: [{selectedLandmark.position.x.toFixed(0)}, {selectedLandmark.position.z.toFixed(0)}]
               </div>
-
-              {/* Active Route Notice */}
-              {navState.activeLandmark?.id === selectedLandmark.id && (
-                <div
-                  style={{
-                    backgroundColor: 'rgba(255, 170, 0, 0.12)',
-                    border: '1px solid rgba(255, 170, 0, 0.4)',
-                    padding: '8px 12px',
-                    borderRadius: 4,
-                    color: 'var(--neon-amber)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.74rem',
-                    fontWeight: 700,
-                  }}
-                >
-                  ▶ ACTIVE GUIDANCE ROUTE ENGAGED
-                </div>
-              )}
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.8rem',
-                textAlign: 'center',
-              }}
-            >
-              CLICK ANY LANDMARK ON THE BLUEPRINT TO INSPECT
             </div>
           )}
 
-          {/* Action Buttons: Set Route, Fast Travel, Clear */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto', paddingTop: 12 }}>
             {selectedLandmark && (
               <>
                 <button
                   onClick={() => handleSelectDestination(selectedLandmark)}
                   className="cyber-btn cyber-btn-primary"
-                  style={{ padding: '10px 14px', fontSize: '0.82rem', width: '100%', fontWeight: 800 }}
+                  style={{ padding: '10px 14px', fontSize: '0.76rem', width: '100%' }}
                 >
                   {navState.activeLandmark?.id === selectedLandmark.id
-                    ? '✓ ROUTE WAYPOINT ACTIVE'
-                    : 'SET WAYPOINT GUIDANCE ROUTE'}
+                    ? '✓ WAYFINDING RIBBON ENGAGED'
+                    : 'PLOT WAYFINDING RIBBON'}
                 </button>
 
                 <button
                   onClick={() => handleFastTravel(selectedLandmark)}
                   className="cyber-btn"
                   style={{
-                    padding: '8px 14px',
-                    fontSize: '0.78rem',
+                    padding: '9px 14px',
+                    fontSize: '0.74rem',
                     width: '100%',
-                    color: '#00ffaa',
-                    borderColor: 'rgba(0, 255, 170, 0.5)',
+                    color: 'var(--neon-emerald)',
+                    borderColor: 'rgba(16, 185, 129, 0.45)',
                   }}
-                  title="Instantly Teleport to Destination"
                 >
-                  ⚡ FAST TRAVEL // WARP TO LOCATION
+                  FAST TRAVEL TO SECTOR
                 </button>
               </>
             )}
@@ -919,14 +720,14 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 onClick={handleClearDestination}
                 className="cyber-btn"
                 style={{
-                  padding: '6px 12px',
-                  fontSize: '0.72rem',
+                  padding: '7px 12px',
+                  fontSize: '0.7rem',
                   width: '100%',
                   borderColor: 'var(--neon-magenta)',
                   color: 'var(--neon-magenta)',
                 }}
               >
-                CANCEL NAVIGATION ROUTE
+                CLEAR ACTIVE ROUTE
               </button>
             )}
           </div>

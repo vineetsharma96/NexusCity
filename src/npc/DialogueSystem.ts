@@ -1,13 +1,8 @@
-import * as THREE from 'three';
-import { DistrictGenerator } from '../city/DistrictGenerator';
-import { TimeSystem, TimeOfDayPhase } from '../world/TimeSystem';
-import { WeatherSystem, WeatherType } from '../world/WeatherSystem';
 import { SaveSystem } from '../core/SaveSystem';
-import { LivingCitySystem } from './LivingCitySystem';
 
 export interface DialogueChoice {
   text: string;
-  nextNodeId?: string;
+  nextNodeId: string | null;
   action?: () => void;
 }
 
@@ -25,26 +20,16 @@ export interface DialogueConversation {
   nodes: Record<string, DialogueNode>;
 }
 
-type DialogueStateListener = (activeNode: DialogueNode | null) => void;
-
-export interface DialogueContext {
-  playerPosition: THREE.Vector3;
-  district?: string;
-  timePhase?: TimeOfDayPhase;
-  weather?: WeatherType;
-}
+type DialogueListener = (activeNode: DialogueNode | null) => void;
 
 export class DialogueSystem {
   private static instance: DialogueSystem;
-  private conversations: Map<string, DialogueConversation> = new Map();
-  private currentNode: DialogueNode | null = null;
-  private currentNpcId: string | null = null;
-  private dialogueCompleted = false;
-  private listeners: Set<DialogueStateListener> = new Set();
+  private conversations = new Map<string, DialogueConversation>();
+  private activeConversationId: string | null = null;
+  private activeNode: DialogueNode | null = null;
+  private listeners = new Set<DialogueListener>();
 
-  constructor() {
-    this.initDefaultDialogues();
-  }
+  private constructor() {}
 
   public static getInstance(): DialogueSystem {
     if (!DialogueSystem.instance) {
@@ -53,280 +38,63 @@ export class DialogueSystem {
     return DialogueSystem.instance;
   }
 
-  private initDefaultDialogues(): void {
-    // 1. Dr. Vance Kael — Senior Neural Architect
-    this.registerConversation({
-      npcId: 'dr_vance',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Dr. Vance Kael',
-          role: 'Chief Neural Architect // Nexus Labs',
-          text: 'Greetings, traveler. You stand in District 1, the beating heart of Nexus City. Every spire you see is synchronized with the planetary quantum core.',
-          choices: [
-            { text: 'Tell me about the skyscrapers.', nextNodeId: 'skyscrapers' },
-            { text: 'What research happens here?', nextNodeId: 'research' },
-            { text: 'Safe travels, Doctor.', nextNodeId: 'exit' },
-          ],
-        },
-        skyscrapers: {
-          id: 'skyscrapers',
-          speaker: 'Dr. Vance Kael',
-          role: 'Chief Neural Architect // Nexus Labs',
-          text: 'They are built from self-healing polymer alloy and photonic glass. As night falls, the facades harvest solar irradiance and channel it into ground-level grids.',
-          choices: [
-            { text: 'Fascinating. What about the research?', nextNodeId: 'research' },
-            { text: 'Thank you for the insight.', nextNodeId: 'exit' },
-          ],
-        },
-        research: {
-          id: 'research',
-          speaker: 'Dr. Vance Kael',
-          role: 'Chief Neural Architect // Nexus Labs',
-          text: 'We are engineering autonomous spatial systems and atmospheric climate regulators. The falling leaves you see along the avenues are bio-synthesized air filters.',
-          choices: [
-            { text: 'The leaves clean the city air?', nextNodeId: 'leaves' },
-            { text: 'I will explore more of the district.', nextNodeId: 'exit' },
-          ],
-        },
-        leaves: {
-          id: 'leaves',
-          speaker: 'Dr. Vance Kael',
-          role: 'Chief Neural Architect // Nexus Labs',
-          text: 'Precisely! They absorb urban carbon and dissolve upon contact with the mulch bedding. Nature augmented by quantum chemistry.',
-          choices: [{ text: 'Brilliant engineering. See you around.', nextNodeId: 'exit' }],
-        },
-      },
-    });
-
-    // 2. Kira Jin — Urban Courier
-    this.registerConversation({
-      npcId: 'kira_courier',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Kira Jin',
-          role: 'Rooftop Courier // Velocity Logistics',
-          text: 'Hey! Watch your step on the avenue crossings. Delivery drones and speed-skaters move fast around here. What brings you to Sector 1?',
-          choices: [
-            { text: 'Just exploring the city avenues.', nextNodeId: 'exploring' },
-            { text: 'Any good vantage points nearby?', nextNodeId: 'vantage' },
-            { text: 'Catch you later, Kira.', nextNodeId: 'exit' },
-          ],
-        },
-        exploring: {
-          id: 'exploring',
-          speaker: 'Kira Jin',
-          role: 'Rooftop Courier // Velocity Logistics',
-          text: 'Take the central boulevard down to the intersection plaza. When sunset hits, the neon light strips illuminate the whole skyline. Best view in the sector.',
-          choices: [
-            { text: 'Where can I get high up?', nextNodeId: 'vantage' },
-            { text: 'Thanks for the tip!', nextNodeId: 'exit' },
-          ],
-        },
-        vantage: {
-          id: 'vantage',
-          speaker: 'Kira Jin',
-          role: 'Rooftop Courier // Velocity Logistics',
-          text: 'The skybridge on the Twin Towers at Block 3 connects both spires at 60 meters up. The wind up there will blow you away!',
-          choices: [{ text: 'I will definitely check that out.', nextNodeId: 'exit' }],
-        },
-      },
-    });
-
-    // 3. Echo-7 — Infrastructure Android
-    this.registerConversation({
-      npcId: 'echo_android',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Echo-7',
-          role: 'Municipal Maintenance Android // Unit 41',
-          text: 'Unit Echo-7 reporting nominal operation. Power grid telemetry: 99.8%. Street luminaire arrays: fully operational. How may this unit assist citizen?',
-          choices: [
-            { text: 'What is your current directive?', nextNodeId: 'directive' },
-            { text: 'How does the day/night cycle work?', nextNodeId: 'cycle' },
-            { text: 'Carry on with your patrol, Echo.', nextNodeId: 'exit' },
-          ],
-        },
-        directive: {
-          id: 'directive',
-          speaker: 'Echo-7',
-          role: 'Municipal Maintenance Android // Unit 41',
-          text: 'Routine sidewalk patrol, verifying solar collection conduits and sidewalk curb integrity. All systems operating within approved tolerances.',
-          choices: [{ text: 'Good work, Echo-7.', nextNodeId: 'exit' }],
-        },
-        cycle: {
-          id: 'cycle',
-          speaker: 'Echo-7',
-          role: 'Municipal Maintenance Android // Unit 41',
-          text: 'At 17:30 hours, luminaire point lights scale from 0.2 to 3.0 intensity. Energy reserves transition to stored capacitor banks until 06:00 dawn.',
-          choices: [{ text: 'Understood. Thank you.', nextNodeId: 'exit' }],
-        },
-      },
-    });
-
-    // 4. Officer Chen — Peacekeeper
-    this.registerConversation({
-      npcId: 'officer_chen',
-      startNodeId: 'intro',
-      nodes: {
-        intro: {
-          id: 'intro',
-          speaker: 'Officer Chen',
-          role: 'Metropolis Peacekeeper // Sector 1 Patrol',
-          text: 'Keep moving, citizen. Keep to the sidewalks and observe crosswalk signals. Sector 1 is under 24/7 automated monitoring.',
-          choices: [
-            { text: 'Is the city safe for exploration?', nextNodeId: 'safety' },
-            { text: 'Where can I find the central terminal?', nextNodeId: 'terminal' },
-            { text: 'Understood, Officer.', nextNodeId: 'exit' },
-          ],
-        },
-        safety: {
-          id: 'safety',
-          speaker: 'Officer Chen',
-          role: 'Metropolis Peacekeeper // Sector 1 Patrol',
-          text: 'Completely. There is zero violent crime in Nexus City. The worst you might encounter is a rogue leaf particle in your visor.',
-          choices: [{ text: 'Good to know. Stay safe.', nextNodeId: 'exit' }],
-        },
-        terminal: {
-          id: 'terminal',
-          speaker: 'Officer Chen',
-          role: 'Metropolis Peacekeeper // Sector 1 Patrol',
-          text: 'Right at the central intersection plaza. The holographic pedestal gives full district telemetry and seed parameters.',
-          choices: [{ text: 'Heading there now.', nextNodeId: 'exit' }],
-        },
-      },
-    });
-
-  }
-
   public registerConversation(conv: DialogueConversation): void {
     this.conversations.set(conv.npcId, conv);
   }
 
-  public startDialogue(npcId: string, citizenName?: string, citizenRole?: string, context?: DialogueContext): boolean {
-    this.currentNpcId = npcId;
-    this.dialogueCompleted = false;
+  public startDialogue(npcId: string): boolean {
     const conv = this.conversations.get(npcId);
-    if (conv) {
-      const node = conv.nodes[conv.startNodeId] || null;
-      this.currentNode = node ? this.withContextualDirection(node, context) : null;
-    } else {
-      // Procedural Citizen ambient dialogue chatter
-      const ambientQuotes = [
-        "The skyward magnetic grid is experiencing high flux today. Fascinating readings.",
-        "Heading toward Central Plaza. The holographic news broadcast is updating sector trade tariffs.",
-        "Have you seen the weather atmospheric condensers? The rainfall patterns are completely synthetic.",
-        "Always watch the skybridge crossings when the high-altitude winds pick up.",
-        "Dr. Vance Kael's team at Nexus Labs just stabilized the quantum reactor core.",
-        "The Neon Velocity Lounge on West Avenue has the best synthesized espresso in District 1.",
-        "Beautiful day in Nexus City. The solar arrays are running at 100% capacity.",
-      ];
-      const quoteIndex = this.stableIndex(npcId, ambientQuotes.length);
-      this.currentNode = {
-        id: `dialogue_${npcId}`,
-        speaker: citizenName || 'Nexus Citizen',
-        role: citizenRole || 'Metropolis Resident',
-        text: `${ambientQuotes[quoteIndex]}\n\n${this.getContextualDirection(context)}\n${LivingCitySystem.getInstance().getDialogueContext(npcId, citizenRole || 'Metropolis Resident')}`,
-        choices: [
-          { text: 'Understood. Safe travels in the city.', nextNodeId: 'exit' },
-          { text: 'Catch you later.', nextNodeId: 'exit' },
-        ],
-      };
-    }
+    if (!conv) return false;
+    this.activeConversationId = npcId;
+    this.activeNode = conv.nodes[conv.startNodeId] || null;
+    SaveSystem.getInstance().recordNodeInteraction(`npc_${npcId}`);
     this.notify();
-    return !!this.currentNode;
-  }
-
-  private withContextualDirection(node: DialogueNode, context?: DialogueContext): DialogueNode {
-    if (!context) return node;
-    const cityRhythm = this.currentNpcId ? LivingCitySystem.getInstance().getDialogueContext(this.currentNpcId, node.role) : '';
-    return { ...node, text: `${node.text}\n\n${this.getContextualDirection(context)}\n${cityRhythm}` };
-  }
-
-  private stableIndex(value: string, length: number): number {
-    let hash = 0;
-    for (let i = 0; i < value.length; i++) hash = (hash * 31 + value.charCodeAt(i)) | 0;
-    return Math.abs(hash) % length;
-  }
-
-  private getContextualDirection(context?: DialogueContext): string {
-    const position = context?.playerPosition || new THREE.Vector3();
-    const district = context?.district || DistrictGenerator.getDistrictAt(position.x, position.z).name;
-    const time = context?.timePhase || TimeSystem.getInstance().getState().phase;
-    const weather = context?.weather || WeatherSystem.getInstance().getState().currentWeather;
-    const districtDirection: Record<string, string> = {
-      'CENTRAL METROPOLIS': 'Central Plaza is the reliable hub for transit and city telemetry.',
-      'SKY DISTRICT': 'The Twin Spire Skybridge is north; keep to the marked approach in poor visibility.',
-      'NEURAL DISTRICT': 'Nexus Labs and the Apex Monolith route east through the lit research avenues.',
-      'INDUSTRIAL REACTOR ZONE': 'South Crossing is the safest route toward the illuminated reactor corridors.',
-      'BIOSPHERE GREEN DISTRICT': 'Central Park Sanctuary is close by; follow the waterway lights.',
-      'OLD METRO HISTORIC SECTOR': 'The Old Metro lanes lead back toward South Crossing and the central boulevards.',
-    };
-    const weatherAdvice = weather === 'FOG' || weather === 'HEAVY_RAIN'
-      ? 'Visibility is reduced, so use landmark lights and stay on the main paths.'
-      : weather === 'RAIN'
-        ? 'The streets are wet; favor covered walkways and illuminated crossings.'
-        : 'Clear conditions make the skyline landmarks easy to use as bearings.';
-    const timeAdvice = time === 'NIGHT' || time === 'DUSK' || time === 'BLUE_HOUR'
-      ? 'After dark, follow the cyan avenue beacons.'
-      : time === 'DAWN'
-        ? 'At dawn, the east-facing avenue is the clearest route.'
-        : 'Daylight keeps the major avenue signs visible.';
-    return `[LOCAL DIRECTIONS] ${district}: ${districtDirection[district] || 'Use the nearest marked avenue to reach Central Plaza.'} ${weatherAdvice} ${timeAdvice}`;
+    return Boolean(this.activeNode);
   }
 
   public selectChoice(choice: DialogueChoice): void {
     if (choice.action) choice.action();
-
-    if (!choice.nextNodeId || choice.nextNodeId === 'exit') {
-      this.closeDialogue();
+    if (!choice.nextNodeId) {
+      this.endDialogue();
       return;
     }
-
-    // Node names are shared between conversations; resolve within this speaker.
-    const conversation = this.currentNpcId ? this.conversations.get(this.currentNpcId) : undefined;
-    const nextNode = conversation?.nodes[choice.nextNodeId];
-    if (nextNode) {
-      this.currentNode = nextNode;
+    const activeConv = this.activeConversationId ? this.conversations.get(this.activeConversationId) : null;
+    if (activeConv?.nodes[choice.nextNodeId]) {
+      this.activeNode = activeConv.nodes[choice.nextNodeId];
       this.notify();
       return;
     }
-
-    this.closeDialogue();
+    for (const conv of this.conversations.values()) {
+      if (conv.nodes[choice.nextNodeId]) {
+        this.activeNode = conv.nodes[choice.nextNodeId];
+        this.notify();
+        return;
+      }
+    }
+    this.endDialogue();
   }
 
-  public closeDialogue(): void {
-    if (this.currentNpcId && !this.dialogueCompleted) {
-      this.dialogueCompleted = true;
-      const npcId = this.currentNpcId;
-      SaveSystem.getInstance().incrementDialogue();
-      SaveSystem.getInstance().recordHistory(
-        `dialogue_${npcId}_${Date.now()}`,
-        `CONTACT LOGGED // ${npcId.replace(/_/g, ' ').toUpperCase()}`,
-        'A conversation was completed and added to the operative city history.',
-      );
-    }
-    this.currentNode = null;
-    this.currentNpcId = null;
+  public endDialogue(): void {
+    this.activeConversationId = null;
+    this.activeNode = null;
     this.notify();
   }
 
-  public getActiveNode(): DialogueNode | null {
-    return this.currentNode;
+  public closeDialogue(): void {
+    this.endDialogue();
   }
 
-  public subscribe(listener: DialogueStateListener): () => void {
+  public getActiveNode(): DialogueNode | null {
+    return this.activeNode;
+  }
+
+  public subscribe(listener: DialogueListener): () => void {
     this.listeners.add(listener);
-    listener(this.currentNode);
+    listener(this.activeNode);
     return () => this.listeners.delete(listener);
   }
 
   private notify(): void {
-    this.listeners.forEach((l) => l(this.currentNode));
+    this.listeners.forEach((l) => l(this.activeNode));
   }
 }

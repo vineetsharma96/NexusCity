@@ -19,6 +19,8 @@ async function systems() {
       export { NavigationSystem } from './src/map/NavigationSystem';
       export { DiscoverySystem } from './src/world/DiscoverySystem';
       export { AudioManager } from './src/audio/AudioManager';
+      export { AmbientAudioManager } from './src/audio/AmbientAudioManager';
+      export { TimeSystem } from './src/world/TimeSystem';
       export { NPCManager } from './src/npc/NPCManager';
       export { CityGenerator } from './src/city/CityGenerator';
       export { WeatherSystem } from './src/world/WeatherSystem';
@@ -146,6 +148,47 @@ test('audio preserves a saved zero volume', async () => {
   const { AudioManager, data } = await systems();
   data.set('nexus_audio_volume', '0');
   assert.equal(AudioManager.getInstance().getSettings().masterVolume, 0);
+});
+
+test('ambient audio manager adapts traffic, wind, rain, and drone levels to time of day and weather', async () => {
+  const { AudioManager, AmbientAudioManager, TimeSystem, WeatherSystem } = await systems();
+  const audio = AudioManager.getInstance();
+  const ambient = AmbientAudioManager.getInstance();
+  const time = TimeSystem.getInstance();
+  const weather = WeatherSystem.getInstance();
+
+  // Clear daytime (13:00): high traffic hum, zero rain, low nocturnal drone
+  time.setTime(13.0);
+  weather.setWeather('CLEAR');
+  const dayClear = audio.updateAmbientSoundscape(0.1, time.getState(), weather.getState());
+  assert.equal(dayClear.activePhase, 'DAY');
+  assert.equal(dayClear.activeWeather, 'CLEAR');
+  assert.ok(dayClear.trafficLevel >= 0.7);
+  assert.equal(dayClear.rainLevel, 0);
+
+  // Nocturnal monsoon storm (23:00 + HEAVY_RAIN): sparse traffic, elevated wind & rain, thunder trigger on lightning flash
+  time.setTime(23.0);
+  weather.setWeather('HEAVY_RAIN');
+  for (let i = 0; i < 30; i++) weather.update(0.5);
+  const nightStorm = audio.updateAmbientSoundscape(0.1, time.getState(), {
+    ...weather.getState(),
+    rainIntensity: 1.0,
+    wetnessFactor: 1.0,
+    lightningFlash: 0.95,
+  });
+  assert.equal(nightStorm.activePhase, 'NIGHT');
+  assert.equal(nightStorm.activeWeather, 'HEAVY_RAIN');
+  assert.ok(nightStorm.trafficLevel < dayClear.trafficLevel);
+  assert.ok(nightStorm.windLevel > dayClear.windLevel);
+  assert.equal(nightStorm.rainLevel, 1);
+  assert.ok(nightStorm.nocturneDroneLevel > dayClear.nocturneDroneLevel);
+  assert.equal(nightStorm.thunderCount, 1);
+
+  // Individual channel toggles mute specific layers
+  ambient.updateChannelSettings({ trafficEnabled: false, windEnabled: false });
+  const mutedTraffic = audio.updateAmbientSoundscape(0.1, time.getState(), weather.getState());
+  assert.equal(mutedTraffic.trafficLevel, 0);
+  assert.equal(mutedTraffic.windLevel, 0);
 });
 
 test('quality-culled citizens cannot remain invisible interaction targets', async () => {

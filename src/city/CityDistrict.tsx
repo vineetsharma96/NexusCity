@@ -1,10 +1,10 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 import { CityGenerator, CityData } from './CityGenerator';
 import { RoadGenerator } from './RoadGenerator';
 import { VegetationGenerator, TreeDef } from './VegetationGenerator';
 import { ProceduralTree } from './ProceduralTree';
-import { FallingLeaves } from './FallingLeaves';
 import { CyberVideoBillboard } from './CyberVideoBillboard';
 import { ProceduralTextures } from '../core/ProceduralTextures';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
@@ -14,102 +14,169 @@ import { StreetSign } from './StreetSign';
 import { NavigationSystem } from '../map/NavigationSystem';
 import { LivingCityEventState, LivingCityEventSystem } from '../world/LivingCityEventSystem';
 
-// Shared static geometries to eliminate redundant GPU vertex buffer uploads
 const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
-const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
-const SHARED_BEACON_SPHERE = new THREE.SphereGeometry(0.3, 8, 8);
 
 interface CityDistrictProps {
   seed?: number;
 }
 
 export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => {
-  // Generate deterministic city and vegetation data
   const cityData: CityData = useMemo(() => CityGenerator.generateDistrict(seed), [seed]);
   const trees: TreeDef[] = useMemo(() => VegetationGenerator.generateTrees(seed), [seed]);
+  const astrolabeRef = useRef<THREE.Group>(null);
 
-  // Lighting & time state
-  const [timeState, setTimeState] = useState<TimeLightingState>(() =>
-    TimeSystem.getInstance().getState()
-  );
-  const [weatherState, setWeatherState] = useState<WeatherState>(() =>
-    WeatherSystem.getInstance().getState()
-  );
+  const [timeState, setTimeState] = useState<TimeLightingState>(() => TimeSystem.getInstance().getState());
+  const [weatherState, setWeatherState] = useState<WeatherState>(() => WeatherSystem.getInstance().getState());
   const [cityEvent, setCityEvent] = useState<LivingCityEventState>(() => LivingCityEventSystem.getInstance().getState());
   const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
   useEffect(() => {
-    let lastNightFactor = -1;
-    let lastWeatherUpdate = -Infinity;
-    let lastWetness = -1;
-    const unsubTime = TimeSystem.getInstance().subscribe((state) => {
-      if (Math.abs(state.nightFactor - lastNightFactor) < 0.03) return;
-      lastNightFactor = state.nightFactor;
-      setTimeState(state);
+    let lastNight = -1;
+    let lastWet = -1;
+    const uTime = TimeSystem.getInstance().subscribe((s) => {
+      if (Math.abs(s.nightFactor - lastNight) < 0.03) return;
+      lastNight = s.nightFactor;
+      setTimeState(s);
     });
-    const unsubWeather = WeatherSystem.getInstance().subscribe((state) => {
-      const now = performance.now();
-      if (now - lastWeatherUpdate < 250 || Math.abs(state.wetnessFactor - lastWetness) < 0.01) return;
-      lastWeatherUpdate = now;
-      lastWetness = state.wetnessFactor;
-      setWeatherState(state);
+    const uWea = WeatherSystem.getInstance().subscribe((s) => {
+      if (Math.abs(s.wetnessFactor - lastWet) < 0.02) return;
+      lastWet = s.wetnessFactor;
+      setWeatherState(s);
     });
-    const unsubEvent = LivingCityEventSystem.getInstance().subscribe(setCityEvent);
-    const unsubQuality = QualityManager.subscribe(setQuality);
+    const uEvt = LivingCityEventSystem.getInstance().subscribe(setCityEvent);
+    const uQual = QualityManager.subscribe(setQuality);
     return () => {
-      unsubTime();
-      unsubWeather();
-      unsubEvent();
-      unsubQuality();
+      uTime();
+      uWea();
+      uEvt();
+      uQual();
     };
   }, []);
 
-  // Dynamic surface wetness and reflection scaling based on Quality profile
-  const envReflectionScale =
-    quality.reflectionQuality === 'HIGH' ? 1.4 :
-    quality.reflectionQuality === 'MEDIUM' ? 0.9 :
-    quality.reflectionQuality === 'LOW' ? 0.4 : 0.0;
+  useFrame((_, delta) => {
+    if (astrolabeRef.current) {
+      astrolabeRef.current.rotation.y += delta * 0.45;
+      astrolabeRef.current.children.forEach((child, idx) => {
+        if (idx > 0) {
+          child.rotation.x += delta * (0.3 + idx * 0.15);
+        }
+      });
+    }
+  });
 
-  const roadRoughness = THREE.MathUtils.lerp(0.35, 0.08, weatherState.wetnessFactor);
-  const roadMetalness = THREE.MathUtils.lerp(0.65, 0.88, weatherState.wetnessFactor);
-  const sidewalkRoughness = THREE.MathUtils.lerp(0.6, 0.18, weatherState.wetnessFactor);
-  const sidewalkMetalness = THREE.MathUtils.lerp(0.3, 0.6, weatherState.wetnessFactor);
+  const envScale =
+    quality.reflectionQuality === 'HIGH'
+      ? 1.55
+      : quality.reflectionQuality === 'MEDIUM'
+      ? 0.95
+      : quality.reflectionQuality === 'LOW'
+      ? 0.4
+      : 0.0;
+
+  const isUltra = quality.name === 'ULTRA';
+  const effectiveWetness = quality.wetReflectionsEnabled ? weatherState.wetnessFactor : 0;
+  const roadRoughness = THREE.MathUtils.lerp(isUltra ? 0.28 : 0.38, 0.06, effectiveWetness);
+  const roadMetalness = THREE.MathUtils.lerp(0.68, 0.92, effectiveWetness);
+  const sidewalkRoughness = THREE.MathUtils.lerp(0.52, 0.16, effectiveWetness);
+  const sidewalkMetalness = THREE.MathUtils.lerp(0.36, 0.68, effectiveWetness);
   const gridIsOut = cityEvent.type === 'POWER_OUTAGE' && cityEvent.phase === 'ACTIVE';
 
-  // Procedural textures
   const asphaltTex = useMemo(() => RoadGenerator.getAsphaltTexture(), []);
   const sidewalkTex = useMemo(() => RoadGenerator.getSidewalkTexture(), []);
-  const facadeTex = useMemo(() => ProceduralTextures.getBuildingFacadeTexture(0.65), []);
+  const facadeTex = useMemo(() => ProceduralTextures.getBuildingFacadeTexture(0.64), []);
   const plazaTex = useMemo(() => ProceduralTextures.getPlazaGridTexture(), []);
   const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
   const puddleRoughness = useMemo(() => ProceduralTextures.getWetPuddleRoughnessMap(), []);
   const claddingNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
-  const landmarkNames = useMemo(() => {
-    const landmarks = NavigationSystem.getInstance().landmarks;
-    return new Map(landmarks.map((landmark) => [landmark.id, landmark.name]));
-  }, []);
+  const landmarkNames = useMemo(
+    () => new Map(NavigationSystem.getInstance().landmarks.map((l) => [l.id, l.name])),
+    []
+  );
+
+  const lightStep = quality.maxLights >= 30 ? 3 : quality.maxLights >= 18 ? 5 : 8;
 
   return (
     <group name="CityDistrictCentral">
-      {/* 1. Base Ground Substrate (2400x2400m for 3km Metropolis) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
-        <planeGeometry args={[2400, 2400]} />
-        <meshStandardMaterial color="#060912" roughness={roadRoughness + 0.2} metalness={0.4} />
+      {/* Ground Substrate */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow={quality.shadows}>
+        <planeGeometry args={[2800, 2800]} />
+        <meshStandardMaterial color="#05080f" roughness={roadRoughness + 0.18} metalness={0.38} />
       </mesh>
 
-      {/* 2. Central Intersection Plaza Hub */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} receiveShadow>
+      {/* Central Civic Plaza */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} receiveShadow={quality.shadows}>
         <planeGeometry args={[28, 28]} />
         <meshStandardMaterial
           map={plazaTex}
-          normalMap={asphaltNormal}
+          normalMap={quality.normalMapsEnabled ? asphaltNormal : undefined}
           normalScale={new THREE.Vector2(0.4, 0.4)}
-          roughness={sidewalkRoughness * 0.8}
+          roughness={sidewalkRoughness * 0.75}
           metalness={sidewalkMetalness}
+          envMapIntensity={envScale}
         />
       </mesh>
 
-      {/* 3. Road Avenues with Dynamic Wetness & Normal Mapping */}
+      {/* Central Plaza Sunken Reflective Meridian Ring & Overhead Astrolabe */}
+      <group name="CentralPlazaPavilion">
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+          <ringGeometry args={[5.4, 8.2, 48]} />
+          <meshStandardMaterial
+            color="#042f2e"
+            emissive="#38bdf8"
+            emissiveIntensity={gridIsOut ? 0.02 : 0.22}
+            roughness={0.05}
+            metalness={0.95}
+            envMapIntensity={envScale * 1.4}
+          />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.045, 0]}>
+          <ringGeometry args={[5.2, 5.4, 48]} />
+          <meshBasicMaterial color="#f59e0b" />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.045, 0]}>
+          <ringGeometry args={[8.2, 8.4, 48]} />
+          <meshBasicMaterial color="#38bdf8" />
+        </mesh>
+
+        {/* 4 Corner Architectural Light Pylons at Plaza Perimeter */}
+        {(
+          [
+            [-10.8, -10.8],
+            [10.8, -10.8],
+            [-10.8, 10.8],
+            [10.8, 10.8],
+          ] as const
+        ).map(([px, pz], idx) => (
+          <group key={`pylon-${idx}`} position={[px, 0, pz]}>
+            <mesh position={[0, 2.4, 0]} castShadow={quality.shadows}>
+              <boxGeometry args={[0.42, 4.8, 0.42]} />
+              <meshStandardMaterial color="#0b0f19" metalness={0.9} roughness={0.2} />
+            </mesh>
+            <mesh position={[0, 2.5, 0]}>
+              <boxGeometry args={[0.46, 3.8, 0.12]} />
+              <meshBasicMaterial color={idx % 2 === 0 ? '#f59e0b' : '#38bdf8'} />
+            </mesh>
+          </group>
+        ))}
+
+        {/* Suspended Kinetic Meridian Astrolabe (High Overhead at y=13.5m) */}
+        <group ref={astrolabeRef} position={[0, 13.5, 0]}>
+          <mesh>
+            <octahedronGeometry args={[1.1, 0]} />
+            <meshBasicMaterial color="#f59e0b" wireframe />
+          </mesh>
+          <mesh>
+            <torusGeometry args={[2.6, 0.05, 8, 48]} />
+            <meshBasicMaterial color="#38bdf8" />
+          </mesh>
+          <mesh rotation={[Math.PI / 3, 0, 0]}>
+            <torusGeometry args={[3.4, 0.04, 8, 48]} />
+            <meshBasicMaterial color="#f59e0b" />
+          </mesh>
+        </group>
+      </group>
+
+      {/* Arterial Avenues */}
       {cityData.avenues.map((ave, idx) => (
         <mesh
           key={`ave-${idx}`}
@@ -117,293 +184,304 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
           rotation={[0, ave.rotationY, 0]}
           geometry={SHARED_UNIT_BOX}
           scale={[ave.size.x, ave.size.y, ave.size.z]}
-          receiveShadow
+          receiveShadow={quality.shadows}
         >
           <meshStandardMaterial
             map={asphaltTex}
-            normalMap={asphaltNormal}
-            normalScale={new THREE.Vector2(0.7, 0.7)}
-            roughnessMap={quality.reflectionQuality !== 'OFF' && weatherState.wetnessFactor > 0.05 ? puddleRoughness : undefined}
+            normalMap={quality.normalMapsEnabled ? asphaltNormal : undefined}
+            normalScale={new THREE.Vector2(isUltra ? 0.85 : 0.65, isUltra ? 0.85 : 0.65)}
+            roughnessMap={
+              quality.wetReflectionsEnabled &&
+              quality.reflectionQuality !== 'OFF' &&
+              (effectiveWetness > 0.05 || isUltra)
+                ? puddleRoughness
+                : undefined
+            }
             roughness={roadRoughness}
             metalness={roadMetalness}
-            envMapIntensity={weatherState.wetnessFactor > 0.05 ? envReflectionScale : envReflectionScale * 0.5}
+            envMapIntensity={effectiveWetness > 0.05 ? envScale : envScale * 0.65}
           />
         </mesh>
       ))}
 
-      {/* 4. Raised Sidewalk Slabs */}
+      {/* Raised Sidewalks with Curb Trim */}
       {cityData.sidewalks.map((sw, idx) => (
-        <mesh
-          key={`sw-${idx}`}
-          position={sw.position}
-          geometry={SHARED_UNIT_BOX}
-          scale={[sw.size.x, sw.size.y, sw.size.z]}
-          receiveShadow
-          castShadow
-        >
-          <meshStandardMaterial
-            map={sidewalkTex}
-            normalMap={asphaltNormal}
-            normalScale={new THREE.Vector2(0.3, 0.3)}
-            roughness={sidewalkRoughness}
-            metalness={sidewalkMetalness}
-          />
-        </mesh>
-      ))}
-
-      {/* 5. Procedural Buildings with Cladding Normals */}
-      {cityData.buildings.map((bldg) => (
-        <group key={bldg.id} position={bldg.position}>
-          {/* Tiers / Main Building Volumes */}
-          {bldg.tiers.map((tier, tIdx) => (
-            <mesh
-              key={`tier-${tIdx}`}
-              position={tier.offset}
-              geometry={SHARED_UNIT_BOX}
-              scale={[tier.size.x, tier.size.y, tier.size.z]}
-              castShadow={quality.shadows}
-              receiveShadow
-            >
-              <meshStandardMaterial
-                map={facadeTex}
-                normalMap={claddingNormal}
-                normalScale={new THREE.Vector2(0.6, 0.6)}
-                roughness={0.35}
-                metalness={0.8}
-              />
-            </mesh>
-          ))}
-
-          {/* Storefront Arcade at Street Level */}
+        <group key={`sw-${idx}`} position={sw.position}>
           <mesh
-            position={[0, 2.2, bldg.totalSize.z / 2 + 0.05]}
             geometry={SHARED_UNIT_BOX}
-            scale={[bldg.totalSize.x * 0.7, 4.4, 0.4]}
+            scale={[sw.size.x, sw.size.y, sw.size.z]}
+            receiveShadow={quality.shadows}
             castShadow={quality.shadows}
           >
             <meshStandardMaterial
-              color="#091428"
-              emissive={bldg.storefrontColor}
-              emissiveIntensity={0.25}
-              metalness={0.9}
-              roughness={0.2}
+              map={sidewalkTex}
+              normalMap={quality.normalMapsEnabled ? asphaltNormal : undefined}
+              normalScale={new THREE.Vector2(0.32, 0.32)}
+              roughness={sidewalkRoughness}
+              metalness={sidewalkMetalness}
+              envMapIntensity={envScale * 0.5}
             />
           </mesh>
-          {/* Glowing Storefront Sign Header */}
+          <mesh position={[0, sw.size.y / 2 + 0.01, 0]} geometry={SHARED_UNIT_BOX} scale={[sw.size.x + 0.08, 0.03, sw.size.z + 0.08]}>
+            <meshBasicMaterial color={idx % 2 === 0 ? '#38bdf8' : '#f59e0b'} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Architectural Monoliths */}
+      {cityData.buildings.map((bldg) => (
+        <group key={bldg.id} position={bldg.position}>
+          {bldg.tiers.map((tier, tIdx) => (
+            <group key={tIdx} position={tier.offset}>
+              <mesh
+                geometry={SHARED_UNIT_BOX}
+                scale={[tier.size.x, tier.size.y, tier.size.z]}
+                castShadow={quality.shadows}
+                receiveShadow={quality.shadows}
+              >
+                <meshStandardMaterial
+                  map={facadeTex}
+                  normalMap={quality.normalMapsEnabled ? claddingNormal : undefined}
+                  normalScale={new THREE.Vector2(isUltra ? 0.75 : 0.55, isUltra ? 0.75 : 0.55)}
+                  roughness={isUltra ? 0.24 : 0.32}
+                  metalness={0.86}
+                  envMapIntensity={envScale}
+                />
+              </mesh>
+              {/* Structural Corner Exoskeleton Columns */}
+              {(
+                [
+                  [-1, -1],
+                  [1, -1],
+                  [-1, 1],
+                  [1, 1],
+                ] as const
+              ).map(([cx, cz], cIdx) => (
+                <mesh
+                  key={cIdx}
+                  position={[(cx * tier.size.x) / 2, 0, (cz * tier.size.z) / 2]}
+                  geometry={SHARED_UNIT_BOX}
+                  scale={[0.65, tier.size.y, 0.65]}
+                >
+                  <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.22} />
+                </mesh>
+              ))}
+            </group>
+          ))}
+
+          {/* Street-Level Illuminated Lobby & Cantilevered Canopy */}
           <mesh
-            position={[0, 4.2, bldg.totalSize.z / 2 + 0.3]}
+            position={[0, 2.4, bldg.totalSize.z / 2 + 0.06]}
             geometry={SHARED_UNIT_BOX}
-            scale={[bldg.totalSize.x * 0.5, 0.6, 0.1]}
+            scale={[bldg.totalSize.x * 0.72, 4.8, 0.42]}
           >
-            <meshBasicMaterial color={bldg.storefrontColor} />
+            <meshStandardMaterial
+              color="#09111f"
+              emissive={bldg.storefrontColor}
+              emissiveIntensity={gridIsOut ? 0.04 : 0.32}
+              metalness={0.9}
+              roughness={0.16}
+            />
+          </mesh>
+          <mesh
+            position={[0, 4.95, bldg.totalSize.z / 2 + 0.85]}
+            geometry={SHARED_UNIT_BOX}
+            scale={[bldg.totalSize.x * 0.78, 0.24, 1.8]}
+          >
+            <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
           </mesh>
 
-          {/* Vertical Neon Architectural Light Strips */}
           {bldg.lightStrips.map((strip, sIdx) => (
             <mesh
-              key={`strip-${sIdx}`}
+              key={sIdx}
               position={strip.position}
               geometry={SHARED_UNIT_BOX}
               scale={[strip.size.x, strip.size.y, strip.size.z]}
             >
-              <meshBasicMaterial color={strip.color} />
+              <meshBasicMaterial color={gridIsOut ? '#1e293b' : strip.color} />
             </mesh>
           ))}
 
-          {/* Rooftop Equipment & Antennas */}
           {bldg.rooftopEquipment.map((eq, eIdx) => (
-            <group key={`eq-${eIdx}`} position={eq.position}>
+            <group key={eIdx} position={eq.position}>
               {eq.type === 'ANTENNA' ? (
                 <>
-                  <mesh castShadow>
-                    <cylinderGeometry args={[0.08, 0.3, eq.size.y, 8]} />
+                  <mesh>
+                    <cylinderGeometry args={[0.08, 0.28, eq.size.y, 8]} />
                     <meshStandardMaterial color="#334155" metalness={0.9} />
                   </mesh>
-                  {/* Blinking Warning Beacon on tip */}
                   <mesh position={[0, eq.size.y / 2, 0]}>
-                    <sphereGeometry args={[0.3, 8, 8]} />
-                    <meshBasicMaterial color="#ff0055" />
+                    <sphereGeometry args={[0.32, 8, 8]} />
+                    <meshBasicMaterial color="#f59e0b" />
                   </mesh>
                 </>
-              ) : eq.type === 'COOLING_TOWER' ? (
+              ) : eq.type === 'HELIPAD' ? (
                 <group>
-                  {/* Wooden/Metal Cylindrical Water Tank */}
-                  <mesh position={[0, 0.5, 0]} castShadow>
-                    <cylinderGeometry args={[eq.size.x * 0.45, eq.size.x * 0.45, eq.size.y * 0.7, 12]} />
-                    <meshStandardMaterial color="#451a03" roughness={0.7} />
+                  <mesh geometry={SHARED_UNIT_BOX} scale={[eq.size.x, eq.size.y, eq.size.z]}>
+                    <meshStandardMaterial color="#0f172a" metalness={0.8} roughness={0.3} />
                   </mesh>
-                  {/* Conical Roof Cap */}
-                  <mesh position={[0, 0.5 + eq.size.y * 0.35 + 0.3, 0]}>
-                    <coneGeometry args={[eq.size.x * 0.5, 0.7, 12]} />
-                    <meshStandardMaterial color="#1e293b" metalness={0.8} />
-                  </mesh>
-                  {/* Stilt Legs */}
-                  {[-0.8, 0.8].map((lx) =>
-                    [-0.8, 0.8].map((lz) => (
-                      <mesh key={`leg-${lx}-${lz}`} position={[lx, -eq.size.y * 0.25, lz]}>
-                        <cylinderGeometry args={[0.06, 0.06, eq.size.y * 0.4, 6]} />
-                        <meshStandardMaterial color="#1e293b" metalness={0.9} />
-                      </mesh>
-                    ))
-                  )}
-                </group>
-              ) : eq.type === 'DISH' ? (
-                <group rotation={[0.4, 0.6, 0]}>
-                  {/* Parabolic Communications Dish */}
-                  <mesh castShadow>
-                    <cylinderGeometry args={[eq.size.x * 0.5, 0.1, 0.4, 16]} />
-                    <meshStandardMaterial color="#e2e8f0" metalness={0.9} roughness={0.2} />
-                  </mesh>
-                  {/* Feed Horn Arm */}
-                  <mesh position={[0, 0.6, 0]}>
-                    <cylinderGeometry args={[0.04, 0.04, 0.8, 6]} />
-                    <meshStandardMaterial color="#0f172a" metalness={0.9} />
+                  <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, eq.size.y / 2 + 0.02, 0]}>
+                    <ringGeometry args={[eq.size.x * 0.32, eq.size.x * 0.38, 24]} />
+                    <meshBasicMaterial color="#38bdf8" />
                   </mesh>
                 </group>
               ) : (
-                /* HVAC Compressor Unit with Fan Grill */
-                <group>
-                  <mesh castShadow receiveShadow>
-                    <boxGeometry args={[eq.size.x, eq.size.y, eq.size.z]} />
-                    <meshStandardMaterial color="#1e293b" metalness={0.85} roughness={0.3} />
-                  </mesh>
-                  {/* Circular Ventilation Fan Grill on top */}
-                  <mesh position={[0, eq.size.y / 2 + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                    <circleGeometry args={[Math.min(eq.size.x, eq.size.z) * 0.35, 12]} />
-                    <meshBasicMaterial color="#00f0ff" wireframe />
-                  </mesh>
-                </group>
+                <mesh geometry={SHARED_UNIT_BOX} scale={[eq.size.x, eq.size.y, eq.size.z]}>
+                  <meshStandardMaterial color="#1e293b" metalness={0.85} roughness={0.3} />
+                </mesh>
               )}
             </group>
           ))}
         </group>
       ))}
 
-      {/* 6. Street Lights Along Sidewalks */}
+      {/* Elevated Glazed Skybridges */}
+      {quality.streetFurnitureEnabled &&
+        cityData.skybridges.map((sb) => (
+          <group key={sb.id} position={sb.position} rotation={[0, sb.rotationY, 0]}>
+            <mesh geometry={SHARED_UNIT_BOX} scale={[sb.size.x, sb.size.y, sb.size.z]} castShadow={quality.shadows}>
+              <meshStandardMaterial
+                color="#0f172a"
+                metalness={0.9}
+                roughness={0.15}
+                transparent
+                opacity={0.86}
+                envMapIntensity={envScale}
+              />
+            </mesh>
+            <mesh position={[0, -sb.size.y / 2 - 0.12, 0]} geometry={SHARED_UNIT_BOX} scale={[sb.size.x, 0.22, sb.size.z + 0.4]}>
+              <meshStandardMaterial color="#090d16" metalness={0.92} roughness={0.25} />
+            </mesh>
+            <mesh position={[0, -sb.size.y / 2 - 0.26, 0]} geometry={SHARED_UNIT_BOX} scale={[sb.size.x * 0.92, 0.06, 0.35]}>
+              <meshBasicMaterial color={gridIsOut ? '#1e293b' : sb.accentColor} />
+            </mesh>
+            <mesh position={[0, sb.size.y / 2 + 0.08, 0]} geometry={SHARED_UNIT_BOX} scale={[sb.size.x * 0.92, 0.06, sb.size.z + 0.1]}>
+              <meshBasicMaterial color={gridIsOut ? '#1e293b' : sb.accentColor} />
+            </mesh>
+          </group>
+        ))}
+
+      {/* Detailed Streetscape Props (Transit Shelters, Cyber Kiosks, Benches, Bollards, Steam Grates) */}
+      {quality.streetFurnitureEnabled &&
+        cityData.streetProps.map((prop) => (
+          <group key={prop.id} position={prop.position} rotation={[0, prop.rotationY, 0]}>
+            {prop.type === 'TRANSIT_SHELTER' && (
+              <group>
+                <mesh position={[0, 1.35, -0.8]} geometry={SHARED_UNIT_BOX} scale={[3.8, 2.7, 0.14]} castShadow={quality.shadows}>
+                  <meshStandardMaterial color="#0f172a" metalness={0.88} roughness={0.18} />
+                </mesh>
+                <mesh position={[0, 2.75, 0]} geometry={SHARED_UNIT_BOX} scale={[4.2, 0.16, 1.9]} castShadow={quality.shadows}>
+                  <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.2} />
+                </mesh>
+                <mesh position={[0, 2.66, 0.85]} geometry={SHARED_UNIT_BOX} scale={[4.0, 0.05, 0.12]}>
+                  <meshBasicMaterial color={prop.accentColor} />
+                </mesh>
+                <mesh position={[0, 0.48, -0.35]} geometry={SHARED_UNIT_BOX} scale={[2.4, 0.12, 0.55]}>
+                  <meshStandardMaterial color="#334155" metalness={0.8} roughness={0.3} />
+                </mesh>
+              </group>
+            )}
+            {prop.type === 'CYBER_KIOSK' && (
+              <group>
+                <mesh position={[0, 1.25, 0]} geometry={SHARED_UNIT_BOX} scale={[0.85, 2.5, 0.36]} castShadow={quality.shadows}>
+                  <meshStandardMaterial color="#0b0f19" metalness={0.92} roughness={0.18} />
+                </mesh>
+                <mesh position={[0, 1.4, 0.19]} geometry={SHARED_UNIT_BOX} scale={[0.68, 1.35, 0.02]}>
+                  <meshBasicMaterial color={prop.accentColor} />
+                </mesh>
+                <mesh position={[0, 2.62, 0]} geometry={SHARED_UNIT_BOX} scale={[0.92, 0.08, 0.44]}>
+                  <meshBasicMaterial color="#f59e0b" />
+                </mesh>
+              </group>
+            )}
+            {prop.type === 'BENCH' && (
+              <group>
+                <mesh position={[0, 0.42, 0]} geometry={SHARED_UNIT_BOX} scale={[2.2, 0.12, 0.65]} castShadow={quality.shadows}>
+                  <meshStandardMaterial color="#1e293b" metalness={0.75} roughness={0.35} />
+                </mesh>
+                <mesh position={[0, 0.72, -0.26]} geometry={SHARED_UNIT_BOX} scale={[2.2, 0.48, 0.1]}>
+                  <meshStandardMaterial color="#0f172a" metalness={0.85} roughness={0.25} />
+                </mesh>
+                <mesh position={[0, 0.12, 0]} geometry={SHARED_UNIT_BOX} scale={[1.8, 0.04, 0.4]}>
+                  <meshBasicMaterial color={prop.accentColor} />
+                </mesh>
+              </group>
+            )}
+            {prop.type === 'BOLLARD_CLUSTER' && (
+              <group>
+                {([-1.2, 0, 1.2] as const).map((bx, bIdx) => (
+                  <group key={bIdx} position={[bx, 0, 0]}>
+                    <mesh position={[0, 0.5, 0]}>
+                      <cylinderGeometry args={[0.11, 0.13, 1.0, 8]} />
+                      <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
+                    </mesh>
+                    <mesh position={[0, 0.88, 0]}>
+                      <cylinderGeometry args={[0.12, 0.12, 0.08, 8]} />
+                      <meshBasicMaterial color={prop.accentColor} />
+                    </mesh>
+                  </group>
+                ))}
+              </group>
+            )}
+            {prop.type === 'STEAM_GRATE' && (
+              <group>
+                <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                  <planeGeometry args={[1.8, 1.1]} />
+                  <meshStandardMaterial color="#1e293b" metalness={0.92} roughness={0.25} />
+                </mesh>
+                <mesh position={[0, 1.2, 0]}>
+                  <coneGeometry args={[0.85, 2.4, 8, 1, true]} />
+                  <meshBasicMaterial color={prop.accentColor} transparent opacity={0.09} depthWrite={false} side={THREE.DoubleSide} />
+                </mesh>
+              </group>
+            )}
+          </group>
+        ))}
+
+      {/* Street Luminaires */}
       {cityData.streetlights.map((sl, idx) => (
-        <group key={`sl-${idx}`} position={sl.position} rotation={[0, sl.rotationY, 0]}>
-          {/* Lamp Post Base */}
-          <mesh position={[0, 0.3, 0]} castShadow>
-            <cylinderGeometry args={[0.2, 0.25, 0.6, 8]} />
-            <meshStandardMaterial color="#0b1322" metalness={0.9} />
+        <group key={idx} position={sl.position} rotation={[0, sl.rotationY, 0]}>
+          <mesh position={[0, 3.2, 0]}>
+            <cylinderGeometry args={[0.07, 0.1, 6.2, 8]} />
+            <meshStandardMaterial color="#1e293b" metalness={0.88} />
           </mesh>
-          {/* Vertical Pole */}
-          <mesh position={[0, 3.2, 0]} castShadow>
-            <cylinderGeometry args={[0.08, 0.1, 5.8, 8]} />
-            <meshStandardMaterial color="#1e293b" metalness={0.85} />
-          </mesh>
-          {/* Curved Arm Overhang */}
-          <mesh position={[0.8, 6.0, 0]} rotation={[0, 0, -Math.PI / 4]} castShadow>
-            <cylinderGeometry args={[0.06, 0.08, 1.8, 8]} />
-            <meshStandardMaterial color="#1e293b" metalness={0.85} />
-          </mesh>
-          {/* Luminaire Head */}
-          <mesh position={[1.4, 6.4, 0]} geometry={SHARED_UNIT_BOX} scale={[0.8, 0.15, 0.3]}>
+          <mesh position={[0.9, 6.2, 0]} geometry={SHARED_UNIT_BOX} scale={[1.8, 0.12, 0.24]}>
             <meshStandardMaterial color="#0f172a" metalness={0.9} />
           </mesh>
-          {/* Glowing Emissive Light Diffuser */}
-          <mesh position={[1.4, 6.32, 0]} geometry={SHARED_UNIT_BOX} scale={[0.65, 0.04, 0.22]}>
-             <meshBasicMaterial color={gridIsOut ? '#17202b' : timeState.nightFactor > 0.3 ? '#00f0ff' : '#083344'} />
+          <mesh position={[1.4, 6.12, 0]} geometry={SHARED_UNIT_BOX} scale={[0.7, 0.04, 0.2]}>
+            <meshBasicMaterial color={gridIsOut ? '#1e293b' : timeState.nightFactor > 0.3 ? '#fef3c7' : '#38bdf8'} />
           </mesh>
-          {/* Localized point light on street lamps adhering to quality maxLights budget */}
-          {quality.maxLights >= 8 && quality.nightLightsEnabled && idx % 8 === 0 && (
+          {quality.maxLights >= 8 && quality.nightLightsEnabled && idx % lightStep === 0 && (
             <pointLight
               position={[1.4, 5.8, 0]}
-              color="#00f0ff"
-              distance={24}
+              color="#fef3c7"
+              distance={isUltra ? 30 : 24}
               decay={2}
-               intensity={gridIsOut ? 0.04 : 0.2 + timeState.nightFactor * 2.8}
+              intensity={gridIsOut ? 0.04 : 0.25 + timeState.nightFactor * (isUltra ? 3.0 : 2.5)}
             />
           )}
         </group>
       ))}
 
-      {/* 7. Procedural Trees & Street Planters with Dynamic Wind Sway */}
-      {trees.map((tree) => (
-        <ProceduralTree key={tree.id} tree={tree} registerGlobalCollider={true} />
-      ))}
+      {/* Avenue Trees */}
+      {quality.vegetationEnabled &&
+        trees.map((tree) => <ProceduralTree key={tree.id} tree={tree} registerGlobalCollider />)}
 
-      {/* 8. Dynamic Wind-Driven Falling Leaves Particle System */}
-      <FallingLeaves trees={trees} count={800} />
+      {/* Broadcast Matrices */}
+      {quality.billboardsEnabled && (
+        <>
+          <CyberVideoBillboard position={[0, 18, -28]} rotationY={0} width={22} height={13} channel={1} />
+          <CyberVideoBillboard position={[22, 18, 0]} rotationY={-Math.PI / 2} width={20} height={12} channel={2} />
+          <CyberVideoBillboard position={[-22, 18, 0]} rotationY={Math.PI / 2} width={20} height={12} channel={3} />
+          <CyberVideoBillboard position={[0, 18, 32]} rotationY={Math.PI} width={22} height={13} channel={1} />
+        </>
+      )}
 
-      {/* 9. Giant Skyscraper Dynamic Cyber-Video Billboards */}
-      {/* Central Plaza North Facade Billboard (Channel 1: Nexus 24 Live News with ticker & globe) */}
-      <CyberVideoBillboard
-        position={[0, 18, -28]}
-        rotationY={0}
-        width={22}
-        height={13}
-        channel={1}
-      />
-
-      {/* Apex Tower East Avenue Facade Billboard (Channel 2: Cyber-Corp Commercial Adverts) */}
-      <CyberVideoBillboard
-        position={[22, 18, 0]}
-        rotationY={-Math.PI / 2}
-        width={20}
-        height={12}
-        channel={2}
-      />
-
-      {/* Neon Lounge West Avenue Facade Billboard (Channel 3: Metropolis Grid Surveillance & Matrix) */}
-      <CyberVideoBillboard
-        position={[-22, 18, 0]}
-        rotationY={Math.PI / 2}
-        width={20}
-        height={12}
-        channel={3}
-      />
-
-      {/* South Plaza Facade Billboard (Channel 1: Live News Ticker) */}
-      <CyberVideoBillboard
-        position={[0, 18, 32]}
-        rotationY={Math.PI}
-        width={22}
-        height={13}
-        channel={1}
-      />
-
-      {/* 10. Static wayfinding signs: fixed placements keep exploration clues stable for every seed. */}
-      <StreetSign
-        position={[0, 4.25, -12]}
-        rotationY={Math.PI}
-        label={landmarkNames.get('central_plaza') ?? 'Central Plaza Hub'}
-        direction="S"
-      />
-      <StreetSign
-        position={[0, 4.25, -62]}
-        rotationY={Math.PI}
-        label={landmarkNames.get('north_crossway') ?? 'North Crossing Avenue'}
-        direction="N"
-        accent="#ff4fd8"
-      />
-      <StreetSign
-        position={[0, 4.25, 62]}
-        label={landmarkNames.get('south_crossway') ?? 'South Crossing Avenue'}
-        direction="S"
-        accent="#ff4fd8"
-      />
-      <StreetSign
-        position={[28, 4.25, -28]}
-        rotationY={Math.PI / 2}
-        label={landmarkNames.get('twin_spires') ?? 'Twin Spire Skybridge'}
-        direction="E"
-        accent="#a78bfa"
-      />
-      <StreetSign
-        position={[28, 4.25, 28]}
-        rotationY={Math.PI / 2}
-        label={landmarkNames.get('apex_tower') ?? 'Apex Monolith Tower'}
-        direction="E"
-        accent="#ffd166"
-      />
-      <StreetSign
-        position={[62, 4.25, 62]}
-        rotationY={-Math.PI / 2}
-        label={landmarkNames.get('park_sanctuary') ?? 'Central Park Sanctuary'}
-        direction="E"
-        accent="#59f0b2"
-      />
+      {/* Wayfinding Signage */}
+      <StreetSign position={[0, 4.25, -12]} rotationY={Math.PI} label={landmarkNames.get('central_plaza') ?? 'Central Plaza Hub'} direction="S" />
+      <StreetSign position={[0, 4.25, -62]} rotationY={Math.PI} label={landmarkNames.get('north_crossway') ?? 'North Crossing Avenue'} direction="N" accent="#38bdf8" />
+      <StreetSign position={[28, 4.25, 28]} rotationY={Math.PI / 2} label={landmarkNames.get('apex_tower') ?? 'Apex Monolith Tower'} direction="E" accent="#f59e0b" />
+      <StreetSign position={[62, 4.25, 62]} rotationY={-Math.PI / 2} label={landmarkNames.get('park_sanctuary') ?? 'Central Park Sanctuary'} direction="E" accent="#10b981" />
     </group>
   );
 };

@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CinematicManager, CinematicState } from '../cinematics/CinematicManager';
 
 export const CinematicOverlay: React.FC = () => {
-  const [cinematic, setCinematic] = useState<CinematicState>(() =>
-    CinematicManager.getInstance().getState()
-  );
+  const [cinematic, setCinematic] = useState<CinematicState>(() => CinematicManager.getInstance().getState());
 
   useEffect(() => {
     return CinematicManager.getInstance().subscribe(setCinematic);
@@ -32,26 +30,48 @@ export const CinematicOverlay: React.FC = () => {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-start',
-          padding: '18px 20px',
+          padding: '20px 24px',
         }}
       >
-        <div aria-hidden="true" />
-        <button
-          onClick={() => CinematicManager.getInstance().skip()}
+        <div
+          className="glass-panel"
           style={{
-            pointerEvents: 'auto',
-            padding: '8px 12px',
-            color: '#d7faff',
-            background: 'rgba(3, 8, 20, 0.72)',
-            border: '1px solid rgba(0, 240, 255, 0.34)',
-            borderRadius: 3,
-            fontFamily: 'var(--font-mono, monospace)',
-            fontSize: '0.68rem',
-            letterSpacing: '1px',
-            cursor: 'pointer',
+            padding: '10px 16px',
+            borderLeft: '3px solid var(--neon-amber)',
           }}
         >
-          RESUME [V]
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.68rem',
+              letterSpacing: '0.16em',
+              color: 'var(--neon-amber)',
+              fontWeight: 600,
+            }}
+          >
+            AERIAL ORBIT // LIVE TELEMETRY
+          </div>
+          <div
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '0.92rem',
+              color: 'var(--text-primary)',
+              marginTop: 2,
+            }}
+          >
+            {cinematic.caption}
+          </div>
+        </div>
+        <button
+          onClick={() => CinematicManager.getInstance().skip()}
+          className="cyber-btn"
+          style={{
+            pointerEvents: 'auto',
+            padding: '8px 14px',
+            fontSize: '0.72rem',
+          }}
+        >
+          RESUME GROUND CONTROL [V]
         </button>
       </div>
     );
@@ -67,126 +87,103 @@ export const CinematicOverlay: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        transition: 'opacity 0.6s ease',
-        opacity: isTransitioning ? 0.6 : 1.0,
+        transition: 'opacity 0.55s ease',
+        opacity: isTransitioning ? 0.55 : 1.0,
       }}
     >
-      {/* Top Cinematic Letterbox Bar */}
+      {/* Top Architectural Letterbox Bar */}
       <div
         className="cinematic-bar"
         style={{
-          height: '75px',
-          backgroundColor: '#040711',
-          borderBottom: '1px solid rgba(0, 240, 255, 0.25)',
+          height: '68px',
+          backgroundColor: 'rgba(7, 9, 14, 0.94)',
+          borderBottom: '1px solid var(--border-glass)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '0 32px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.8)',
+          padding: '0 28px',
           pointerEvents: 'auto',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div
             style={{
-              width: '10px',
-              height: '10px',
+              width: '8px',
+              height: '8px',
               borderRadius: '50%',
-              backgroundColor: '#ff0055',
-              boxShadow: '0 0 10px #ff0055',
-              animation: 'pulse 1.2s infinite ease-in-out',
+              backgroundColor: 'var(--neon-amber)',
+              boxShadow: '0 0 10px var(--neon-amber)',
+              animation: 'pulse 1.4s infinite ease-in-out',
             }}
           />
           <span
             style={{
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: '0.82rem',
-              letterSpacing: '2px',
-              color: '#00f0ff',
-              fontWeight: 700,
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.76rem',
+              letterSpacing: '0.18em',
+              color: 'var(--text-primary)',
+              fontWeight: 600,
             }}
           >
-            {isVista ? 'REC // 360° CINEMATIC DRONE VISTA' : 'REC // ORBITAL DRONE CAMERA'}
+            NEXUS ARCHITECTURAL RECON // ORBITAL TELEMETRY
           </span>
         </div>
 
-        {/* Prominent SKIP INTRO / RESUME Button */}
         {cinematic.canSkip && (
           <button
             onClick={() => CinematicManager.getInstance().skip()}
+            className="cyber-btn cyber-btn-primary"
             style={{
-              background: 'rgba(0, 240, 255, 0.12)',
-              border: '1px solid #00f0ff',
-              color: '#ffffff',
-              padding: '8px 24px',
-              borderRadius: '4px',
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              letterSpacing: '2px',
-              cursor: 'pointer',
-              boxShadow: '0 0 16px rgba(0, 240, 255, 0.4)',
-              transition: 'all 0.2s ease',
+              padding: '8px 20px',
+              fontSize: '0.76rem',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 240, 255, 0.3)';
-              e.currentTarget.style.boxShadow = '0 0 24px rgba(0, 240, 255, 0.8)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 240, 255, 0.12)';
-              e.currentTarget.style.boxShadow = '0 0 16px rgba(0, 240, 255, 0.4)';
-            }}
           >
-            <span>SKIP INTRO</span>
-            <span style={{ color: '#00f0ff' }}>→</span>
+            <span>ENTER METROPOLIS</span>
+            <span>→</span>
           </button>
         )}
       </div>
 
-      {/* Center Cinematic Grid Overlay Elements */}
+      {/* Lower-Third Editorial Caption Frame */}
       <div
         className="cinematic-caption"
         style={{
-          position: 'relative',
-          padding: '0 40px 10px 40px',
+          padding: '0 32px 16px 32px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-start',
         }}
       >
         <div
+          className="glass-panel"
           style={{
-            backgroundColor: 'rgba(4, 8, 20, 0.75)',
-            borderLeft: '4px solid #00f0ff',
+            borderLeft: '3px solid var(--neon-amber)',
             padding: '16px 24px',
-            borderRadius: '0 8px 8px 0',
-            backdropFilter: 'blur(8px)',
-            boxShadow: '0 0 30px rgba(0, 0, 0, 0.6)',
-            maxWidth: '640px',
+            maxWidth: '620px',
           }}
         >
           <div
             style={{
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: '0.78rem',
-              color: '#ff007f',
-              letterSpacing: '2px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.7rem',
+              color: 'var(--neon-amber)',
+              letterSpacing: '0.18em',
               marginBottom: '6px',
-              fontWeight: 700,
+              fontWeight: 600,
             }}
           >
-            AUTOMATED RECON // ARCHITECTURE SCAN
+            SECTOR SCAN // REAL-TIME PROCEDURAL STREAM
           </div>
           <div
             style={{
-              fontFamily: 'var(--font-display, sans-serif)',
-              fontSize: '1.45rem',
-              color: '#ffffff',
-              letterSpacing: '3px',
-              textShadow: '0 0 16px rgba(0, 240, 255, 0.6)',
+              fontFamily: 'var(--font-display)',
+              fontSize: '1.35rem',
+              fontWeight: 800,
+              color: 'var(--text-primary)',
+              letterSpacing: '0.06em',
               marginBottom: '4px',
             }}
           >
@@ -194,10 +191,9 @@ export const CinematicOverlay: React.FC = () => {
           </div>
           <div
             style={{
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: '0.85rem',
-              color: '#94a3b8',
-              letterSpacing: '1px',
+              fontFamily: 'var(--font-body)',
+              fontSize: '0.84rem',
+              color: 'var(--text-secondary)',
             }}
           >
             {cinematic.subcaption}
@@ -205,38 +201,36 @@ export const CinematicOverlay: React.FC = () => {
         </div>
       </div>
 
-      {/* Bottom Cinematic Letterbox Bar */}
+      {/* Bottom Letterbox Bar */}
       <div
         className="cinematic-bar"
         style={{
-          height: '75px',
-          backgroundColor: '#040711',
-          borderTop: '1px solid rgba(0, 240, 255, 0.25)',
+          height: '64px',
+          backgroundColor: 'rgba(7, 9, 14, 0.94)',
+          borderTop: '1px solid var(--border-glass)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '0 32px',
-          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.8)',
+          padding: '0 28px',
           pointerEvents: 'auto',
         }}
       >
         <div
           style={{
-            fontFamily: 'var(--font-mono, monospace)',
-            fontSize: '0.78rem',
-            color: '#64748b',
-            letterSpacing: '1.5px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.72rem',
+            color: 'var(--text-muted)',
+            letterSpacing: '0.14em',
           }}
         >
-          COORDINATES // [35°41&apos;N, 139°41&apos;E] • SEED #847291
+          GRID MATRIX 24×24 • SEED #847291
         </div>
 
-        {/* Progress track */}
         <div
           style={{
             width: '200px',
-            height: '4px',
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            height: '3px',
+            backgroundColor: 'rgba(255, 255, 255, 0.08)',
             borderRadius: '2px',
             overflow: 'hidden',
           }}
@@ -245,8 +239,8 @@ export const CinematicOverlay: React.FC = () => {
             style={{
               height: '100%',
               width: `${Math.min(100, cinematic.progress * 100)}%`,
-              backgroundColor: '#00f0ff',
-              boxShadow: '0 0 8px #00f0ff',
+              backgroundColor: 'var(--neon-cyan)',
+              boxShadow: '0 0 10px var(--neon-cyan)',
               transition: 'width 0.1s linear',
             }}
           />

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { WeatherState, WeatherSystem } from '../world/WeatherSystem';
@@ -22,18 +22,14 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
   height = 12,
   channel = 1,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const textureRef = useRef<THREE.CanvasTexture | null>(null);
-  const tickerOffsetRef = useRef(0);
-  const lastDrawTimeRef = useRef(0);
+  const tickerRef = useRef(0);
+  const lastDrawRef = useRef(0);
   const weatherRef = useRef<WeatherState>(WeatherSystem.getInstance().getState());
   const emergencyRef = useRef<EmergencyState>(EmergencyAlertSystem.getInstance().getState());
-  const cityEventRef = useRef<LivingCityEventState>(LivingCityEventSystem.getInstance().getState());
+  const eventRef = useRef<LivingCityEventState>(LivingCityEventSystem.getInstance().getState());
   const discoveryCountRef = useRef(Object.keys(SaveSystem.getInstance().getData().discoveredLandmarks).length);
-  const lastDiscoveryRef = useRef('CENTRAL PLAZA HUB');
   const district = DistrictGenerator.getDistrictAt(position[0], position[2]);
 
-  // Setup offscreen canvas and texture
   const { canvas, texture } = useMemo(() => {
     const c = document.createElement('canvas');
     c.width = 512;
@@ -49,54 +45,40 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
   useEffect(() => () => texture.dispose(), [texture]);
 
   useEffect(() => {
-    canvasRef.current = canvas;
-    textureRef.current = texture;
-
-    // Draw initial test pattern immediately
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#040714';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#00f0ff';
-      ctx.font = 'bold 24px monospace';
-      ctx.fillText('NEXUS BROADCAST // ONLINE', 60, 160);
-      texture.needsUpdate = true;
-    }
-  }, [canvas, texture]);
-
-  useEffect(() => {
-    const unsubscribeWeather = WeatherSystem.getInstance().subscribe((state) => { weatherRef.current = state; });
-    const unsubscribeEmergency = EmergencyAlertSystem.getInstance().subscribe((state) => { emergencyRef.current = state; });
-    const unsubscribeCityEvent = LivingCityEventSystem.getInstance().subscribe((state) => { cityEventRef.current = state; });
-    const handleDiscovery = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      if (detail?.type !== 'discovery') return;
-      discoveryCountRef.current += 1;
-      lastDiscoveryRef.current = detail?.title?.replace('LOCATION DISCOVERED // ', '') || lastDiscoveryRef.current;
+    const uWea = WeatherSystem.getInstance().subscribe((s) => {
+      weatherRef.current = s;
+    });
+    const uEmg = EmergencyAlertSystem.getInstance().subscribe((s) => {
+      emergencyRef.current = s;
+    });
+    const uEvt = LivingCityEventSystem.getInstance().subscribe((s) => {
+      eventRef.current = s;
+    });
+    const onDisc = (e: Event) => {
+      if ((e as CustomEvent).detail?.type === 'discovery') {
+        discoveryCountRef.current += 1;
+      }
     };
-    window.addEventListener('nexus:notification', handleDiscovery);
+    window.addEventListener('nexus:notification', onDisc);
     return () => {
-      unsubscribeWeather();
-      unsubscribeEmergency();
-      unsubscribeCityEvent();
-      window.removeEventListener('nexus:notification', handleDiscovery);
+      uWea();
+      uEmg();
+      uEvt();
+      window.removeEventListener('nexus:notification', onDisc);
     };
   }, []);
 
-  // Frame update for dynamic video rendering
   useFrame(({ clock, camera }) => {
-    const camDist = Math.hypot(
+    const dist = Math.hypot(
       camera.position.x - position[0],
       camera.position.y - position[1],
       camera.position.z - position[2]
     );
-    if (camDist > 220) return; // Skip 2D canvas redraws when distant
+    if (dist > 220) return;
 
     const time = clock.getElapsedTime();
-
-    // Broadcast panels remain fluid at 15 FPS without uploading four canvases every frame.
-    if (time - lastDrawTimeRef.current < 1 / 15) return;
-    lastDrawTimeRef.current = time;
+    if (time - lastDrawRef.current < 1 / 12) return;
+    lastDrawRef.current = time;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -105,355 +87,129 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
     const h = canvas.height;
     const weather = weatherRef.current;
     const emergency = emergencyRef.current;
-    const cityEvent = cityEventRef.current;
+    const cityEvent = eventRef.current;
 
-    // Determine active video channel (can cycle or use prop)
-    const activeChannel = channel;
-
-    // Clear background
-    ctx.fillStyle = '#040714';
+    ctx.fillStyle = '#060911';
     ctx.fillRect(0, 0, w, h);
 
-    if (activeChannel === 1) {
-      // ==========================================
-      // CHANNEL 1: NEXUS 24 LIVE NEWS BROADCAST
-      // ==========================================
+    // Top telemetry header
+    ctx.fillStyle = '#0d1322';
+    ctx.fillRect(0, 0, w, 38);
+    ctx.fillStyle = channel === 1 ? '#f59e0b' : channel === 2 ? '#38bdf8' : '#10b981';
+    ctx.fillRect(0, 0, 6, 38);
 
-      // 1. Top Header Bar
-      ctx.fillStyle = '#091326';
-      ctx.fillRect(0, 0, w, 36);
+    ctx.font = '700 14px monospace';
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillText(
+      channel === 1
+        ? 'NEXUS CIVIC BROADCAST // SECTOR 01'
+        : channel === 2
+        ? 'SOLARIS ARCHITECTURAL CORP // INDEX'
+        : 'METROPOLITAN GRID TELEMETRY // RADAR',
+      18,
+      24
+    );
 
-      // Blinking Red Recording Dot
-      const blink = Math.sin(time * 6) > 0;
-      ctx.fillStyle = blink ? '#ff0055' : '#55001a';
-      ctx.beginPath();
-      ctx.arc(20, 18, 7, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Broadcast Title
-      ctx.font = 'bold 15px "Courier New", monospace';
-      ctx.fillStyle = '#00f0ff';
-      ctx.fillText('🔴 NEXUS 24 // LIVE METROPOLIS FEED', 36, 23);
-
-      // Time readout
-      const hrs = String(Math.floor((time * 2) % 24)).padStart(2, '0');
-      const mins = String(Math.floor((time * 40) % 60)).padStart(2, '0');
-      const secs = String(Math.floor((time * 120) % 60)).padStart(2, '0');
-      ctx.fillStyle = '#ffaa00';
-      ctx.fillText(`${hrs}:${mins}:${secs} UTC`, w - 120, 23);
-
-      // 2. Central 3D Wireframe Rotating Globe / Hologram
-      const centerX = w / 2;
-      const centerY = h / 2 - 10;
-      const globeRadius = 55;
-
+    if (channel === 1) {
+      // Wireframe orbital rings
       ctx.save();
-      ctx.translate(centerX, centerY);
-
-      // Outer glowing ring
-      ctx.strokeStyle = '#00f0ff';
+      ctx.translate(w / 2, h / 2 - 4);
+      ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(0, 0, globeRadius, 0, Math.PI * 2);
+      ctx.arc(0, 0, 56, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Rotating latitude / longitude ellipses
-      for (let ring = 1; ring <= 4; ring++) {
-        ctx.strokeStyle = ring % 2 === 0 ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 0, 128, 0.35)';
-        ctx.lineWidth = 1.5;
+      for (let r = 1; r <= 3; r++) {
+        ctx.strokeStyle = r % 2 === 0 ? 'rgba(245, 158, 11, 0.55)' : 'rgba(56, 189, 248, 0.45)';
         ctx.beginPath();
-        const ellipseScale = Math.cos(time * 1.5 + (ring * Math.PI) / 4);
-        ctx.ellipse(0, 0, globeRadius, Math.abs(ellipseScale) * globeRadius, time * 0.4, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 56, Math.abs(Math.cos(time * 1.2 + r)) * 56, time * 0.35, 0, Math.PI * 2);
         ctx.stroke();
       }
-
-      // Center spinning core
-      ctx.fillStyle = '#00ffaa';
-      ctx.beginPath();
-      ctx.arc(0, 0, 8 + Math.sin(time * 4) * 3, 0, Math.PI * 2);
-      ctx.fill();
-
       ctx.restore();
-
-      // 3. Audio Spectrum Equalizer Bars
-      const numBars = 24;
-      const barW = 8;
-      const startX = 20;
-      const baseY = h - 60;
-
-      for (let b = 0; b < numBars; b++) {
-        const barH = Math.max(
-          8,
-          Math.sin(time * 8 + b * 0.6) * 28 + Math.cos(time * 5 + b * 1.2) * 18 + 25
-        );
-        const bx = startX + b * (barW + 4);
-        const grad = ctx.createLinearGradient(0, baseY, 0, baseY - barH);
-        grad.addColorStop(0, '#00f0ff');
-        grad.addColorStop(0.6, '#00ffaa');
-        grad.addColorStop(1, '#ff0077');
-        ctx.fillStyle = grad;
-        ctx.fillRect(bx, baseY - barH, barW, barH);
+    } else if (channel === 2) {
+      // Architectural waveform bars
+      const bars = 24;
+      for (let b = 0; b < bars; b++) {
+        const bh = 18 + Math.abs(Math.sin(time * 3.5 + b * 0.45)) * 90;
+        ctx.fillStyle = b % 3 === 0 ? '#f59e0b' : '#38bdf8';
+        ctx.fillRect(36 + b * 18, h - 85 - bh, 11, bh);
       }
-
-      // Right Side Telemetry Readout
-      ctx.font = '12px "Courier New", monospace';
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillText(`TRANSIT: OPTIMAL`, w - 165, baseY - 45);
-      ctx.fillText(`SOLAR FLUX: 14.8 GW`, w - 165, baseY - 25);
-      ctx.fillText(`AIR PURITY: 92.4%`, w - 165, baseY - 5);
-
-      // 4. Bottom Scrolling News Marquee Ticker
-      ctx.fillStyle = '#020617';
-      ctx.fillRect(0, h - 38, w, 38);
-      ctx.fillStyle = '#ffaa00';
-      ctx.fillRect(0, h - 38, w, 2);
-
-      tickerOffsetRef.current -= 2.2;
-      if (tickerOffsetRef.current < -1200) tickerOffsetRef.current = 0;
-
-      const tickerText =
-        '⚡ NEXUS BULLETINS: CELESTIAL ORBIT ACTIVE // TRAFFIC SYSTEM ONLINE // BIOSPHERE WATER POND SANCTUARY OPEN // HYPERLOOP TRANSIT ON SCHEDULE // STOCK TICKER: $CYBR +6.8% // METROPOLIS STABILITY 99.8% // ⚡';
-
-      ctx.font = 'bold 15px "Courier New", monospace';
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillText(tickerText, tickerOffsetRef.current + w, h - 14);
-      ctx.fillText(tickerText, tickerOffsetRef.current + w + 1200, h - 14);
-
-    } else if (activeChannel === 2) {
-      // ==========================================
-      // CHANNEL 2: CYBER-CORP COMMERCIAL ADVERT
-      // ==========================================
-      const commercialIdx = Math.floor(time / 4) % 3;
-
-      if (commercialIdx === 0) {
-        // Ad 1: NEO-COCA ENERGY
-        const grad = ctx.createLinearGradient(0, 0, w, h);
-        grad.addColorStop(0, '#3b0764');
-        grad.addColorStop(0.5, '#701a75');
-        grad.addColorStop(1, '#0f172a');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, w, h);
-
-        ctx.font = '900 36px "Courier New", sans-serif';
-        ctx.fillStyle = '#f43f5e';
-        ctx.textAlign = 'center';
-        ctx.fillText('NEO - COCA', w / 2, 90);
-
-        ctx.font = 'bold 18px "Courier New", monospace';
-        ctx.fillStyle = '#fbcfe8';
-        ctx.fillText('RECHARGE YOUR SYNAPSES', w / 2, 130);
-
-        // Animated neon bottle silhouette
-        const pulse = 1 + Math.sin(time * 8) * 0.08;
-        ctx.fillStyle = '#ec4899';
-        ctx.fillRect(w / 2 - 18 * pulse, 155, 36 * pulse, 85);
-        ctx.fillStyle = '#00f0ff';
-        ctx.fillRect(w / 2 - 10, 142, 20, 15);
-
-        ctx.font = 'bold 14px "Courier New", monospace';
-        ctx.fillStyle = '#00ffaa';
-        ctx.fillText('AVAILABLE AT ALL METRO VENDORS', w / 2, 280);
-        ctx.textAlign = 'left';
-
-      } else if (commercialIdx === 1) {
-        // Ad 2: CYBER-OPTICS 8K
-        ctx.fillStyle = '#030712';
-        ctx.fillRect(0, 0, w, h);
-
-        // Animated Concentric HUD Reticle
-        ctx.save();
-        ctx.translate(w / 2, h / 2 - 20);
-        ctx.strokeStyle = '#00f0ff';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, 0, 60, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.strokeStyle = '#ff0077';
-        ctx.beginPath();
-        ctx.arc(0, 0, 42, time * 2, time * 2 + Math.PI * 1.5);
-        ctx.stroke();
-
-        // Crosshairs
-        ctx.strokeStyle = '#00ffaa';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(-75, 0);
-        ctx.lineTo(75, 0);
-        ctx.moveTo(0, -75);
-        ctx.lineTo(0, 75);
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.font = '900 28px "Courier New", monospace';
-        ctx.fillStyle = '#00f0ff';
-        ctx.textAlign = 'center';
-        ctx.fillText('KROM - OPTICS 8K', w / 2, 235);
-        ctx.font = 'bold 15px "Courier New", monospace';
-        ctx.fillStyle = '#e0e7ff';
-        ctx.fillText('SEE BEYOND THE GRID // UPGRADE TODAY', w / 2, 265);
-        ctx.textAlign = 'left';
-
-      } else {
-        // Ad 3: AERO-CRUISER
-        ctx.fillStyle = '#022c22';
-        ctx.fillRect(0, 0, w, h);
-
-        ctx.font = '900 32px "Courier New", sans-serif';
-        ctx.fillStyle = '#34d399';
-        ctx.textAlign = 'center';
-        ctx.fillText('VELOCITY - X', w / 2, 100);
-
-        ctx.font = 'bold 18px "Courier New", monospace';
-        ctx.fillStyle = '#a7f3d0';
-        ctx.fillText('HIGH-ALTITUDE HOVER COMMUTING', w / 2, 140);
-
-        // Flying wedge shape
-        const flyX = ((time * 120) % (w + 120)) - 60;
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.moveTo(flyX, 190);
-        ctx.lineTo(flyX - 45, 175);
-        ctx.lineTo(flyX - 45, 205);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.font = '14px "Courier New", monospace';
-        ctx.fillStyle = '#fbbf24';
-        ctx.fillText('EXPERIENCE 600 KM/H GLIDE', w / 2, 270);
-        ctx.textAlign = 'left';
-      }
-
     } else {
-      // ==========================================
-      // CHANNEL 3: METROPOLIS GRID SURVEILLANCE
-      // ==========================================
-      ctx.fillStyle = '#020b08';
-      ctx.fillRect(0, 0, w, h);
-
-      // Radar Screen Circle
+      // Sector radar sweep
       const rx = w / 2;
-      const ry = h / 2;
-      const rRad = 90;
-
-      ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
-      ctx.lineWidth = 2;
+      const ry = h / 2 + 4;
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.45)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(rx, ry, rRad, 0, Math.PI * 2);
-      ctx.arc(rx, ry, rRad * 0.66, 0, Math.PI * 2);
-      ctx.arc(rx, ry, rRad * 0.33, 0, Math.PI * 2);
+      ctx.arc(rx, ry, 68, 0, Math.PI * 2);
+      ctx.arc(rx, ry, 38, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Sweeping Radar Beam
       ctx.save();
       ctx.translate(rx, ry);
-      ctx.rotate(time * 2.5);
-      const sweepGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, rRad);
-      sweepGrad.addColorStop(0, 'rgba(16, 185, 129, 0.6)');
-      sweepGrad.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
-      ctx.fillStyle = sweepGrad;
+      ctx.rotate(time * 2.0);
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.arc(0, 0, rRad, 0, Math.PI / 3);
-      ctx.closePath();
-      ctx.fill();
+      ctx.lineTo(68, 0);
+      ctx.stroke();
       ctx.restore();
-
-      // Tracking Blips
-      ctx.fillStyle = '#38bdf8';
-      ctx.beginPath();
-      ctx.arc(rx + 35, ry - 25, 4, 0, Math.PI * 2);
-      ctx.arc(rx - 45, ry + 15, 4, 0, Math.PI * 2);
-      ctx.arc(rx + 15, ry + 50, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Surveillance Header & Footers
-      ctx.font = 'bold 14px "Courier New", monospace';
-      ctx.fillStyle = '#10b981';
-      ctx.fillText('CAM-04 // SECTOR 0 // CORE BOULEVARDS', 20, 30);
-      ctx.fillText('FPS: 60 // RES: 1080p // REC ●', 20, h - 20);
-      ctx.fillText(`GRID LOCK: ACTIVE [${Math.floor(time * 10) % 9999}]`, w - 240, 30);
     }
 
-    // Shared public-service strip: content changes only when world services change;
-    // animation remains isolated to this canvas and never drives React state.
-    ctx.fillStyle = emergency.active ? (emergency.kind === 'STORM' ? '#7f1d1d' : '#713f12') : '#071827';
-    ctx.fillRect(10, 42, w - 20, 24);
-    ctx.font = 'bold 12px "Courier New", monospace';
-    ctx.fillStyle = emergency.active ? '#fef2f2' : '#a5f3fc';
-    const weatherLabel = weather.currentWeather === 'HEAVY_RAIN' ? 'STORM' : weather.currentWeather;
-    const alertLabel = emergency.active ? `${emergency.kind} ${emergency.level} // ${emergency.message}` : 'PUBLIC CHANNELS NOMINAL';
-    ctx.fillText(`${district.name} // WEATHER: ${weatherLabel} // ${alertLabel}`.slice(0, 92), 18, 58);
+    // Status Banner
+    ctx.fillStyle = emergency.active ? '#7f1d1d' : '#0b1528';
+    ctx.fillRect(14, 48, w - 28, 24);
+    ctx.font = '700 12px monospace';
+    ctx.fillStyle = emergency.active ? '#fecaca' : '#bae6fd';
+    ctx.fillText(
+      `${district.name} // ATMO: ${weather.currentWeather} // ${emergency.message}`.slice(0, 66),
+      22,
+      64
+    );
 
-    // Phase 2 overrides the public-service strip for corporate response events.
     if (cityEvent.phase !== 'IDLE') {
-      const eventColor = cityEvent.type === 'CORPORATE_LOCKDOWN' ? '#ff176b' : cityEvent.type === 'POWER_OUTAGE' ? '#ffb000' : '#ff5c35';
-      ctx.fillStyle = eventColor;
-      ctx.fillRect(10, 68, w - 20, 22);
-      ctx.fillStyle = '#050816';
-      ctx.font = 'bold 11px "Courier New", monospace';
-      const eventLabel = cityEvent.phase === 'RECOVERY' ? 'RECOVERY // ' : 'LIVE EVENT // ';
-      ctx.fillText(`${eventLabel}${cityEvent.title} // ${cityEvent.message}`.slice(0, 96), 18, 83);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(14, 76, w - 28, 22);
+      ctx.fillStyle = '#07090e';
+      ctx.fillText(`${cityEvent.title} (${cityEvent.remainingSeconds}S)`.slice(0, 64), 22, 91);
     }
 
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(12, h - 66, w - 24, 20);
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = '11px "Courier New", monospace';
-    ctx.fillText(`CODEX SYNC: ${discoveryCountRef.current} DISCOVERIES // LAST: ${lastDiscoveryRef.current}`, 20, h - 52);
+    // Bottom marquee
+    ctx.fillStyle = '#03060c';
+    ctx.fillRect(0, h - 36, w, 36);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(0, h - 36, w, 2);
 
-    // 5. Global Video Glitch & Scanline Overlay
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
-    for (let line = 0; line < h; line += 4) {
-      ctx.fillRect(0, line, w, 1.5);
-    }
-
-    // VHS tracking glitch bar every ~4s
-    if (Math.sin(time * 3.5) > 0.88) {
-      const glitchY = Math.abs(Math.sin(time * 12)) * (h - 20);
-      ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
-      ctx.fillRect(0, glitchY, w, 14);
-    }
+    tickerRef.current = (tickerRef.current - 2.5) % 900;
+    const msg = `METROPOLIS TELEMETRY // ${discoveryCountRef.current} LANDMARKS LOGGED // TRANSIT CORRIDORS ACTIVE // `;
+    ctx.font = '700 14px monospace';
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillText(msg + msg, tickerRef.current, h - 13);
 
     texture.needsUpdate = true;
   });
 
+  const rimColor = channel === 1 ? '#f59e0b' : channel === 2 ? '#38bdf8' : '#10b981';
+
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
-      {/* Heavy Industrial Screen Enclosure / Backing */}
-      <mesh position={[0, 0, -0.25]} castShadow receiveShadow>
-        <boxGeometry args={[width + 1.6, height + 1.4, 0.5]} />
-        <meshStandardMaterial color="#070b14" roughness={0.3} metalness={0.9} />
+      <mesh position={[0, 0, -0.22]} castShadow receiveShadow>
+        <boxGeometry args={[width + 1.2, height + 1.2, 0.42]} />
+        <meshStandardMaterial color="#070a12" roughness={0.28} metalness={0.9} />
       </mesh>
-
-      {/* Dynamic Video Display Surface (in front of backing) */}
-      <mesh position={[0, 0, 0.05]}>
+      <mesh position={[0, 0, 0.04]}>
         <planeGeometry args={[width, height]} />
-        <meshBasicMaterial map={texture} toneMapped={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial map={texture} toneMapped={false} />
       </mesh>
-
-      {/* Outer Glowing Neon Bezel Rim Tubes */}
-      <mesh position={[0, height / 2 + 0.35, 0.08]}>
-        <boxGeometry args={[width + 0.8, 0.12, 0.12]} />
-        <meshBasicMaterial color={channel === 1 ? '#00f0ff' : channel === 2 ? '#ec4899' : '#10b981'} />
+      <mesh position={[0, height / 2 + 0.3, 0.06]}>
+        <boxGeometry args={[width + 0.6, 0.1, 0.1]} />
+        <meshBasicMaterial color={rimColor} />
       </mesh>
-      <mesh position={[0, -height / 2 - 0.35, 0.08]}>
-        <boxGeometry args={[width + 0.8, 0.12, 0.12]} />
-        <meshBasicMaterial color={channel === 1 ? '#00f0ff' : channel === 2 ? '#ec4899' : '#10b981'} />
-      </mesh>
-      <mesh position={[-width / 2 - 0.35, 0, 0.08]}>
-        <boxGeometry args={[0.12, height + 0.8, 0.12]} />
-        <meshBasicMaterial color={channel === 1 ? '#00f0ff' : channel === 2 ? '#ec4899' : '#10b981'} />
-      </mesh>
-      <mesh position={[width / 2 + 0.35, 0, 0.08]}>
-        <boxGeometry args={[0.12, height + 0.8, 0.12]} />
-        <meshBasicMaterial color={channel === 1 ? '#00f0ff' : channel === 2 ? '#ec4899' : '#10b981'} />
-      </mesh>
-
-      {/* Structural Catwalk Grate Platform Below Screen */}
-      <mesh position={[0, -height / 2 - 0.8, 0.8]}>
-        <boxGeometry args={[width + 2, 0.15, 1.6]} />
-        <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.4} />
+      <mesh position={[0, -height / 2 - 0.3, 0.06]}>
+        <boxGeometry args={[width + 0.6, 0.1, 0.1]} />
+        <meshBasicMaterial color={rimColor} />
       </mesh>
     </group>
   );

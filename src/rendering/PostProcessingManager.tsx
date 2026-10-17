@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -7,132 +7,170 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { QualitySettings } from './QualityManager';
-import { createNeonGradePass } from './NeonGradePass';
 import { WebGLCapabilities } from './WebGLCapabilities';
+import { TimeSystem } from '../world/TimeSystem';
+import { WeatherSystem } from '../world/WeatherSystem';
+import { createNeonGradePass } from './NeonGradePass';
 
-function disposeComposer(composer: EffectComposer): void {
-  for (const pass of composer.passes) {
-    try { pass.dispose(); } catch { /* Continue releasing the remaining GPU resources. */ }
-  }
-  composer.dispose();
+interface PostProcessingManagerProps {
+  quality: QualitySettings;
 }
 
-export const PostProcessingManager: React.FC<{ quality: QualitySettings }> = ({ quality }) => {
-  const { gl, scene, camera, size, viewport } = useThree();
-  const caps = useMemo(() => WebGLCapabilities.detect(), []);
-  const [renderError, setRenderError] = useState(false);
+export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({ quality }) => {
+  const { gl, scene, camera, size } = useThree();
   const composerRef = useRef<EffectComposer | null>(null);
-  const bloomRef = useRef<UnrealBloomPass | null>(null);
-  const gradeRef = useRef<ShaderPass | null>(null);
-  const clearColor = useMemo(() => new THREE.Color(), []);
-  const enabled = quality.postProcessing && !renderError && caps.supported &&
-    caps.version === 'webgl2' && !caps.isConstrained && !caps.isVirGL;
-  const bloomEnabled = enabled && quality.bloom && caps.supportsHalfFloatRenderTarget;
+  const bloomPassRef = useRef<UnrealBloomPass | null>(null);
+  const gradePassRef = useRef<ShaderPass | null>(null);
+  const pipelineBrokenRef = useRef(false);
 
-  // Allocate in an effect so StrictMode and profile changes release all passes
-  // and both full-size composer buffers. Start at 1px before applying the budget.
+  const canUsePost = useMemo(() => {
+    const caps = WebGLCapabilities.detect();
+    return quality.postProcessing && !caps.isVirGL && caps.supportsHalfFloatRenderTarget;
+  }, [quality.postProcessing]);
+
+  const isUltra = quality.name === 'ULTRA' || quality.reflectionQuality === 'HIGH';
+
   useEffect(() => {
-    if (!enabled) return;
-    let composer: EffectComposer | null = null;
-    let target: THREE.WebGLRenderTarget | null = null;
+    if (!canUsePost) {
+      composerRef.current = null;
+      return;
+    }
+
     try {
-      target = new THREE.WebGLRenderTarget(1, 1, {
+      const targetDpr = Math.min(window.devicePixelRatio || 1, quality.dpr[1]);
+      const clampedDpr = Math.max(quality.dpr[0], targetDpr);
+      gl.setPixelRatio(clampedDpr);
+
+      const rtWidth = Math.max(1, Math.floor(size.width * clampedDpr));
+      const rtHeight = Math.max(1, Math.floor(size.height * clampedDpr));
+
+      // Linear HalfFloat render target (no sRGB colorSpace on HalfFloat to prevent WebGL2 internalformat mismatch)
+      const renderTarget = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
+        type: THREE.HalfFloatType,
         format: THREE.RGBAFormat,
-        type: caps.supportsHalfFloatRenderTarget ? THREE.HalfFloatType : THREE.UnsignedByteType,
-        samples: 0,
         depthBuffer: true,
         stencilBuffer: false,
       });
-      composer = new EffectComposer(gl, target);
-      composer.setPixelRatio(1);
+
+      const composer = new EffectComposer(gl, renderTarget);
+      composer.setPixelRatio(clampedDpr);
+      composer.setSize(size.width, size.height);
       composer.addPass(new RenderPass(scene, camera));
-      if (bloomEnabled) {
-        const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.28, 0.38, 0.82);
-        for (const buffer of [bloom.renderTargetBright, ...bloom.renderTargetsHorizontal, ...bloom.renderTargetsVertical]) {
-          buffer.depthBuffer = false;
-          buffer.stencilBuffer = false;
-          buffer.samples = 0;
-        }
-        composer.addPass(bloom);
-        bloomRef.current = bloom;
+
+      const bloomScale = isUltra ? 1 : 2;
+      const bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(
+          Math.max(1, Math.floor((size.width * clampedDpr) / bloomScale)),
+          Math.max(1, Math.floor((size.height * clampedDpr) / bloomScale))
+        ),
+        quality.bloom ? (isUltra ? 0.42 : 0.34) : 0.0,
+        isUltra ? 0.56 : 0.46,
+        isUltra ? 0.78 : 0.84
+      );
+      bloomPass.enabled = quality.bloom;
+      composer.addPass(bloomPass);
+      bloomPassRef.current = bloomPass;
+
+      const gradePass = createNeonGradePass();
+      gradePass.uniforms.uUltraClarity.value = quality.sharpeningEnabled
+        ? isUltra
+          ? 1.0
+          : 0.55
+        : 0.0;
+      gradePass.uniforms.uVignette.value = quality.vignetteEnabled ? 0.26 : 0.0;
+      if (gradePass.uniforms.uTexelSize?.value?.set) {
+        gradePass.uniforms.uTexelSize.value.set(1 / rtWidth, 1 / rtHeight);
+      } else {
+        gradePass.uniforms.uTexelSize.value = new THREE.Vector2(1 / rtWidth, 1 / rtHeight);
       }
-      const grade = createNeonGradePass();
-      composer.addPass(grade);
+      composer.addPass(gradePass);
+      gradePassRef.current = gradePass;
+
       composer.addPass(new OutputPass());
+
       composerRef.current = composer;
-      gradeRef.current = grade;
-    } catch (error) {
-      if (composer) disposeComposer(composer);
-      else target?.dispose();
-      composerRef.current = null;
-      bloomRef.current = null;
-      gradeRef.current = null;
-      console.warn('[PostProcessingManager] Initialization failed; using direct rendering.', error);
-      setRenderError(true);
-      return;
-    }
-    return () => {
-      if (composerRef.current === composer) {
+      pipelineBrokenRef.current = false;
+
+      return () => {
+        composer.dispose();
+        renderTarget.dispose();
         composerRef.current = null;
-        bloomRef.current = null;
-        gradeRef.current = null;
-      }
-      if (composer) disposeComposer(composer);
-    };
-  }, [gl, scene, camera, enabled, bloomEnabled, caps.supportsHalfFloatRenderTarget]);
+      };
+    } catch {
+      pipelineBrokenRef.current = true;
+      composerRef.current = null;
+    }
+  }, [canUsePost, quality.bloom, quality.dpr[0], quality.dpr[1], isUltra, gl, scene, camera]);
 
   useEffect(() => {
-    const composer = composerRef.current;
-    if (!composer) return;
-    try {
-      const physicalWidth = Math.max(1, Math.round(size.width * gl.getPixelRatio()));
-      const physicalHeight = Math.max(1, Math.round(size.height * gl.getPixelRatio()));
-      const maxWidth = Math.max(1, Math.min(caps.maxTextureSize, caps.maxRenderBufferSize, caps.maxViewportDims[0]));
-      const maxHeight = Math.max(1, Math.min(caps.maxTextureSize, caps.maxRenderBufferSize, caps.maxViewportDims[1]));
-      // Bound physical pixels, including DPR, while preserving the viewport aspect.
-      const scale = Math.min(1, maxWidth / physicalWidth, maxHeight / physicalHeight,
-        Math.sqrt((1920 * 1080) / (physicalWidth * physicalHeight)));
-      const width = Math.max(1, Math.floor(physicalWidth * scale));
-      const height = Math.max(1, Math.floor(physicalHeight * scale));
-      composer.setSize(width, height);
-      const bloom = bloomRef.current;
-      if (bloom) {
-        const ultra = quality.name === 'ULTRA';
-        bloom.strength = ultra ? 0.42 : 0.28;
-        const bloomScale = Math.min(ultra ? 1 : 0.5, 1280 / width, 720 / height);
-        // Composer.setSize resizes every pass; apply the actual bloom target budget last.
-        bloom.setSize(Math.max(1, Math.floor(width * bloomScale)), Math.max(1, Math.floor(height * bloomScale)));
-      }
-    } catch (error) {
-      console.warn('[PostProcessingManager] Resize failed; using direct rendering.', error);
-      setRenderError(true);
+    const targetDpr = Math.max(quality.dpr[0], Math.min(window.devicePixelRatio || 1, quality.dpr[1]));
+    gl.setPixelRatio(targetDpr);
+    const rtWidth = Math.max(1, Math.floor(size.width * targetDpr));
+    const rtHeight = Math.max(1, Math.floor(size.height * targetDpr));
+
+    if (composerRef.current) {
+      composerRef.current.setPixelRatio(targetDpr);
+      composerRef.current.setSize(size.width, size.height);
     }
-  }, [gl, enabled, bloomEnabled, quality.name, size.width, size.height, viewport.dpr, caps]);
+    if (bloomPassRef.current) {
+      const bloomScale = isUltra ? 1 : 2;
+      bloomPassRef.current.resolution.set(
+        Math.max(1, Math.floor(rtWidth / bloomScale)),
+        Math.max(1, Math.floor(rtHeight / bloomScale))
+      );
+      bloomPassRef.current.enabled = quality.bloom;
+    }
+    if (gradePassRef.current) {
+      gradePassRef.current.uniforms.uUltraClarity.value = quality.sharpeningEnabled
+        ? isUltra
+          ? 1.0
+          : 0.55
+        : 0.0;
+      gradePassRef.current.uniforms.uVignette.value = quality.vignetteEnabled ? 0.26 : 0.0;
+      if (gradePassRef.current.uniforms.uTexelSize?.value?.set) {
+        gradePassRef.current.uniforms.uTexelSize.value.set(1 / rtWidth, 1 / rtHeight);
+      }
+    }
+  }, [
+    size.width,
+    size.height,
+    quality.bloom,
+    quality.sharpeningEnabled,
+    quality.vignetteEnabled,
+    quality.dpr[0],
+    quality.dpr[1],
+    isUltra,
+    gl,
+  ]);
 
   useFrame((_, delta) => {
-    if (!enabled) return;
-    const composer = composerRef.current;
-    if (!composer) {
+    if (!canUsePost || pipelineBrokenRef.current || !composerRef.current) {
       gl.render(scene, camera);
       return;
     }
-    const previousAutoClear = gl.autoClear;
-    gl.getClearColor(clearColor);
-    const previousClearAlpha = gl.getClearAlpha();
+
+    const timeState = TimeSystem.getInstance().getState();
+    const weatherState = WeatherSystem.getInstance().getState();
+
+    if (bloomPassRef.current && quality.bloom) {
+      const ultraBoost = isUltra ? 0.08 : 0.0;
+      const targetStrength =
+        0.16 + ultraBoost + timeState.nightFactor * 0.26 + weatherState.wetnessFactor * 0.14;
+      bloomPassRef.current.strength = THREE.MathUtils.lerp(bloomPassRef.current.strength, targetStrength, delta * 3);
+    }
+
+    if (gradePassRef.current) {
+      gradePassRef.current.uniforms.uNightFactor.value = timeState.nightFactor;
+      gradePassRef.current.uniforms.uRainIntensity.value = weatherState.rainIntensity;
+    }
+
     try {
-      if (gradeRef.current) gradeRef.current.uniforms.uTime.value += delta;
-      composer.render(delta);
-    } catch (error) {
-      // Bloom can fail after switching render targets and clear state. Restore
-      // the normal renderer before presenting the same frame through the fallback.
-      gl.setRenderTarget(null);
-      gl.autoClear = previousAutoClear;
-      gl.setClearColor(clearColor, previousClearAlpha);
-      console.warn('[PostProcessingManager] Render failed; disabling post-processing.', error);
-      setRenderError(true);
+      composerRef.current.render(delta);
+    } catch {
+      pipelineBrokenRef.current = true;
       gl.render(scene, camera);
     }
-  }, enabled ? 1 : 0);
+  }, 1);
 
   return null;
 };

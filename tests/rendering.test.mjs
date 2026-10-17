@@ -87,6 +87,38 @@ test('toggling a setting preserves the active AUTO graphics budget', async () =>
   assert.equal(after.nightLightsEnabled, false);
 });
 
+test('CUSTOM preset and granular graphics toggles can be switched on or off independently', async () => {
+  const { QualityManager } = await graphics();
+  QualityManager.setPreset('CUSTOM');
+  assert.equal(QualityManager.preset, 'CUSTOM');
+  assert.equal(QualityManager.current.name, 'CUSTOM');
+
+  QualityManager.setAllGraphicsToggles(false);
+  assert.equal(QualityManager.current.shadows, false);
+  assert.equal(QualityManager.current.bloom, false);
+  assert.equal(QualityManager.current.rainParticlesEnabled, false);
+  assert.equal(QualityManager.current.vegetationEnabled, false);
+  assert.equal(QualityManager.current.trafficEnabled, false);
+  assert.equal(QualityManager.current.npcsEnabled, false);
+  assert.equal(QualityManager.current.reflectionQuality, 'OFF');
+
+  QualityManager.updateCustomSettings({
+    vegetationEnabled: true,
+    rainParticlesEnabled: true,
+    sharpeningEnabled: true,
+  });
+  assert.equal(QualityManager.current.vegetationEnabled, true);
+  assert.equal(QualityManager.current.rainParticlesEnabled, true);
+  assert.equal(QualityManager.current.sharpeningEnabled, true);
+  assert.equal(QualityManager.current.trafficEnabled, false);
+
+  QualityManager.setAllGraphicsToggles(true);
+  assert.equal(QualityManager.current.shadows, true);
+  assert.equal(QualityManager.current.trafficEnabled, true);
+  assert.equal(QualityManager.current.npcsEnabled, true);
+  assert.equal(QualityManager.current.reflectionQuality, 'HIGH');
+});
+
 test('performance samples notify with new immutable snapshots', async () => {
   const original = globalThis.performance;
   let time = 0;

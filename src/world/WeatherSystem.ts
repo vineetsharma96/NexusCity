@@ -1,53 +1,40 @@
 import * as THREE from 'three';
 
-export type WeatherType = 'CLEAR' | 'CLOUDY' | 'RAIN' | 'HEAVY_RAIN' | 'FOG';
+export type WeatherType = 'CLEAR' | 'RAIN' | 'HEAVY_RAIN' | 'FOG';
 
 export interface WeatherState {
   currentWeather: WeatherType;
-  targetWeather: WeatherType;
-  rainIntensity: number; // 0.0 to 1.0
-  wetnessFactor: number; // 0.0 to 1.0 (smooth buildup and drying)
-  fogDensityMultiplier: number; // 1.0 (clear) to 4.0 (dense fog)
-  fogColorTint: string;
-  skyDarkness: number; // 0.0 (normal) to 0.7 (stormy overcast)
-  windVector: THREE.Vector3; // Current wind drift velocity for particles
-  isLightningActive: boolean;
-  lightningIntensity: number; // 0.0 to 1.0 spike during strikes
+  rainIntensity: number;
+  wetnessFactor: number;
+  fogDensityMultiplier: number;
+  windVector: THREE.Vector3;
+  lightningFlash: number;
+  autoCycle: boolean;
 }
 
 type WeatherListener = (state: WeatherState) => void;
 
 export class WeatherSystem {
   private static instance: WeatherSystem;
+  private state: WeatherState = {
+    currentWeather: 'CLEAR',
+    rainIntensity: 0.0,
+    wetnessFactor: 0.15,
+    fogDensityMultiplier: 1.0,
+    windVector: new THREE.Vector3(2.2, -18.0, 1.4),
+    lightningFlash: 0.0,
+    autoCycle: true,
+  };
 
-  private currentWeather: WeatherType = 'CLEAR';
-  private targetWeather: WeatherType = 'CLEAR';
+  private targetRain = 0.0;
+  private targetWetness = 0.15;
+  private targetFogMult = 1.0;
+  private cycleTimer = 0;
+  private readonly weatherSequence: WeatherType[] = ['CLEAR', 'RAIN', 'HEAVY_RAIN', 'FOG', 'CLEAR'];
+  private seqIndex = 0;
+  private listeners = new Set<WeatherListener>();
 
-  // Smoothly interpolated atmospheric variables
-  private rainIntensity: number = 0.0;
-  private wetnessFactor: number = 0.0;
-  private fogDensityMultiplier: number = 1.0;
-  private skyDarkness: number = 0.0;
-  private windVector: THREE.Vector3 = new THREE.Vector3(-4, -32, 2);
-
-  // Lightning system for HEAVY_RAIN / STORM
-  private lightningTimer: number = 0;
-  private nextLightningTime: number = 10;
-  private isLightningActive: boolean = false;
-  private lightningIntensity: number = 0.0;
-  private lightningFlashDuration: number = 0;
-
-  // Auto weather cycle timer
-  private autoCycleTimer: number = 0;
-  private autoCycleEnabled: boolean = false;
-  private weatherCycleOrder: WeatherType[] = ['CLEAR', 'CLOUDY', 'RAIN', 'HEAVY_RAIN', 'FOG'];
-  private currentCycleIndex: number = 0;
-
-  private listeners: Set<WeatherListener> = new Set();
-
-  private constructor() {
-    this.resetLightningTimer();
-  }
+  private constructor() {}
 
   public static getInstance(): WeatherSystem {
     if (!WeatherSystem.instance) {
@@ -56,158 +43,107 @@ export class WeatherSystem {
     return WeatherSystem.instance;
   }
 
-  public setWeather(weather: WeatherType, autoCycle: boolean = false): void {
-    this.targetWeather = weather;
-    this.currentWeather = weather;
-    this.currentCycleIndex = this.weatherCycleOrder.indexOf(weather);
-    this.autoCycleTimer = 0;
-    this.autoCycleEnabled = autoCycle;
-    if (weather === 'HEAVY_RAIN') {
-      this.resetLightningTimer();
+  public setWeather(type: WeatherType, keepAutoCycle: boolean = false): void {
+    this.state.currentWeather = type;
+    this.state.autoCycle = keepAutoCycle;
+    const idx = this.weatherSequence.indexOf(type);
+    if (idx !== -1) this.seqIndex = idx;
+
+    switch (type) {
+      case 'CLEAR':
+        this.targetRain = 0.0;
+        this.targetWetness = 0.12;
+        this.targetFogMult = 1.0;
+        this.state.windVector.set(1.5, -16.0, 0.8);
+        break;
+      case 'RAIN':
+        this.targetRain = 0.55;
+        this.targetWetness = 0.78;
+        this.targetFogMult = 1.6;
+        this.state.windVector.set(3.2, -22.0, 1.8);
+        break;
+      case 'HEAVY_RAIN':
+        this.targetRain = 1.0;
+        this.targetWetness = 1.0;
+        this.targetFogMult = 2.4;
+        this.state.windVector.set(5.8, -28.0, 3.2);
+        break;
+      case 'FOG':
+        this.targetRain = 0.08;
+        this.targetWetness = 0.55;
+        this.targetFogMult = 3.5;
+        this.state.windVector.set(0.8, -14.0, 0.5);
+        break;
     }
     this.notify();
   }
 
-  public toggleAutoCycle(): boolean {
-    this.autoCycleEnabled = !this.autoCycleEnabled;
-    return this.autoCycleEnabled;
-  }
-
-  public isAutoCycle(): boolean {
-    return this.autoCycleEnabled;
-  }
-
-  private resetLightningTimer(): void {
-    this.lightningTimer = 0;
-    this.nextLightningTime = 5 + Math.random() * 8; // lightning every 5–13s in storm
+  public setAutoCycle(enabled: boolean): void {
+    this.state.autoCycle = enabled;
+    this.notify();
   }
 
   public update(delta: number): void {
-    // 1. Auto weather cycle if enabled (changes every 90 seconds)
-    if (this.autoCycleEnabled) {
-      this.autoCycleTimer += delta;
-      if (this.autoCycleTimer >= 90) {
-        this.autoCycleTimer = 0;
-        this.currentCycleIndex = (this.currentCycleIndex + 1) % this.weatherCycleOrder.length;
-        this.setWeather(this.weatherCycleOrder[this.currentCycleIndex], true);
+    if (this.state.autoCycle) {
+      this.cycleTimer += delta;
+      if (this.cycleTimer > 85) {
+        this.cycleTimer = 0;
+        this.seqIndex = (this.seqIndex + 1) % this.weatherSequence.length;
+        this.setWeather(this.weatherSequence[this.seqIndex], true);
       }
     }
 
-    // 2. Compute target values based on weather type
-    let targetRain = 0;
-    let targetWetness = 0;
-    let targetFog = 1.0;
-    let targetDarkness = 0.0;
-    const targetWind = new THREE.Vector3(-3, -30, 2);
+    let changed = false;
+    const lerpSpeed = delta * 0.45;
 
-    switch (this.targetWeather) {
-      case 'CLEAR':
-        targetRain = 0.0;
-        targetWetness = 0.0;
-        targetFog = 1.0;
-        targetDarkness = 0.0;
-        targetWind.set(-2, -30, 1);
-        break;
-      case 'CLOUDY':
-        targetRain = 0.0;
-        targetWetness = 0.05;
-        targetFog = 1.3;
-        targetDarkness = 0.28;
-        targetWind.set(-5, -28, 3);
-        break;
-      case 'RAIN':
-        targetRain = 0.65;
-        targetWetness = 0.85;
-        targetFog = 1.85;
-        targetDarkness = 0.45;
-        targetWind.set(-9, -32, 4);
-        break;
-      case 'HEAVY_RAIN':
-        targetRain = 1.0;
-        targetWetness = 1.0;
-        targetFog = 2.5;
-        targetDarkness = 0.65;
-        targetWind.set(-18, -38, 9); // Strong storm wind
-        break;
-      case 'FOG':
-        targetRain = 0.0;
-        targetWetness = 0.35; // Wet dewy atmosphere
-        targetFog = 4.2; // Very dense cyber fog
-        targetDarkness = 0.35;
-        targetWind.set(-1, -20, 1);
-        break;
-    }
-
-    // 3. Smooth interpolation (lerp)
-    const lerpRate = Math.min(1.0, delta * 1.5);
-    // Dynamic drying hysteresis: wet up quickly during rainfall, evaporate gradually over 45-60s post-rain
-    const wetnessLerpRate = Math.min(1.0, delta * (targetWetness > this.wetnessFactor ? 0.6 : 0.05));
-
-    this.rainIntensity = THREE.MathUtils.lerp(this.rainIntensity, targetRain, lerpRate);
-    this.wetnessFactor = THREE.MathUtils.lerp(this.wetnessFactor, targetWetness, wetnessLerpRate);
-    this.fogDensityMultiplier = THREE.MathUtils.lerp(this.fogDensityMultiplier, targetFog, lerpRate);
-    this.skyDarkness = THREE.MathUtils.lerp(this.skyDarkness, targetDarkness, lerpRate);
-    this.windVector.lerp(targetWind, lerpRate);
-
-    // 4. Lightning simulation for HEAVY_RAIN
-    if (this.targetWeather === 'HEAVY_RAIN') {
-      this.lightningTimer += delta;
-      if (this.lightningTimer >= this.nextLightningTime) {
-        this.isLightningActive = true;
-        this.lightningFlashDuration = 0.28; // 280ms double-pulse flash
-        this.resetLightningTimer();
-      }
-
-      if (this.isLightningActive) {
-        this.lightningFlashDuration -= delta;
-        if (this.lightningFlashDuration > 0) {
-          // Double-pulse strobe profile
-          const t = 1.0 - this.lightningFlashDuration / 0.28;
-          const strobe = Math.sin(t * Math.PI * 3);
-          this.lightningIntensity = Math.max(0, strobe);
-        } else {
-          this.isLightningActive = false;
-          this.lightningIntensity = 0.0;
-        }
-      }
+    if (Math.abs(this.state.rainIntensity - this.targetRain) > 0.005) {
+      this.state.rainIntensity = THREE.MathUtils.lerp(this.state.rainIntensity, this.targetRain, lerpSpeed);
+      changed = true;
     } else {
-      this.isLightningActive = false;
-      this.lightningIntensity = 0.0;
+      this.state.rainIntensity = this.targetRain;
     }
 
-    this.notify();
+    if (Math.abs(this.state.wetnessFactor - this.targetWetness) > 0.005) {
+      this.state.wetnessFactor = THREE.MathUtils.lerp(this.state.wetnessFactor, this.targetWetness, delta * 0.25);
+      changed = true;
+    } else {
+      this.state.wetnessFactor = this.targetWetness;
+    }
+
+    if (Math.abs(this.state.fogDensityMultiplier - this.targetFogMult) > 0.005) {
+      this.state.fogDensityMultiplier = THREE.MathUtils.lerp(this.state.fogDensityMultiplier, this.targetFogMult, lerpSpeed);
+      changed = true;
+    } else {
+      this.state.fogDensityMultiplier = this.targetFogMult;
+    }
+
+    if (this.state.currentWeather === 'HEAVY_RAIN') {
+      if (this.state.lightningFlash > 0.01) {
+        this.state.lightningFlash = Math.max(0, this.state.lightningFlash - delta * 4.5);
+        changed = true;
+      } else if (Math.random() < delta * 0.14) {
+        this.state.lightningFlash = 0.8 + Math.random() * 0.6;
+        changed = true;
+      }
+    } else if (this.state.lightningFlash > 0) {
+      this.state.lightningFlash = 0;
+      changed = true;
+    }
+
+    if (changed) this.notify();
   }
 
   public getState(): WeatherState {
-    let fogColor = '#0b1428';
-    if (this.targetWeather === 'FOG') {
-      fogColor = '#102236'; // Cool cyan-tinted cyber smog
-    } else if (this.targetWeather === 'HEAVY_RAIN' || this.targetWeather === 'RAIN') {
-      fogColor = '#090d18'; // Dark atmospheric stormy navy
-    }
-
-    return {
-      currentWeather: this.currentWeather,
-      targetWeather: this.targetWeather,
-      rainIntensity: this.rainIntensity,
-      wetnessFactor: this.wetnessFactor,
-      fogDensityMultiplier: this.fogDensityMultiplier,
-      fogColorTint: fogColor,
-      skyDarkness: this.skyDarkness,
-      windVector: this.windVector,
-      isLightningActive: this.isLightningActive,
-      lightningIntensity: this.lightningIntensity,
-    };
+    return this.state;
   }
 
   public subscribe(listener: WeatherListener): () => void {
     this.listeners.add(listener);
-    listener(this.getState());
+    listener(this.state);
     return () => this.listeners.delete(listener);
   }
 
   private notify(): void {
-    const state = this.getState();
-    this.listeners.forEach((l) => l(state));
+    this.listeners.forEach((l) => l(this.state));
   }
 }

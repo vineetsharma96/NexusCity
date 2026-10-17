@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { NavigationSystem, NavigationState } from '../map/NavigationSystem';
+import { NavigationState, NavigationSystem } from '../map/NavigationSystem';
 
 interface WorldHUDMarkersProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -19,9 +19,7 @@ interface ProjectedMarker {
 }
 
 export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }) => {
-  const [navState, setNavState] = useState<NavigationState>(() =>
-    NavigationSystem.getInstance().getState()
-  );
+  const [navState, setNavState] = useState<NavigationState>(() => NavigationSystem.getInstance().getState());
   const [markers, setMarkers] = useState<ProjectedMarker[]>([]);
 
   useEffect(() => {
@@ -39,40 +37,32 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
       animId = requestAnimationFrame(updateProjections);
       if (now - lastProjection < 1000 / 30) return;
       lastProjection = now;
-      const cam = (window as any).__NEXUS_CAMERA__ as THREE.Camera | undefined;
-      const pPos = playerPosRef?.current;
 
-      if (!cam || !pPos) {
-        return;
-      }
+      const cam = (window as unknown as { __NEXUS_CAMERA__?: THREE.Camera }).__NEXUS_CAMERA__;
+      const pPos = playerPosRef?.current;
+      if (!cam || !pPos) return;
 
       cam.getWorldDirection(camDir);
       const width = window.innerWidth;
       const height = window.innerHeight;
       const projectedList: ProjectedMarker[] = [];
 
-      // 1. Project Active Landmark (if set)
       if (navState.activeLandmark) {
         const target = navState.activeLandmark;
         tempPos.copy(target.position);
         tempPos.y += 3.2;
         const dist = pPos.distanceTo(target.position);
 
-        // Check if in front of camera
         tempVec.subVectors(tempPos, cam.position);
         if (tempVec.dot(camDir) > 0.2) {
           tempVec.copy(tempPos).project(cam);
-          // If within screen NDC bounds [-1.1 to 1.1]
           if (tempVec.z < 1.0 && Math.abs(tempVec.x) <= 1.1 && Math.abs(tempVec.y) <= 1.1) {
-            const sx = (tempVec.x * 0.5 + 0.5) * width;
-            const sy = (-(tempVec.y * 0.5) + 0.5) * height;
-
             projectedList.push({
               id: target.id,
               name: target.name,
               category: target.category,
-              x: sx,
-              y: sy,
+              x: (tempVec.x * 0.5 + 0.5) * width,
+              y: (-(tempVec.y * 0.5) + 0.5) * height,
               dist: Math.round(dist),
               isTarget: true,
               color: 'var(--neon-amber)',
@@ -82,7 +72,6 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         }
       }
 
-      // 2. Project Nearby District Landmarks (within 85m)
       NavigationSystem.getInstance().landmarks.forEach((lm) => {
         if (navState.activeLandmark?.id === lm.id) return;
         const dist = pPos.distanceTo(lm.position);
@@ -94,16 +83,13 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         if (tempVec.dot(camDir) > 0.3) {
           tempVec.copy(tempPos).project(cam);
           if (tempVec.z < 1.0 && Math.abs(tempVec.x) <= 1.05 && Math.abs(tempVec.y) <= 1.05) {
-            const sx = (tempVec.x * 0.5 + 0.5) * width;
-            const sy = (-(tempVec.y * 0.5) + 0.5) * height;
             const opacity = dist < 25 ? 0.9 : THREE.MathUtils.lerp(0.9, 0.0, (dist - 25) / 60);
-
             projectedList.push({
               id: lm.id,
               name: lm.name,
               category: lm.category,
-              x: sx,
-              y: sy,
+              x: (tempVec.x * 0.5 + 0.5) * width,
+              y: (-(tempVec.y * 0.5) + 0.5) * height,
               dist: Math.round(dist),
               isTarget: false,
               color: 'var(--neon-cyan)',
@@ -113,15 +99,35 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
         }
       });
 
-      // Keep labels inside the viewport and avoid stacking unreadable badges.
       const visible = projectedList
         .sort((a, b) => Number(b.isTarget) - Number(a.isTarget) || a.dist - b.dist)
-        .filter((marker, index, list) => !list.slice(0, index).some((other) => Math.abs(marker.x - other.x) < 200 && Math.abs(marker.y - other.y) < 38))
-        .map((marker) => ({ ...marker, x: THREE.MathUtils.clamp(marker.x, 120, width - 120), y: THREE.MathUtils.clamp(marker.y, 64, height - 90) }));
-      setMarkers((previous) => previous.length === visible.length && previous.every((marker, index) => {
-        const next = visible[index];
-        return marker.id === next.id && marker.dist === next.dist && Math.abs(marker.x - next.x) < 0.75 && Math.abs(marker.y - next.y) < 0.75 && Math.abs(marker.opacity - next.opacity) < 0.03;
-      }) ? previous : visible);
+        .filter(
+          (marker, idx, list) =>
+            !list
+              .slice(0, idx)
+              .some((other) => Math.abs(marker.x - other.x) < 200 && Math.abs(marker.y - other.y) < 38)
+        )
+        .map((marker) => ({
+          ...marker,
+          x: THREE.MathUtils.clamp(marker.x, 120, width - 120),
+          y: THREE.MathUtils.clamp(marker.y, 64, height - 90),
+        }));
+
+      setMarkers((prev) =>
+        prev.length === visible.length &&
+        prev.every((m, idx) => {
+          const next = visible[idx];
+          return (
+            m.id === next.id &&
+            m.dist === next.dist &&
+            Math.abs(m.x - next.x) < 0.75 &&
+            Math.abs(m.y - next.y) < 0.75 &&
+            Math.abs(m.opacity - next.opacity) < 0.03
+          );
+        })
+          ? prev
+          : visible
+      );
     };
 
     animId = requestAnimationFrame(updateProjections);
@@ -133,10 +139,7 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
       data-component="WorldHUDMarkersOverlay"
       style={{
         position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100dvh',
+        inset: 0,
         pointerEvents: 'none',
         zIndex: 28,
         overflow: 'hidden',
@@ -158,75 +161,55 @@ export const WorldHUDMarkers: React.FC<WorldHUDMarkersProps> = ({ playerPosRef }
             pointerEvents: 'none',
           }}
         >
-          {/* Main Badge */}
           <div
             className="glass-panel"
             style={{
-              padding: m.isTarget ? '3px 8px' : '2px 6px',
-              border: `1.5px solid ${m.color}`,
-              boxShadow: m.isTarget
-                ? `0 0 16px ${m.color}, inset 0 0 8px ${m.color}`
-                : `0 0 10px rgba(0, 240, 255, 0.25)`,
+              padding: m.isTarget ? '4px 10px' : '3px 8px',
+              border: `1px solid ${m.color}`,
               display: 'flex',
               alignItems: 'center',
-              gap: 5,
+              gap: 6,
               borderRadius: 4,
-              backgroundColor: 'rgba(4, 10, 22, 0.88)',
+              backgroundColor: 'rgba(11, 15, 25, 0.9)',
             }}
           >
-            {/* Pulsing Icon Diamond */}
             <div
               style={{
-                width: m.isTarget ? 8 : 6,
-                height: m.isTarget ? 8 : 6,
+                width: m.isTarget ? 7 : 5,
+                height: m.isTarget ? 7 : 5,
                 backgroundColor: m.color,
                 transform: 'rotate(45deg)',
-                boxShadow: `0 0 8px ${m.color}`,
-                animation: m.isTarget ? 'pulse 1.2s infinite' : undefined,
               }}
             />
-
             <span
               style={{
                 fontFamily: 'var(--font-display)',
-                fontSize: m.isTarget ? '0.72rem' : '0.64rem',
-                fontWeight: 800,
-                letterSpacing: '0.8px',
+                fontSize: m.isTarget ? '0.7rem' : '0.62rem',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
                 color: m.color,
                 whiteSpace: 'nowrap',
               }}
             >
               {m.name.toUpperCase()}
             </span>
-
             <span
               style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: '0.62rem',
-                color: '#e2e8f0',
-                backgroundColor: 'rgba(255, 255, 255, 0.12)',
-                padding: '0 4px',
+                color: 'var(--text-primary)',
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                padding: '1px 5px',
                 borderRadius: 2,
               }}
             >
               {m.dist}m
             </span>
           </div>
-
-          {/* Stem Pointer Downwards */}
           <div
             style={{
-              width: 1.5,
-              height: m.isTarget ? 14 : 8,
-              backgroundColor: m.color,
-              boxShadow: `0 0 6px ${m.color}`,
-            }}
-          />
-          <div
-            style={{
-              width: 4,
-              height: 4,
-              borderRadius: '50%',
+              width: 1,
+              height: m.isTarget ? 12 : 7,
               backgroundColor: m.color,
             }}
           />

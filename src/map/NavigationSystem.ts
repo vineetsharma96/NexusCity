@@ -1,78 +1,103 @@
 import * as THREE from 'three';
-import { SaveSystem } from '../core/SaveSystem';
 
-export interface LandmarkDef {
+export interface Landmark {
   id: string;
   name: string;
-  category: 'PLAZA' | 'TOWER' | 'CROSSWAY' | 'SANCTUARY' | 'TRANSIT';
+  category: 'PLAZA' | 'TOWER' | 'ARCADE' | 'TRANSIT' | 'INFRASTRUCTURE';
   position: THREE.Vector3;
   description: string;
+  color: string;
 }
 
+export type LandmarkDef = Landmark;
+
 export interface NavigationState {
-  activeLandmark: LandmarkDef | null;
-  distance: number;
+  activeLandmark: Landmark | null;
   routeWaypoints: THREE.Vector3[];
+  distance: number;
   isMapOpen: boolean;
 }
 
-type NavigationChangeListener = (state: NavigationState) => void;
+type NavListener = (state: NavigationState) => void;
 
 export class NavigationSystem {
   private static instance: NavigationSystem;
 
-  public readonly landmarks: LandmarkDef[] = [
+  public readonly landmarks: Landmark[] = [
     {
       id: 'central_plaza',
       name: 'Central Plaza Hub',
       category: 'PLAZA',
       position: new THREE.Vector3(0, 0.2, 0),
-      description: 'The monumental core public square and holographic nexus of District 1.',
-    },
-    {
-      id: 'twin_spires',
-      name: 'Twin Spire Skybridge',
-      category: 'TOWER',
-      position: new THREE.Vector3(40, 0.2, -40),
-      description: 'Twin commercial spires linked by an elevated skybridge at 60m altitude.',
+      description: 'Primary metropolitan civic axis and pedestrian crossroads.',
+      color: '#38bdf8',
     },
     {
       id: 'apex_tower',
       name: 'Apex Monolith Tower',
       category: 'TOWER',
-      position: new THREE.Vector3(35, 0.2, 35),
-      description: 'The tallest corporate skyscraper in the central district with panoramic spires.',
+      position: new THREE.Vector3(38, 0.2, 38),
+      description: '130m titanium-clad corporate spire anchoring the Southeast block.',
+      color: '#f59e0b',
     },
     {
-      id: 'park_sanctuary',
-      name: 'Central Park Sanctuary',
-      category: 'SANCTUARY',
-      position: new THREE.Vector3(75, 0.2, 75),
-      description: 'Lush bioluminescent ecological sanctuary and natural pond oasis.',
+      id: 'neon_arcade',
+      name: 'Cyber-Synth Lounge',
+      category: 'ARCADE',
+      position: new THREE.Vector3(-38, 0.2, 38),
+      description: 'Southwest cultural concourse and acoustic synthesizer pavilion.',
+      color: '#f43f5e',
+    },
+    {
+      id: 'helix_spire',
+      name: 'Helix Data Citadel',
+      category: 'TOWER',
+      position: new THREE.Vector3(-38, 0.2, -38),
+      description: 'Northwest quantum telemetry core and atmospheric mast.',
+      color: '#10b981',
+    },
+    {
+      id: 'twin_spires',
+      name: 'Twin Spire Skybridge',
+      category: 'TOWER',
+      position: new THREE.Vector3(38, 0.2, -38),
+      description: 'Northeast twin architectural towers linked by high-altitude skybridges.',
+      color: '#a855f7',
     },
     {
       id: 'north_crossway',
       name: 'North Crossing Avenue',
-      category: 'CROSSWAY',
+      category: 'TRANSIT',
       position: new THREE.Vector3(0, 0.2, -75),
-      description: 'Arterial North-South boulevard intersection connecting to outer districts.',
+      description: 'Northern arterial transit gateway and signal gantry.',
+      color: '#38bdf8',
     },
     {
       id: 'south_crossway',
       name: 'South Crossing Avenue',
-      category: 'CROSSWAY',
+      category: 'TRANSIT',
       position: new THREE.Vector3(0, 0.2, 75),
-      description: 'Commercial crossing connecting avenue sidewalks to residential sectors.',
+      description: 'Southern arterial boulevard and autonomous shuttle corridor.',
+      color: '#38bdf8',
+    },
+    {
+      id: 'park_sanctuary',
+      name: 'Central Park Sanctuary',
+      category: 'PLAZA',
+      position: new THREE.Vector3(75, 0.2, 75),
+      description: 'Tranquil hydrological basin, arched footbridge, and botanical reserve.',
+      color: '#10b981',
     },
   ];
 
-  private activeLandmark: LandmarkDef | null = null;
+  private activeLandmark: Landmark | null = null;
   private routeWaypoints: THREE.Vector3[] = [];
-  private distance: number = 0;
-  private isMapOpen: boolean = false;
-  private arrivalTriggered = false;
-  private lastRouteUpdatePos = new THREE.Vector3(9999, 9999, 9999);
-  private listeners: Set<NavigationChangeListener> = new Set();
+  private distance = 0;
+  private isMapOpen = false;
+  private lastPlayerPos = new THREE.Vector3(0, 0.2, 10);
+  private listeners = new Set<NavListener>();
+
+  private constructor() {}
 
   public static getInstance(): NavigationSystem {
     if (!NavigationSystem.instance) {
@@ -86,46 +111,38 @@ export class NavigationSystem {
       this.activeLandmark = null;
       this.routeWaypoints = [];
       this.distance = 0;
-      this.arrivalTriggered = false;
-      this.lastRouteUpdatePos.set(9999, 9999, 9999);
       this.notify();
       return;
     }
 
-    const target = this.landmarks.find((l) => l.id === landmarkId);
-    if (target) {
-      this.activeLandmark = target;
-      this.routeWaypoints = [];
-      this.distance = playerPos ? Math.round(playerPos.distanceTo(target.position)) : 0;
-      this.arrivalTriggered = false;
-      this.lastRouteUpdatePos.set(9999, 9999, 9999);
-      if (playerPos) {
-        this.calculateRoute(playerPos);
-      }
-      this.notify();
+    const found = this.landmarks.find((l) => l.id === landmarkId) || null;
+    this.activeLandmark = found;
+    if (playerPos) this.lastPlayerPos.copy(playerPos);
+
+    if (found) {
+      this.distance = Math.round(this.lastPlayerPos.distanceTo(found.position));
+      this.recomputeRoute(this.lastPlayerPos, found.position);
     }
+    this.notify();
+  }
+
+  public setMapOpen(open: boolean): void {
+    if (this.isMapOpen === open) return;
+    this.isMapOpen = open;
+    this.notify();
+  }
+
+  public toggleMap(force?: boolean): void {
+    this.isMapOpen = force !== undefined ? force : !this.isMapOpen;
+    this.notify();
   }
 
   public updatePlayerPosition(playerPos: THREE.Vector3): void {
+    this.lastPlayerPos.copy(playerPos);
     if (!this.activeLandmark) return;
 
-    const rawDistance = playerPos.distanceTo(this.activeLandmark.position);
-    this.distance = Math.round(rawDistance);
-
-    if (rawDistance <= 8 && !this.arrivalTriggered) {
-      this.arrivalTriggered = true;
-      const destination = this.activeLandmark;
-      SaveSystem.getInstance().incrementLandmarkArrival(destination.name);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('nexus:notification', {
-          detail: {
-            title: `ARRIVAL CONFIRMED // ${destination.name.toUpperCase()}`,
-            message: 'Route archived. Landmark telemetry is now available in city history.',
-            type: 'discovery',
-            duration: 4200,
-          },
-        }));
-      }
+    const dist = playerPos.distanceTo(this.activeLandmark.position);
+    if (dist < 4.5) {
       this.activeLandmark = null;
       this.routeWaypoints = [];
       this.distance = 0;
@@ -133,92 +150,38 @@ export class NavigationSystem {
       return;
     }
 
-    // Route geometry and listeners only need updates after meaningful travel;
-    // the player controller can call this every frame without causing a UI
-    // notification and waypoint allocation every frame.
-    if (this.lastRouteUpdatePos.distanceToSquared(playerPos) < 1) return;
-    this.lastRouteUpdatePos.copy(playerPos);
-
-    // Recalculate street route when player moves
-    this.calculateRoute(playerPos);
-    this.notify();
+    if (Math.abs(dist - this.distance) > 0.8) {
+      this.distance = Math.round(dist);
+      this.recomputeRoute(playerPos, this.activeLandmark.position);
+      this.notify();
+    }
   }
 
-  /**
-   * Street-grid Manhattan pathfinder following the central avenue and cross streets.
-   */
-  private calculateRoute(playerPos: THREE.Vector3): void {
-    if (!this.activeLandmark) return;
-
-    const start = playerPos.clone();
-    const target = this.activeLandmark.position.clone();
-    const waypoints: THREE.Vector3[] = [start];
-
-    // Check closest east-west cross street: z = -75, z = 0, z = 75
-    const crossStreetsZ = [-75, 0, 75];
-    let closestCrossZ = 0;
-    let minDistZ = Infinity;
-
-    for (const z of crossStreetsZ) {
-      const d = Math.abs(start.z - z) + Math.abs(target.z - z);
-      if (d < minDistZ) {
-        minDistZ = d;
-        closestCrossZ = z;
+  private recomputeRoute(start: THREE.Vector3, end: THREE.Vector3): void {
+    const pts: THREE.Vector3[] = [new THREE.Vector3(start.x, 0.15, start.z)];
+    if (Math.abs(start.x - end.x) > 8 && Math.abs(start.z - end.z) > 8) {
+      if (Math.abs(start.x) < Math.abs(start.z)) {
+        pts.push(new THREE.Vector3(0, 0.15, start.z));
+        pts.push(new THREE.Vector3(0, 0.15, end.z));
+      } else {
+        pts.push(new THREE.Vector3(start.x, 0.15, 0));
+        pts.push(new THREE.Vector3(end.x, 0.15, 0));
       }
     }
-
-    // Step 1: Move from current position to Main Central Avenue (x=0) or cross street
-    if (Math.abs(start.x) > 2.0) {
-      // Move to cross street junction
-      waypoints.push(new THREE.Vector3(start.x, 0.08, closestCrossZ));
-      waypoints.push(new THREE.Vector3(0, 0.08, closestCrossZ));
-    } else {
-      waypoints.push(new THREE.Vector3(0, 0.08, start.z));
-    }
-
-    // Step 2: Traverse Central Avenue to target's cross street
-    let targetCrossZ = 0;
-    let minTargetZ = Infinity;
-    for (const z of crossStreetsZ) {
-      const d = Math.abs(target.z - z);
-      if (d < minTargetZ) {
-        minTargetZ = d;
-        targetCrossZ = z;
-      }
-    }
-
-    waypoints.push(new THREE.Vector3(0, 0.08, targetCrossZ));
-
-    // Step 3: Turn from Central Avenue towards target along cross street
-    waypoints.push(new THREE.Vector3(target.x, 0.08, targetCrossZ));
-
-    // Step 4: Final approach to destination
-    waypoints.push(new THREE.Vector3(target.x, 0.08, target.z));
-
-    this.routeWaypoints = waypoints;
-  }
-
-  public toggleMap(): boolean {
-    this.isMapOpen = !this.isMapOpen;
-    this.notify();
-    return this.isMapOpen;
-  }
-
-  public setMapOpen(open: boolean): void {
-    this.isMapOpen = open;
-    this.notify();
+    pts.push(new THREE.Vector3(end.x, 0.15, end.z));
+    this.routeWaypoints = pts;
   }
 
   public getState(): NavigationState {
     return {
       activeLandmark: this.activeLandmark,
-      distance: this.distance,
       routeWaypoints: this.routeWaypoints,
+      distance: this.distance,
       isMapOpen: this.isMapOpen,
     };
   }
 
-  public subscribe(listener: NavigationChangeListener): () => void {
+  public subscribe(listener: NavListener): () => void {
     this.listeners.add(listener);
     listener(this.getState());
     return () => this.listeners.delete(listener);

@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { KinematicController, KinematicState } from './KinematicController';
@@ -12,68 +12,74 @@ import { DiscoverySystem } from '../world/DiscoverySystem';
 import { AudioManager } from '../audio/AudioManager';
 import { InteractionSystem } from '../interaction/InteractionSystem';
 import { NavigationSystem } from '../map/NavigationSystem';
+import { ContactShadowDecal } from './ContactShadowDecal';
+import { VehicleInteractionSystem, VehicleState } from '../vehicle/VehicleInteractionSystem';
 
 export interface PlayerControllerProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
   registerTeleport?: (teleportFn: (pos: THREE.Vector3) => void) => void;
 }
 
-import { ContactShadowDecal } from './ContactShadowDecal';
-import { VehicleInteractionSystem, VehicleState } from '../vehicle/VehicleInteractionSystem';
-
 export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef, registerTeleport }) => {
-  // Controller instance
   const controllerRef = useRef<KinematicController | null>(null);
   if (!controllerRef.current) controllerRef.current = new KinematicController();
+  const controller = controllerRef.current;
+
   const [kinematicState, setKinematicState] = useState<KinematicState>(() => ({
-    position: controllerRef.current!.position,
-    velocity: controllerRef.current!.velocity,
-    rotationY: controllerRef.current!.rotationY,
+    position: controller.position,
+    velocity: controller.velocity,
+    rotationY: controller.rotationY,
     speed: 0,
     bankAngle: 0,
     isGrounded: true,
     gait: 'IDLE',
   }));
-  const [vehicleState, setVehicleState] = useState<VehicleState>(() => VehicleInteractionSystem.getInstance().getState());
+  const [vehicleState, setVehicleState] = useState<VehicleState>(() =>
+    VehicleInteractionSystem.getInstance().getState()
+  );
 
   const cameraYaw = useRef(0);
-  const controller = controllerRef.current;
 
-  const teleport = React.useCallback((newPos: THREE.Vector3) => {
-    if (![newPos.x, newPos.y, newPos.z].every(Number.isFinite)) return;
-    VehicleInteractionSystem.getInstance().dismount();
-    const safePosition = KinematicCollisionSolver.findSafePosition(newPos, controller.playerRadius, controller.playerHeight);
-    controller.position.copy(safePosition);
-    controller.resetMotion();
-    controller.isGrounded = true;
-    if (playerPosRef) playerPosRef.current.copy(safePosition);
-  }, [controller, playerPosRef]);
+  const teleport = useCallback(
+    (newPos: THREE.Vector3) => {
+      if (![newPos.x, newPos.y, newPos.z].every(Number.isFinite)) return;
+      VehicleInteractionSystem.getInstance().dismount();
+      const safe = KinematicCollisionSolver.findSafePosition(newPos, controller.playerRadius, controller.playerHeight);
+      controller.position.copy(safe);
+      controller.resetMotion();
+      controller.isGrounded = true;
+      if (playerPosRef) playerPosRef.current.copy(safe);
+    },
+    [controller, playerPosRef]
+  );
 
-  // Spawns player from save or default in Central Plaza intersection & registers teleport
   useEffect(() => {
-    let previousMode = VehicleInteractionSystem.getInstance().getState().mode;
-    return VehicleInteractionSystem.getInstance().subscribe((nextState) => {
-      const dismounted = previousMode !== 'ON_FOOT' && nextState.mode === 'ON_FOOT';
-      previousMode = nextState.mode;
+    let prevMode = VehicleInteractionSystem.getInstance().getState().mode;
+    return VehicleInteractionSystem.getInstance().subscribe((next) => {
+      const dismounted = prevMode !== 'ON_FOOT' && next.mode === 'ON_FOOT';
+      prevMode = next.mode;
       if (dismounted) {
         teleport(VehicleInteractionSystem.getInstance().getDismountPosition());
       }
-      setVehicleState(nextState);
+      setVehicleState(next);
     });
   }, [teleport]);
 
   useEffect(() => {
     const saved = SaveSystem.getInstance().getData().player;
-    if (saved && Array.isArray(saved.position) && saved.position.length === 3 && saved.position.every(Number.isFinite) && saved.position[1] >= 0) {
+    if (
+      saved &&
+      Array.isArray(saved.position) &&
+      saved.position.length === 3 &&
+      saved.position.every(Number.isFinite) &&
+      saved.position[1] >= 0
+    ) {
       teleport(new THREE.Vector3(...saved.position));
       controller.rotationY = Number.isFinite(saved.rotationY) ? saved.rotationY : 0;
     } else {
       teleport(new THREE.Vector3(0, 0.2, 10));
     }
-
-    if (playerPosRef) {
-      playerPosRef.current.copy(controller.position);
-    }
+    if (playerPosRef) playerPosRef.current.copy(controller.position);
   }, [controller, playerPosRef, teleport]);
 
   useEffect(() => {
@@ -81,65 +87,59 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
   }, [registerTeleport, teleport]);
 
   useEffect(() => {
-    // Global custom event listener for fast-travel teleportation
-    const handleCustomTeleport = (e: Event) => {
+    const onTeleport = (e: Event) => {
       const detail = (e as CustomEvent<THREE.Vector3>).detail;
       if (detail) teleport(detail);
     };
-
-    // Hotkey: [V] for Cinematic Vista
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = (document.activeElement?.tagName || '').toLowerCase();
-      if (e.repeat || activeTag === 'input' || activeTag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable || InputManager.isUIBlocked()) return;
-
-      if (e.key === 'v' || e.key === 'V') {
-        CinematicManager.getInstance().toggleVista(
-          controller.position,
-          'CINEMATIC DRONE VISTA // SECTOR RECON',
-          'SWEEPING AERIAL DRONE OVERVIEW • PRESS [V] OR MOVE TO RESUME CONTROL'
-        );
-        AudioManager.getInstance().playUI('toggle');
-      }
-    };
-
-    const handleCustomVista = () => {
+    const triggerVista = () => {
       if (InputManager.isUIBlocked()) return;
       CinematicManager.getInstance().toggleVista(
         controller.position,
-        'CINEMATIC DRONE VISTA // SECTOR RECON',
-        'SWEEPING AERIAL DRONE OVERVIEW • PRESS [V] OR MOVE TO RESUME CONTROL'
+        'AERIAL ORBIT // SECTOR RECONNAISSANCE',
+        'PRESS [V] OR INPUT MOVEMENT TO RESUME GROUND CONTROL'
       );
       AudioManager.getInstance().playUI('toggle');
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (e.repeat || tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) {
+        return;
+      }
+      if (e.key === 'v' || e.key === 'V') triggerVista();
+    };
 
-    window.addEventListener('nexus:teleport', handleCustomTeleport);
-    window.addEventListener('nexus:vista', handleCustomVista);
-    window.addEventListener('keydown', handleKeyDown);
-
+    window.addEventListener('nexus:teleport', onTeleport);
+    window.addEventListener('nexus:vista', triggerVista);
+    window.addEventListener('keydown', onKeyDown);
     return () => {
-      window.removeEventListener('nexus:teleport', handleCustomTeleport);
-      window.removeEventListener('nexus:vista', handleCustomVista);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('nexus:teleport', onTeleport);
+      window.removeEventListener('nexus:vista', triggerVista);
+      window.removeEventListener('keydown', onKeyDown);
     };
   }, [controller, teleport]);
 
   useFrame((_, delta) => {
     const cinematic = CinematicManager.getInstance();
     const cinState = cinematic.getState();
-    const isCinematic = cinState.phase !== 'GAMEPLAY';
+    const isCin = cinState.phase !== 'GAMEPLAY';
 
     const input = InputManager.getState();
-    if (cinState.phase === 'VISTA_MODE' && (Math.abs(input.moveX) > 0.05 || Math.abs(input.moveZ) > 0.05)) cinematic.exitVista();
+    if (cinState.phase === 'VISTA_MODE' && (Math.abs(input.moveX) > 0.05 || Math.abs(input.moveZ) > 0.05)) {
+      cinematic.exitVista();
+    }
 
     const vehicle = VehicleInteractionSystem.getInstance();
-    let updatedState: KinematicState;
+    let updated: KinematicState;
+
     if (vehicleState.mode !== 'ON_FOOT') {
-      if (vehicleState.mode === 'RIDING' && !isCinematic && !InputManager.isUIBlocked()) vehicle.updateMounted(delta, cameraYaw.current);
-      const mountedPosition = vehicle.getMountedPosition();
-      controller.position.copy(mountedPosition);
+      if (vehicleState.mode === 'RIDING' && !isCin && !InputManager.isUIBlocked()) {
+        vehicle.updateMounted(delta, cameraYaw.current);
+      }
+      const mountedPos = vehicle.getMountedPosition();
+      controller.position.copy(mountedPos);
       controller.velocity.set(0, 0, 0);
       controller.rotationY = vehicle.getState().vehicleRotationY;
-      updatedState = {
+      updated = {
         position: controller.position,
         velocity: controller.velocity,
         rotationY: controller.rotationY,
@@ -148,35 +148,37 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
         gait: 'IDLE',
         bankAngle: 0,
       };
-    } else if (isCinematic || InputManager.isUIBlocked()) {
+    } else if (isCin || InputManager.isUIBlocked()) {
       controller.resetMotion();
-      updatedState = { ...kinematicState, position: controller.position, velocity: controller.velocity, speed: 0, gait: 'IDLE', bankAngle: 0 };
+      updated = {
+        ...kinematicState,
+        position: controller.position,
+        velocity: controller.velocity,
+        speed: 0,
+        gait: 'IDLE',
+        bankAngle: 0,
+      };
     } else {
-      updatedState = controller.update(delta, cameraYaw.current);
-    }
-    // The avatar reads this mutable frame state. React only needs a render for material/gait changes.
-    const needsRender = kinematicState.gait !== updatedState.gait || kinematicState.isGrounded !== updatedState.isGrounded;
-    Object.assign(kinematicState, updatedState);
-    if (needsRender) setKinematicState({ ...updatedState });
-
-    if (playerPosRef) {
-      playerPosRef.current.copy(updatedState.position);
+      updated = controller.update(delta, cameraYaw.current);
     }
 
-    // Always update InteractionSystem position so interactive entities (NPCs, terminals, exit door) work indoors and outdoors
-    InteractionSystem.getInstance().updatePlayerPosition(updatedState.position);
+    const needsRender = kinematicState.gait !== updated.gait || kinematicState.isGrounded !== updated.isGrounded;
+    Object.assign(kinematicState, updated);
+    if (needsRender) setKinematicState({ ...updated });
 
-    // Update persistent SaveSystem & DiscoverySystem
-    SaveSystem.getInstance().updatePlayerPosition(updatedState.position, updatedState.rotationY);
-    DiscoverySystem.getInstance().update(updatedState.position);
-    NavigationSystem.getInstance().updatePlayerPosition(updatedState.position);
+    if (playerPosRef) playerPosRef.current.copy(updated.position);
+
+    InteractionSystem.getInstance().updatePlayerPosition(updated.position);
+    SaveSystem.getInstance().updatePlayerPosition(updated.position, updated.rotationY);
+    DiscoverySystem.getInstance().update(updated.position);
+    NavigationSystem.getInstance().updatePlayerPosition(updated.position);
   });
 
-  const posRef = playerPosRef || { current: kinematicState.position };
+  const posRef = playerPosRef || ({ current: kinematicState.position } as React.MutableRefObject<THREE.Vector3>);
 
   return (
     <>
-      <ContactShadowDecal playerPosRef={posRef as React.MutableRefObject<THREE.Vector3>} isGrounded={kinematicState.isGrounded} />
+      <ContactShadowDecal playerPosRef={posRef} isGrounded={kinematicState.isGrounded} />
       {vehicleState.mode === 'ON_FOOT' && <ProceduralProtagonist state={kinematicState} />}
       <PlayerCamera
         targetPos={kinematicState.position}

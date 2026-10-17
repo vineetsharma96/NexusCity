@@ -1,61 +1,37 @@
-import * as THREE from 'three';
-import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
-import { ChunkManager, ChunkManagerState } from '../world/ChunkManager';
+import { AmbientAudioManager, AmbientSoundscapeState } from './AmbientAudioManager';
+import { TimeLightingState } from '../world/TimeSystem';
+import { WeatherState } from '../world/WeatherSystem';
+import { WindState } from '../world/WindSystem';
 
 export interface AudioSettings {
-  isMuted: boolean;
-  masterVolume: number; // 0.0 to 1.0
-  ambientVolume: number;
-  sfxVolume: number;
+  muted: boolean;
+  masterVolume: number;
 }
 
 type AudioListener = (settings: AudioSettings) => void;
 
 export class AudioManager {
   private static instance: AudioManager;
-
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private ambientGain: GainNode | null = null;
-  private weatherGain: GainNode | null = null;
-  private sfxGain: GainNode | null = null;
-
-  // Ambient synth nodes
-  private currentDistrictName: string = '';
-  private ambientOsc1: OscillatorNode | null = null;
-  private ambientOsc2: OscillatorNode | null = null;
-  private ambientNoiseNode: AudioBufferSourceNode | null = null;
-  private ambientFilter: BiquadFilterNode | null = null;
-  private districtAmbientGain: GainNode | null = null;
-
-  // Weather synth nodes
-  private rainNoiseNode: AudioBufferSourceNode | null = null;
-  private rainFilter: BiquadFilterNode | null = null;
-  private rainGain: GainNode | null = null;
-  private prevLightningState: boolean = false;
-
-  private isMuted: boolean = true; // start muted until user activates or interacts
-  private masterVolume: number = 0.75;
-  private ambientVolume: number = 0.6;
-  private sfxVolume: number = 0.7;
-
-  private listeners: Set<AudioListener> = new Set();
-  private initialized: boolean = false;
+  private isInitialized = false;
+  private unlockListenersBound = false;
+  private settings: AudioSettings = { muted: false, masterVolume: 0.45 };
+  private listeners = new Set<AudioListener>();
 
   private constructor() {
-    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-      try {
-      const savedMute = localStorage.getItem('nexus_audio_muted');
-      if (savedMute !== null) {
-        this.isMuted = savedMute === 'true';
-      }
+    try {
+      const savedMuted = localStorage.getItem('nexus_audio_muted');
       const savedVol = localStorage.getItem('nexus_audio_volume');
+      if (savedMuted !== null) this.settings.muted = savedMuted === 'true';
       if (savedVol !== null) {
-        const volume = Number(savedVol);
-        if (Number.isFinite(volume)) this.masterVolume = THREE.MathUtils.clamp(volume, 0, 1);
+        const parsed = parseFloat(savedVol);
+        this.settings.masterVolume = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.45;
       }
-      } catch { /* Audio remains usable when browser storage is unavailable. */ }
+    } catch {
+      // Ignore storage restrictions
     }
+    this.bindUserGestureUnlock();
   }
 
   public static getInstance(): AudioManager {
@@ -65,839 +41,157 @@ export class AudioManager {
     return AudioManager.instance;
   }
 
-  /**
-   * Initializes or resumes the AudioContext on first user interaction.
-   */
-  public init(): void {
-    if (this.initialized || typeof window === 'undefined') return;
-
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-
-      this.ctx = new AudioCtx();
-
-      // Master Gain
-      this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVolume, this.ctx.currentTime);
-      this.masterGain.connect(this.ctx.destination);
-
-      // Ambient Sub-bus
-      this.ambientGain = this.ctx.createGain();
-      this.ambientGain.gain.setValueAtTime(this.ambientVolume, this.ctx.currentTime);
-      this.ambientGain.connect(this.masterGain);
-
-      // Weather Sub-bus
-      this.weatherGain = this.ctx.createGain();
-      this.weatherGain.gain.setValueAtTime(0.7, this.ctx.currentTime);
-      this.weatherGain.connect(this.masterGain);
-
-      // SFX Sub-bus
-      this.sfxGain = this.ctx.createGain();
-      this.sfxGain.gain.setValueAtTime(this.sfxVolume, this.ctx.currentTime);
-      this.sfxGain.connect(this.masterGain);
-
-      // Start continuous ambient synths
-      this.setupWeatherSynth();
-      this.startDistrictAmbient('Central City');
-
-      // Subscribe to weather shifts
-      WeatherSystem.getInstance().subscribe((w) => this.handleWeatherUpdate(w));
-
-      // Subscribe to district shifts
-      ChunkManager.getInstance().subscribe((c) => this.handleDistrictUpdate(c));
-
-      this.initialized = true;
-    } catch (err) {
-      console.warn('AudioContext initialization failed:', err);
-    }
+  private bindUserGestureUnlock(): void {
+    if (this.unlockListenersBound || typeof window === 'undefined' || !window.addEventListener) return;
+    this.unlockListenersBound = true;
+    const unlock = () => {
+      this.ensureContext();
+    };
+    window.addEventListener('pointerdown', unlock, { passive: true });
+    window.addEventListener('keydown', unlock, { passive: true });
   }
-
 
   public ensureContext(): void {
-    if (!this.initialized) {
-      this.init();
+    if (typeof window === 'undefined') return;
+    if (!this.ctx) {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      try {
+        this.ctx = new AudioCtx();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = this.settings.muted ? 0 : this.settings.masterVolume;
+        this.masterGain.connect(this.ctx.destination);
+        AmbientAudioManager.getInstance().attachContext(this.ctx, this.masterGain);
+        this.isInitialized = true;
+      } catch {
+        return;
+      }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      void this.ctx.resume().catch(() => { /* A later user gesture can resume playback. */ });
+      this.ctx.resume().catch(() => {});
     }
   }
 
-  public toggleMute(): boolean {
+  public updateAmbientSoundscape(
+    delta: number,
+    timeState: TimeLightingState,
+    weatherState: WeatherState,
+    windState?: WindState,
+    trafficSpeedMultiplier: number = 1.0
+  ): AmbientSoundscapeState {
+    return AmbientAudioManager.getInstance().update(
+      delta,
+      timeState,
+      weatherState,
+      windState,
+      trafficSpeedMultiplier
+    );
+  }
+
+  public getAmbientState(): AmbientSoundscapeState {
+    return AmbientAudioManager.getInstance().getState();
+  }
+
+  private playTone(
+    freq: number,
+    endFreq: number,
+    duration: number,
+    type: OscillatorType = 'sine',
+    gainVal: number = 0.14
+  ): void {
     this.ensureContext();
-    this.isMuted = !this.isMuted;
+    if (!this.ctx || !this.masterGain || this.settings.muted) return;
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
 
-    if (this.ctx && this.masterGain) {
-      const targetGain = this.isMuted ? 0 : this.masterVolume;
-      this.masterGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), now + duration);
+
+      gain.gain.setValueAtTime(gainVal, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + duration);
+    } catch {
+      // Ignore
     }
-
-    if (typeof window !== 'undefined') {
-      try { localStorage.setItem('nexus_audio_muted', this.isMuted ? 'true' : 'false'); } catch {}
-    }
-
-    this.notify();
-    return this.isMuted;
   }
 
-  public setMasterVolume(vol: number): void {
-    if (!Number.isFinite(vol)) return;
-    this.masterVolume = THREE.MathUtils.clamp(vol, 0, 1);
-    if (!this.isMuted && this.ctx && this.masterGain) {
-      this.masterGain.gain.setTargetAtTime(this.masterVolume, this.ctx.currentTime, 0.05);
+  public playFootstep(isRun: boolean = false): void {
+    this.playTone(isRun ? 135 : 95, 42, 0.065, 'triangle', isRun ? 0.12 : 0.07);
+  }
+
+  public playJump(): void {
+    this.playTone(140, 420, 0.22, 'sine', 0.16);
+  }
+
+  public playLand(): void {
+    this.playTone(90, 32, 0.12, 'triangle', 0.18);
+  }
+
+  public playUI(kind: 'click' | 'open' | 'close' | 'toggle' | 'waypoint' = 'click'): void {
+    if (kind === 'open') this.playTone(440, 660, 0.11, 'sine', 0.12);
+    else if (kind === 'close') this.playTone(580, 340, 0.11, 'sine', 0.12);
+    else if (kind === 'waypoint') this.playTone(520, 880, 0.16, 'triangle', 0.14);
+    else this.playTone(620, 740, 0.06, 'sine', 0.1);
+  }
+
+  public playDiscoveryChime(): void {
+    this.playTone(440, 880, 0.35, 'triangle', 0.15);
+  }
+
+  public playAlertChime(): void {
+    this.playTone(520, 390, 0.25, 'sawtooth', 0.08);
+  }
+
+  public playTransitArrival(): void {
+    this.playTone(392, 587.33, 0.28, 'sine', 0.1);
+  }
+
+  public playRepairComplete(): void {
+    this.playTone(330, 660, 0.24, 'triangle', 0.14);
+  }
+
+  public setMuted(muted: boolean): void {
+    this.settings.muted = muted;
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(muted ? 0 : this.settings.masterVolume, this.ctx.currentTime);
     }
-    if (typeof window !== 'undefined') {
-      try { localStorage.setItem('nexus_audio_volume', this.masterVolume.toString()); } catch {}
+    try {
+      localStorage.setItem('nexus_audio_muted', String(muted));
+    } catch {}
+    this.notify();
+  }
+
+  public toggleMute(): void {
+    this.setMuted(!this.settings.muted);
+  }
+
+  public setMasterVolume(val: number): void {
+    const clamped = Math.max(0, Math.min(1, val));
+    this.settings.masterVolume = clamped;
+    if (this.masterGain && this.ctx && !this.settings.muted) {
+      this.masterGain.gain.setValueAtTime(clamped, this.ctx.currentTime);
     }
+    try {
+      localStorage.setItem('nexus_audio_volume', String(clamped));
+    } catch {}
     this.notify();
   }
 
   public getSettings(): AudioSettings {
-    return {
-      isMuted: this.isMuted,
-      masterVolume: this.masterVolume,
-      ambientVolume: this.ambientVolume,
-      sfxVolume: this.sfxVolume,
-    };
+    return { ...this.settings };
   }
 
-  // ==========================================
-  // PROCEDURAL BUFFER GENERATORS
-  // ==========================================
-
-  private createNoiseBuffer(durationSeconds: number = 3): AudioBuffer {
-    if (!this.ctx) throw new Error('AudioContext missing');
-    const bufferSize = this.ctx.sampleRate * durationSeconds;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    return buffer;
-  }
-
-  private createPinkNoiseBuffer(durationSeconds: number = 3): AudioBuffer {
-    if (!this.ctx) throw new Error('AudioContext missing');
-    const bufferSize = this.ctx.sampleRate * durationSeconds;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-
-    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-    for (let i = 0; i < bufferSize; i++) {
-      const white = Math.random() * 2 - 1;
-      b0 = 0.99886 * b0 + white * 0.0555179;
-      b1 = 0.99332 * b1 + white * 0.0750759;
-      b2 = 0.96900 * b2 + white * 0.1538520;
-      b3 = 0.86650 * b3 + white * 0.3104856;
-      b4 = 0.55000 * b4 + white * 0.5329522;
-      b5 = -0.7616 * b5 - white * 0.0168980;
-      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
-      b6 = white * 0.115926;
-    }
-    return buffer;
-  }
-
-  // ==========================================
-  // AMBIENT DISTRICT SYNTHESIZERS (6 DISTINCT DISTRICTS)
-  // ==========================================
-
-  private startDistrictAmbient(districtName: string): void {
-    if (!this.ctx || !this.ambientGain) return;
-    if (this.currentDistrictName === districtName) return;
-    this.currentDistrictName = districtName;
-
-    // Clean up previous ambient nodes
-    for (const source of [this.ambientOsc1, this.ambientOsc2, this.ambientNoiseNode]) {
-      try { source?.stop(); } catch {}
-      source?.disconnect();
-    }
-    this.ambientOsc1 = null;
-    this.ambientOsc2 = null;
-    this.ambientNoiseNode = null;
-    this.ambientFilter?.disconnect();
-    this.districtAmbientGain?.disconnect();
-    this.districtAmbientGain = this.ctx.createGain();
-    this.districtAmbientGain.connect(this.ambientGain);
-
-    const now = this.ctx.currentTime;
-
-    // Base filter
-    this.ambientFilter = this.ctx.createBiquadFilter();
-
-    const dUpper = districtName.toUpperCase();
-
-    if (dUpper.includes('SKY')) {
-      // 1. Sky District: High-altitude wind whistle + crystalline harmonics
-      this.ambientFilter.type = 'bandpass';
-      this.ambientFilter.frequency.setValueAtTime(460, now);
-      this.ambientFilter.Q.setValueAtTime(1.8, now);
-
-      const noiseBuf = this.createPinkNoiseBuffer(4);
-      this.ambientNoiseNode = this.ctx.createBufferSource();
-      this.ambientNoiseNode.buffer = noiseBuf;
-      this.ambientNoiseNode.loop = true;
-      this.ambientNoiseNode.connect(this.ambientFilter);
-      this.ambientFilter.connect(this.districtAmbientGain);
-      this.ambientNoiseNode.start();
-
-      this.ambientOsc1 = this.ctx.createOscillator();
-      this.ambientOsc1.type = 'sine';
-      this.ambientOsc1.frequency.setValueAtTime(330, now);
-      const oscGain = this.ctx.createGain();
-      oscGain.gain.setValueAtTime(0.045, now);
-      this.ambientOsc1.connect(oscGain);
-      oscGain.connect(this.districtAmbientGain);
-      this.ambientOsc1.start();
-    } else if (dUpper.includes('NEURAL')) {
-      // 2. Neural District: Resonant data-center compute hum & server cooling
-      this.ambientFilter.type = 'lowpass';
-      this.ambientFilter.frequency.setValueAtTime(340, now);
-
-      this.ambientOsc1 = this.ctx.createOscillator();
-      this.ambientOsc1.type = 'sawtooth';
-      this.ambientOsc1.frequency.setValueAtTime(88, now);
-
-      this.ambientOsc2 = this.ctx.createOscillator();
-      this.ambientOsc2.type = 'sine';
-      this.ambientOsc2.frequency.setValueAtTime(176, now);
-
-      const subGain = this.ctx.createGain();
-      subGain.gain.setValueAtTime(0.065, now);
-
-      this.ambientOsc1.connect(this.ambientFilter);
-      this.ambientOsc2.connect(this.ambientFilter);
-      this.ambientFilter.connect(subGain);
-      subGain.connect(this.districtAmbientGain);
-
-      this.ambientOsc1.start();
-      this.ambientOsc2.start();
-    } else if (dUpper.includes('INDUSTRIAL') || dUpper.includes('REACTOR')) {
-      // 3. Industrial Reactor Zone: Heavy transformer hum & low machinery throb
-      this.ambientFilter.type = 'lowpass';
-      this.ambientFilter.frequency.setValueAtTime(140, now);
-
-      this.ambientOsc1 = this.ctx.createOscillator();
-      this.ambientOsc1.type = 'sawtooth';
-      this.ambientOsc1.frequency.setValueAtTime(46, now); // 46Hz heavy sub generator
-
-      this.ambientOsc2 = this.ctx.createOscillator();
-      this.ambientOsc2.type = 'square';
-      this.ambientOsc2.frequency.setValueAtTime(92, now); // 92Hz electrical hum
-
-      const indGain = this.ctx.createGain();
-      indGain.gain.setValueAtTime(0.09, now);
-
-      this.ambientOsc1.connect(this.ambientFilter);
-      this.ambientOsc2.connect(this.ambientFilter);
-      this.ambientFilter.connect(indGain);
-      indGain.connect(this.districtAmbientGain);
-
-      this.ambientOsc1.start();
-      this.ambientOsc2.start();
-    } else if (dUpper.includes('OLD') || dUpper.includes('TOWN')) {
-      // 4. Old Cyber Town: Retro neon tube buzz & rain gutter reverberation
-      this.ambientFilter.type = 'bandpass';
-      this.ambientFilter.frequency.setValueAtTime(120, now);
-      this.ambientFilter.Q.setValueAtTime(4.0, now);
-
-      this.ambientOsc1 = this.ctx.createOscillator();
-      this.ambientOsc1.type = 'sawtooth';
-      this.ambientOsc1.frequency.setValueAtTime(60, now); // 60Hz mains transformer hum
-
-      const neonGain = this.ctx.createGain();
-      neonGain.gain.setValueAtTime(0.07, now);
-
-      this.ambientOsc1.connect(this.ambientFilter);
-      this.ambientFilter.connect(neonGain);
-      neonGain.connect(this.districtAmbientGain);
-      this.ambientOsc1.start();
-    } else if (dUpper.includes('GREEN') || dUpper.includes('BIOSPHERE')) {
-      // 5. Biosphere Preserve: Tranquil organic canopy breeze & soft chimes
-      this.ambientFilter.type = 'bandpass';
-      this.ambientFilter.frequency.setValueAtTime(750, now);
-      this.ambientFilter.Q.setValueAtTime(0.9, now);
-
-      const noiseBuf = this.createPinkNoiseBuffer(4);
-      this.ambientNoiseNode = this.ctx.createBufferSource();
-      this.ambientNoiseNode.buffer = noiseBuf;
-      this.ambientNoiseNode.loop = true;
-      this.ambientNoiseNode.connect(this.ambientFilter);
-      this.ambientFilter.connect(this.districtAmbientGain);
-      this.ambientNoiseNode.start();
-
-      this.ambientOsc1 = this.ctx.createOscillator();
-      this.ambientOsc1.type = 'sine';
-      this.ambientOsc1.frequency.setValueAtTime(392, now); // G4 peaceful tone
-      const padGain = this.ctx.createGain();
-      padGain.gain.setValueAtTime(0.035, now);
-      this.ambientOsc1.connect(padGain);
-      padGain.connect(this.districtAmbientGain);
-      this.ambientOsc1.start();
-    } else {
-      // 6. Central Metropolis (Default): Low urban street traffic rumble
-      this.ambientFilter.type = 'lowpass';
-      this.ambientFilter.frequency.setValueAtTime(160, now);
-
-      const pinkBuf = this.createPinkNoiseBuffer(4);
-      this.ambientNoiseNode = this.ctx.createBufferSource();
-      this.ambientNoiseNode.buffer = pinkBuf;
-      this.ambientNoiseNode.loop = true;
-      this.ambientNoiseNode.connect(this.ambientFilter);
-      this.ambientFilter.connect(this.districtAmbientGain);
-      this.ambientNoiseNode.start();
-
-      this.ambientOsc1 = this.ctx.createOscillator();
-      this.ambientOsc1.type = 'sine';
-      this.ambientOsc1.frequency.setValueAtTime(55, now); // 55Hz deep sub hum
-      const oscGain = this.ctx.createGain();
-      oscGain.gain.setValueAtTime(0.08, now);
-      this.ambientOsc1.connect(oscGain);
-      oscGain.connect(this.districtAmbientGain);
-      this.ambientOsc1.start();
-    }
-  }
-
-  // ==========================================
-  // WEATHER SYNTHESIZERS (RAIN & THUNDER)
-  // ==========================================
-
-  private setupWeatherSynth(): void {
-    if (!this.ctx || !this.weatherGain) return;
-
-    // Rain noise buffer
-    const rainBuf = this.createNoiseBuffer(3);
-    this.rainNoiseNode = this.ctx.createBufferSource();
-    this.rainNoiseNode.buffer = rainBuf;
-    this.rainNoiseNode.loop = true;
-
-    // Bandpass filter for gentle rain patter
-    this.rainFilter = this.ctx.createBiquadFilter();
-    this.rainFilter.type = 'bandpass';
-    this.rainFilter.frequency.setValueAtTime(2400, this.ctx.currentTime);
-    this.rainFilter.Q.setValueAtTime(1.1, this.ctx.currentTime);
-
-    this.rainGain = this.ctx.createGain();
-    this.rainGain.gain.setValueAtTime(0.0, this.ctx.currentTime);
-
-    this.rainNoiseNode.connect(this.rainFilter);
-    this.rainFilter.connect(this.rainGain);
-    this.rainGain.connect(this.weatherGain);
-    this.rainNoiseNode.start();
-  }
-
-  private handleWeatherUpdate(w: WeatherState): void {
-    if (!this.ctx || !this.rainGain) return;
-
-    // Modulate rain patter volume
-    const targetGain = w.rainIntensity > 0.05 ? w.rainIntensity * 0.45 : 0.0;
-    this.rainGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.2);
-
-    // Trigger thunder on lightning flash
-    if (w.isLightningActive && !this.prevLightningState) {
-      this.playThunder();
-    }
-    this.prevLightningState = w.isLightningActive;
-  }
-
-  private handleDistrictUpdate(c: ChunkManagerState): void {
-    this.startDistrictAmbient(c.activeDistrict.name);
-  }
-
-  public playThunder(): void {
-    if (!this.ctx || !this.weatherGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    const filter = this.ctx.createBiquadFilter();
-
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(90, now);
-    osc.frequency.exponentialRampToValueAtTime(26, now + 1.8);
-
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(220, now);
-
-    gain.gain.setValueAtTime(0.0, now);
-    gain.gain.linearRampToValueAtTime(0.7, now + 0.08);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 2.2);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.weatherGain);
-
-    osc.start(now);
-    osc.stop(now + 2.3);
-  }
-
-  // ==========================================
-  // PROCEDURAL SOUND EFFECTS (SFX)
-  // ==========================================
-
-  public playDoor(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, now); // D5
-    osc.frequency.setValueAtTime(880, now + 0.1); // A5
-
-    gain.gain.setValueAtTime(0.12, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start(now);
-    osc.stop(now + 0.36);
-  }
-
-  public playUI(type: 'click' | 'open' | 'close' | 'toggle' = 'click'): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    const freq = type === 'open' ? 1480 : type === 'close' ? 740 : type === 'toggle' ? 1680 : 1200;
-    osc.frequency.setValueAtTime(freq, now);
-
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start(now);
-    osc.stop(now + 0.06);
-  }
-
-  public playDiscovery(): void {
-    this.playDiscoveryChime();
-  }
-
-  public playShortcutCue(): void {
-    this.playUI('open');
-    this.playDiscoveryChime();
-  }
-
-  public playVehicleHorn(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-    const now = this.ctx.currentTime;
-    const osc1 = this.ctx.createOscillator();
-    const osc2 = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc1.type = 'triangle';
-    osc2.type = 'sawtooth';
-    osc1.frequency.setValueAtTime(310, now);
-    osc2.frequency.setValueAtTime(370, now);
-
-    gain.gain.setValueAtTime(0.09, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-
-    osc1.connect(gain);
-    osc2.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc1.start(now);
-    osc2.start(now);
-    osc1.stop(now + 0.31);
-    osc2.stop(now + 0.31);
-  }
-
-  public playHoverFlyby(pan: number = 0, speedFactor: number = 1.0): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const noise = this.ctx.createBufferSource();
-    const filter = this.ctx.createBiquadFilter();
-    const gain = this.ctx.createGain();
-
-    noise.buffer = this.createNoiseBuffer(1);
-
-    filter.type = 'bandpass';
-    filter.Q.setValueAtTime(2.2, now);
-    filter.frequency.setValueAtTime(420 * speedFactor, now);
-    filter.frequency.exponentialRampToValueAtTime(180 * speedFactor, now + 0.55);
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(260 * speedFactor, now);
-    osc.frequency.exponentialRampToValueAtTime(130 * speedFactor, now + 0.55);
-
-    gain.gain.setValueAtTime(0.0, now);
-    gain.gain.linearRampToValueAtTime(0.12, now + 0.2);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
-
-    noise.connect(filter);
-    filter.connect(gain);
-    osc.connect(gain);
-
-    if (typeof this.ctx.createStereoPanner === 'function') {
-      const panner = this.ctx.createStereoPanner();
-      panner.pan.setValueAtTime(THREE.MathUtils.clamp(pan, -1, 1), now);
-      gain.connect(panner);
-      panner.connect(this.sfxGain);
-    } else {
-      gain.connect(this.sfxGain);
-    }
-
-    noise.start(now);
-    noise.stop(now + 0.56);
-    osc.start(now);
-    osc.stop(now + 0.56);
-  }
-
-  public playBrakeSqueal(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const filter = this.ctx.createBiquadFilter();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(820, now);
-    osc.frequency.exponentialRampToValueAtTime(340, now + 0.35);
-
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(1200, now);
-    filter.Q.setValueAtTime(3.5, now);
-
-    gain.gain.setValueAtTime(0.0, now);
-    gain.gain.linearRampToValueAtTime(0.06, now + 0.04);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start(now);
-    osc.stop(now + 0.36);
-  }
-
-  public playPoliceAlert(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-    const now = this.ctx.currentTime;
-    [520, 760].forEach((frequency, index) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(frequency, now + index * 0.16);
-      gain.gain.setValueAtTime(0.0001, now + index * 0.16);
-      gain.gain.exponentialRampToValueAtTime(0.08, now + index * 0.16 + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.16 + 0.15);
-      osc.connect(gain); gain.connect(this.sfxGain!);
-      osc.start(now + index * 0.16); osc.stop(now + index * 0.16 + 0.17);
-    });
-  }
-
-  public playRepairComplete(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-    const now = this.ctx.currentTime;
-    [392, 523.25, 659.25].forEach((frequency, index) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      osc.type = 'sine'; osc.frequency.setValueAtTime(frequency, now + index * 0.08);
-      gain.gain.setValueAtTime(0.07, now + index * 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.08 + 0.32);
-      osc.connect(gain); gain.connect(this.sfxGain!);
-      osc.start(now + index * 0.08); osc.stop(now + index * 0.08 + 0.34);
-    });
-  }
-
-  public playTransitArrival(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-    const now = this.ctx.currentTime;
-    [659.25, 783.99].forEach((frequency, index) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      osc.type = 'triangle'; osc.frequency.setValueAtTime(frequency, now + index * 0.13);
-      gain.gain.setValueAtTime(0.06, now + index * 0.13);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.13 + 0.35);
-      osc.connect(gain); gain.connect(this.sfxGain!);
-      osc.start(now + index * 0.13); osc.stop(now + index * 0.13 + 0.37);
-    });
-  }
-
-  public playVehicleClassFeedback(vehicleClass: 'POLICE' | 'CARGO' | 'TAXI' | 'EMERGENCY' | 'CORPORATE'): void {
-    if (vehicleClass === 'POLICE' || vehicleClass === 'EMERGENCY') this.playPoliceAlert();
-    else if (vehicleClass === 'CARGO') this.playBrakeSqueal();
-    else if (vehicleClass === 'TAXI') this.playVehicleHorn();
-    else this.playHoverFlyby(0, 0.65);
-  }
-
-  public playDiscoveryChime(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const notes = [523.25, 659.25, 783.99, 1046.5];
-    const now = this.ctx.currentTime;
-
-    notes.forEach((freq, idx) => {
-      const startTime = now + idx * 0.08;
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, startTime);
-
-      gain.gain.setValueAtTime(0.09, startTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.45);
-
-      osc.connect(gain);
-      gain.connect(this.sfxGain!);
-
-      osc.start(startTime);
-      osc.stop(startTime + 0.46);
-    });
-  }
-
-  public playElevatorMove(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-
-    // 1. Hydraulic low whoosh
-    const osc = this.ctx.createOscillator();
-    const filter = this.ctx.createBiquadFilter();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(65, now);
-    osc.frequency.linearRampToValueAtTime(85, now + 0.4);
-    osc.frequency.linearRampToValueAtTime(50, now + 0.9);
-
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(160, now);
-    filter.Q.setValueAtTime(2.0, now);
-
-    gain.gain.setValueAtTime(0.0, now);
-    gain.gain.linearRampToValueAtTime(0.12, now + 0.15);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start(now);
-    osc.stop(now + 0.92);
-
-    // 2. Harmonic arrival chime (E5 -> B5)
-    [659.25, 987.77].forEach((freq, idx) => {
-      const chimeStart = now + 0.55 + idx * 0.14;
-      const chimeOsc = this.ctx!.createOscillator();
-      const chimeGain = this.ctx!.createGain();
-
-      chimeOsc.type = 'sine';
-      chimeOsc.frequency.setValueAtTime(freq, chimeStart);
-
-      chimeGain.gain.setValueAtTime(0.08, chimeStart);
-      chimeGain.gain.exponentialRampToValueAtTime(0.001, chimeStart + 0.4);
-
-      chimeOsc.connect(chimeGain);
-      chimeGain.connect(this.sfxGain!);
-
-      chimeOsc.start(chimeStart);
-      chimeOsc.stop(chimeStart + 0.42);
-    });
-  }
-
-  public playElevatorDing(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    [659.25, 987.77].forEach((freq, idx) => {
-      const chimeStart = now + idx * 0.12;
-      const chimeOsc = this.ctx!.createOscillator();
-      const chimeGain = this.ctx!.createGain();
-
-      chimeOsc.type = 'sine';
-      chimeOsc.frequency.setValueAtTime(freq, chimeStart);
-
-      chimeGain.gain.setValueAtTime(0.09, chimeStart);
-      chimeGain.gain.exponentialRampToValueAtTime(0.001, chimeStart + 0.45);
-
-      chimeOsc.connect(chimeGain);
-      chimeGain.connect(this.sfxGain!);
-
-      chimeOsc.start(chimeStart);
-      chimeOsc.stop(chimeStart + 0.46);
-    });
-  }
-
-  public playTerminalBeep(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1480, now);
-    osc.frequency.setValueAtTime(2220, now + 0.04);
-
-    gain.gain.setValueAtTime(0.07, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start(now);
-    osc.stop(now + 0.13);
-  }
-
-  public playFootstep(surface: 'ROAD' | 'CONCRETE' | 'GRASS' | 'METAL' = 'CONCRETE', isSprint: boolean = false): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    const volScale = isSprint ? 1.25 : 1.0;
-
-    if (surface === 'CONCRETE') {
-      // Crisp synthetic boot impact on concrete
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(140, now);
-      osc.frequency.exponentialRampToValueAtTime(45, now + 0.05);
-
-      gain.gain.setValueAtTime(0.045 * volScale, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-
-      osc.connect(gain);
-      gain.connect(this.sfxGain);
-      osc.start(now);
-      osc.stop(now + 0.065);
-    } else if (surface === 'ROAD') {
-      // Denser asphalt thud
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(110, now);
-      osc.frequency.exponentialRampToValueAtTime(38, now + 0.07);
-
-      gain.gain.setValueAtTime(0.055 * volScale, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-
-      osc.connect(gain);
-      gain.connect(this.sfxGain);
-      osc.start(now);
-      osc.stop(now + 0.085);
-    } else if (surface === 'GRASS') {
-      // Soft muffled turf friction
-      const noise = this.ctx.createBufferSource();
-      noise.buffer = this.createNoiseBuffer(0.08);
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(320, now);
-      filter.Q.setValueAtTime(1.5, now);
-
-      const gain = this.ctx.createGain();
-      gain.gain.setValueAtTime(0.035 * volScale, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-
-      noise.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.sfxGain);
-      noise.start(now);
-      noise.stop(now + 0.075);
-    } else {
-      // Metallic catwalk clink
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(480, now);
-      osc.frequency.exponentialRampToValueAtTime(180, now + 0.06);
-
-      gain.gain.setValueAtTime(0.03 * volScale, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-
-      osc.connect(gain);
-      gain.connect(this.sfxGain);
-      osc.start(now);
-      osc.stop(now + 0.065);
-    }
-  }
-
-  public playJump(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-    const now = this.ctx.currentTime;
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(160, now);
-    osc.frequency.exponentialRampToValueAtTime(340, now + 0.16);
-
-    gain.gain.setValueAtTime(0.06, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-    osc.start(now);
-    osc.stop(now + 0.19);
-  }
-
-  public playLand(surface: 'ROAD' | 'CONCRETE' | 'GRASS' | 'METAL' = 'CONCRETE'): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-    const now = this.ctx.currentTime;
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(95, now);
-    osc.frequency.exponentialRampToValueAtTime(30, now + 0.12);
-
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-    osc.start(now);
-    osc.stop(now + 0.15);
-
-    // Play surface resonance shortly after impact
-    this.playFootstep(surface, true);
-  }
-
-  public playSaveSound(): void {
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
-
-    const now = this.ctx.currentTime;
-    [880, 1318.51, 1760].forEach((freq, idx) => {
-      const startTime = now + idx * 0.04;
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, startTime);
-
-      gain.gain.setValueAtTime(0.06, startTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.25);
-
-      osc.connect(gain);
-      gain.connect(this.sfxGain!);
-
-      osc.start(startTime);
-      osc.stop(startTime + 0.26);
-    });
-  }
-
-  public duck(durationSeconds: number = 1.0, duckFactor: number = 0.25): void {
-    if (!this.ctx || !this.masterGain || this.isMuted) return;
-    const now = this.ctx.currentTime;
-    const currentGain = this.masterGain.gain.value;
-    const duckedGain = currentGain * duckFactor;
-
-    this.masterGain.gain.cancelScheduledValues(now);
-    this.masterGain.gain.setValueAtTime(currentGain, now);
-    this.masterGain.gain.linearRampToValueAtTime(duckedGain, now + 0.12);
-    this.masterGain.gain.linearRampToValueAtTime(currentGain, now + durationSeconds);
+  public isAudioInitialized(): boolean {
+    return this.isInitialized;
   }
 
   public subscribe(listener: AudioListener): () => void {
@@ -907,7 +201,7 @@ export class AudioManager {
   }
 
   private notify(): void {
-    const settings = this.getSettings();
-    this.listeners.forEach((l) => l(settings));
+    const snap = this.getSettings();
+    this.listeners.forEach((l) => l(snap));
   }
 }

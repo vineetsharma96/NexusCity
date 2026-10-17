@@ -9,13 +9,15 @@ export interface InteractiveEntity {
   onInteract: () => void;
 }
 
-type InteractionChangeListener = (active: InteractiveEntity | null) => void;
+type InteractionListener = (active: InteractiveEntity | null) => void;
 
 export class InteractionSystem {
   private static instance: InteractionSystem;
-  private entities: Map<string, InteractiveEntity> = new Map();
+  private entities = new Map<string, InteractiveEntity>();
   private activeEntity: InteractiveEntity | null = null;
-  private listeners: Set<InteractionChangeListener> = new Set();
+  private listeners = new Set<InteractionListener>();
+
+  private constructor() {}
 
   public static getInstance(): InteractionSystem {
     if (!InteractionSystem.instance) {
@@ -38,26 +40,20 @@ export class InteractionSystem {
 
   public updatePlayerPosition(playerPos: THREE.Vector3): void {
     let closest: InteractiveEntity | null = null;
-    let closestDistSq = Infinity;
+    let minDist = Infinity;
 
-    this.entities.forEach((entity) => {
-      const distSq = playerPos.distanceToSquared(entity.position);
-      const maxDistSq = entity.radius * entity.radius;
-
-      if (distSq <= maxDistSq && distSq < closestDistSq) {
+    for (const entity of this.entities.values()) {
+      const dist = playerPos.distanceTo(entity.position);
+      if (dist <= entity.radius && dist < minDist) {
+        minDist = dist;
         closest = entity;
-        closestDistSq = distSq;
       }
-    });
+    }
 
-    if (closest !== this.activeEntity) {
+    if (closest?.id !== this.activeEntity?.id || closest?.actionText !== this.activeEntity?.actionText) {
       this.activeEntity = closest;
       this.notify();
     }
-  }
-
-  public getActive(): InteractiveEntity | null {
-    return this.activeEntity;
   }
 
   public triggerInteract(): boolean {
@@ -68,7 +64,11 @@ export class InteractionSystem {
     return false;
   }
 
-  public subscribe(listener: InteractionChangeListener): () => void {
+  public getActive(): InteractiveEntity | null {
+    return this.activeEntity;
+  }
+
+  public subscribe(listener: InteractionListener): () => void {
     this.listeners.add(listener);
     listener(this.activeEntity);
     return () => this.listeners.delete(listener);

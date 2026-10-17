@@ -10,14 +10,14 @@ export interface PerformanceMetrics {
   textures: number;
 }
 
+type MetricsListener = (metrics: PerformanceMetrics) => void;
+
 export class PerformanceMonitor {
   private static instance: PerformanceMonitor;
-
-  private frames: number = 0;
-  private prevTime: number = performance.now();
-  private lowFpsCounter: number = 0;
-
-  public metrics: PerformanceMetrics = {
+  private frames = 0;
+  private lastSampleTime = performance.now();
+  private lowFpsCounter = 0;
+  private metrics: PerformanceMetrics = {
     fps: 60,
     frameTimeMs: 16.6,
     drawCalls: 0,
@@ -25,8 +25,9 @@ export class PerformanceMonitor {
     geometries: 0,
     textures: 0,
   };
+  private listeners = new Set<MetricsListener>();
 
-  private listeners: Set<(m: PerformanceMetrics) => void> = new Set();
+  private constructor() {}
 
   public static getInstance(): PerformanceMonitor {
     if (!PerformanceMonitor.instance) {
@@ -38,23 +39,23 @@ export class PerformanceMonitor {
   public update(gl?: THREE.WebGLRenderer): void {
     this.frames++;
     const now = performance.now();
-    const elapsed = now - this.prevTime;
+    const elapsed = now - this.lastSampleTime;
 
     if (elapsed >= 500) {
-      // Preserve previously delivered snapshots for React subscribers.
-      this.metrics = { ...this.metrics };
-      this.metrics.fps = Math.round((this.frames * 1000) / elapsed);
-      this.metrics.frameTimeMs = parseFloat((elapsed / this.frames).toFixed(1));
+      const fps = Math.round((this.frames * 1000) / elapsed);
+      const frameTimeMs = Number((elapsed / this.frames).toFixed(1));
+      this.metrics = {
+        fps,
+        frameTimeMs,
+        drawCalls: gl ? gl.info.render.calls : this.metrics.drawCalls,
+        triangles: gl ? gl.info.render.triangles : this.metrics.triangles,
+        geometries: gl ? gl.info.memory.geometries : this.metrics.geometries,
+        textures: gl ? gl.info.memory.textures : this.metrics.textures,
+      };
+      this.frames = 0;
+      this.lastSampleTime = now;
 
-      if (gl && gl.info) {
-        this.metrics.drawCalls = gl.info.render.calls;
-        this.metrics.triangles = gl.info.render.triangles;
-        this.metrics.geometries = gl.info.memory.geometries;
-        this.metrics.textures = gl.info.memory.textures;
-      }
-
-      // Detect persistent low FPS below 25
-      if (this.metrics.fps < 25) {
+      if (fps < 28) {
         this.lowFpsCounter++;
         if (this.lowFpsCounter >= 4) {
           QualityManager.throttleDown();
@@ -64,19 +65,17 @@ export class PerformanceMonitor {
         this.lowFpsCounter = Math.max(0, this.lowFpsCounter - 1);
       }
 
-      this.frames = 0;
-      this.prevTime = now;
-      this.notify();
+      this.listeners.forEach((l) => l({ ...this.metrics }));
     }
   }
 
-  public subscribe(listener: (m: PerformanceMetrics) => void): () => void {
-    this.listeners.add(listener);
-    listener(this.metrics);
-    return () => this.listeners.delete(listener);
+  public getMetrics(): PerformanceMetrics {
+    return { ...this.metrics };
   }
 
-  private notify(): void {
-    this.listeners.forEach((l) => l(this.metrics));
+  public subscribe(listener: MetricsListener): () => void {
+    this.listeners.add(listener);
+    listener({ ...this.metrics });
+    return () => this.listeners.delete(listener);
   }
 }
