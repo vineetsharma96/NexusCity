@@ -235,3 +235,42 @@ test('switching weather to FOG immediately activates high fog density and WindSy
   assert.ok(tempestSpeed > calmSpeed * 3.5);
 });
 
+test('time-of-day system smoothly interpolates sun position, sky palette, and global illumination synchronized with environment settings', async () => {
+  const { TimeSystem } = await systems();
+  const time = TimeSystem.getInstance();
+
+  // Dawn (06:00): sun near eastern horizon (+X), golden hour active, warm low Kelvin color temperature
+  time.setTime(6.2);
+  const dawn = time.getState();
+  assert.equal(dawn.phase, 'SUNRISE');
+  assert.ok(dawn.sunDirection.x > 0.9);
+  assert.ok(Math.abs(dawn.sunElevationDeg) < 12);
+  assert.ok(dawn.goldenHourFactor > 0.9);
+  assert.ok(dawn.colorTemperatureK <= 2800);
+
+  // Noon/Zenith (12:00 - 13:00): high sun elevation, bright GI bounce and hemisphere illumination
+  time.setTime(12.5);
+  const zenith = time.getState();
+  assert.equal(zenith.phase, 'DAY');
+  assert.ok(zenith.sunElevationDeg > 70);
+  assert.ok(zenith.sunIntensity > dawn.sunIntensity);
+  assert.ok(zenith.hemiIntensity > dawn.hemiIntensity);
+  assert.ok(zenith.giBounceIntensity > dawn.giBounceIntensity);
+  assert.notEqual(zenith.skyTopColor, dawn.skyTopColor);
+  assert.notEqual(zenith.skyMidColor, dawn.skyMidColor);
+
+  // Synchronizing with heavy rain & fog attenuates direct sun and shifts sky/fog palette
+  const clearZenithSun = zenith.sunIntensity;
+  const clearZenithTop = zenith.skyTopColor;
+  time.syncEnvironment({
+    rainIntensity: 0.9,
+    fogDensityMultiplier: 5.2,
+    districtFogColor: '#0b1326',
+    cityEventLightScale: 0.85,
+  });
+  const stormZenith = time.getState();
+  assert.ok(stormZenith.sunIntensity < clearZenithSun * 0.6);
+  assert.notEqual(stormZenith.skyTopColor, clearZenithTop);
+});
+
+

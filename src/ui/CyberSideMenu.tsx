@@ -77,6 +77,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
   const [vehicleState, setVehicleState] = useState(() => VehicleInteractionSystem.getInstance().getState());
   const [missionState, setMissionState] = useState<MissionSystemState>(() => MissionSystem.getInstance().getState());
   const [currentWeather, setCurrentWeather] = useState(WeatherSystem.getInstance().getState().currentWeather);
+  const [timeState, setTimeState] = useState(() => TimeSystem.getInstance().getState());
   const menuRef = useModalFocus(isOpen, onClose);
 
   useEffect(() => {
@@ -85,6 +86,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
       setQualitySettings(s);
     });
     const uWea = WeatherSystem.getInstance().subscribe((s) => setCurrentWeather(s.currentWeather));
+    const uTime = TimeSystem.getInstance().subscribe(setTimeState);
     const uAud = AudioManager.getInstance().subscribe((s) => setMuted(s.muted));
     const uAmb = AmbientAudioManager.getInstance().subscribe((s) => {
       setAmbientState(s);
@@ -99,6 +101,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
     return () => {
       uQual();
       uWea();
+      uTime();
       uAud();
       uAmb();
       uSave();
@@ -253,7 +256,159 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
           {section === 'WORLD' && (
             <section style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
-                <div className="menu-section-label">SOLAR PHASE</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="menu-section-label" style={{ margin: 0 }}>
+                    SOLAR PHASE & GLOBAL ILLUMINATION
+                  </div>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--neon-amber)', fontWeight: 700 }}>
+                    {timeState.timeString} // {timeState.subPhaseLabel}
+                  </span>
+                </div>
+
+                {/* Live Sky Palette & Global Illumination Readout */}
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: '9px 11px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'rgba(7, 9, 14, 0.6)',
+                    borderRadius: 4,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '4px 10px',
+                      fontSize: '0.6rem',
+                      color: 'var(--text-secondary)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    <div>
+                      SUN ELEV:{' '}
+                      <strong style={{ color: 'var(--text-primary)' }}>
+                        {Math.round(timeState.sunElevationDeg)}°
+                      </strong>
+                    </div>
+                    <div>
+                      SPECTRUM:{' '}
+                      <strong style={{ color: 'var(--neon-amber)' }}>
+                        {timeState.colorTemperatureK}K
+                      </strong>
+                    </div>
+                    <div>
+                      GI HEMISPHERE:{' '}
+                      <strong style={{ color: 'var(--neon-cyan)' }}>
+                        {Math.round(timeState.hemiIntensity * 100)}%
+                      </strong>
+                    </div>
+                    <div>
+                      SKY BOUNCE:{' '}
+                      <strong style={{ color: 'var(--neon-emerald)' }}>
+                        {Math.round(timeState.giBounceIntensity * 100)}%
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Live Interpolated Sky & GI Color Swatches */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
+                    {(
+                      [
+                        ['ZENITH', timeState.skyTopColor],
+                        ['MID-SKY', timeState.skyMidColor],
+                        ['HORIZON', timeState.skyHorizonColor],
+                        ['GI BOUNCE', timeState.giBounceColor],
+                      ] as const
+                    ).map(([label, hex]) => (
+                      <div
+                        key={label}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          fontSize: '0.54rem',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 11,
+                            height: 11,
+                            borderRadius: 2,
+                            background: hex,
+                            border: '1px solid rgba(255,255,255,0.22)',
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Continuous 24-Hour Time Scrubber */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      fontSize: '0.6rem',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>SOLAR ORBIT SCRUBBER</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{timeState.timeString} HRS</strong>
+                    </div>
+                    <input
+                      aria-label="Solar orbit time scrubber"
+                      type="range"
+                      min={0}
+                      max={23.95}
+                      step={0.05}
+                      value={timeState.timeOfDay}
+                      onChange={(e) => TimeSystem.getInstance().setTime(Number(e.target.value))}
+                    />
+                  </label>
+
+                  {/* Diurnal Progression Rate Controls */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
+                    {(
+                      [
+                        ['PAUSE', 0],
+                        ['1X LIVE', 1],
+                        ['4X FAST', 4],
+                        ['12X ORBIT', 12],
+                      ] as const
+                    ).map(([label, mult]) => {
+                      const active =
+                        (mult === 0 && timeState.isPaused) ||
+                        (!timeState.isPaused && Math.abs(timeState.timeScaleMultiplier - mult) < 0.1);
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          aria-pressed={active}
+                          className="cyber-btn"
+                          onClick={() => TimeSystem.getInstance().setTimeScaleMultiplier(mult)}
+                          style={{
+                            padding: '5px 4px',
+                            fontSize: '0.56rem',
+                            color: active ? '#07090e' : 'var(--text-secondary)',
+                            background: active ? 'var(--neon-cyan)' : 'rgba(255, 255, 255, 0.03)',
+                            borderColor: active ? 'var(--neon-cyan)' : 'var(--border-subtle)',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
                   {(
                     [

@@ -83,7 +83,7 @@ const SceneFrameLoop: React.FC = () => {
     }
 
     const timeState = TimeSystem.getInstance().getState();
-    const targetExposure = timeState.isNight ? 1.32 : timeState.phase === 'SUNSET' ? 1.22 : 1.08;
+    const targetExposure = timeState.exposureTarget ?? (timeState.isNight ? 1.32 : timeState.phase === 'SUNSET' ? 1.22 : 1.08);
     gl.toneMappingExposure = THREE.MathUtils.lerp(gl.toneMappingExposure, targetExposure, 1 - Math.exp(-3 * delta));
   });
 
