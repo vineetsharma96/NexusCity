@@ -3,6 +3,7 @@ import { SeedRandom } from '../core/SeedRandom';
 import { DistrictGenerator, DistrictInfo } from './DistrictGenerator';
 import { CollisionBox } from '../player/KinematicCollision';
 import { VegetationGenerator, TreeDef, PlanterBushDef, TreeSpecies } from './VegetationGenerator';
+import { FacadeStyleVariant } from '../core/ProceduralTextures';
 
 export interface StreamedBuildingDef {
   id: string;
@@ -11,6 +12,7 @@ export interface StreamedBuildingDef {
   color: string;
   accentColor: string;
   emissiveColor: string;
+  facadeVariant: FacadeStyleVariant;
   tiers: { offset: THREE.Vector3; size: THREE.Vector3 }[];
   antenna?: { height: number; beaconColor: string };
   collisionBox: CollisionBox;
@@ -252,6 +254,15 @@ export class ProceduralChunkGenerator {
       };
       collisionBoxes.push(collisionBox);
 
+      const facadeVariant: FacadeStyleVariant =
+        district.type === 'GREEN_DISTRICT'
+          ? 'ARCOLOGY_TERRACE'
+          : district.type === 'INDUSTRIAL_DISTRICT' || district.type === 'OLD_CITY'
+          ? 'BRUTALIST_RIBBED'
+          : qIdx % 2 === 0
+          ? 'DIAGRID_HEX'
+          : 'CURTAIN_GLASS';
+
       buildings.push({
         id: `stream-${key}-${qIdx}`,
         position: new THREE.Vector3(lotCenterX, 0, lotCenterZ),
@@ -259,9 +270,10 @@ export class ProceduralChunkGenerator {
         color: rng.pick(palette),
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
+        facadeVariant,
         tiers,
         antenna:
-          totalH > 78 && rng.next() > 0.4
+          totalH > 68 && rng.next() > 0.35
             ? { height: rng.range(9, 20), beaconColor: district.primaryLightColor }
             : undefined,
         collisionBox,

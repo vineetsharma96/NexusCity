@@ -76,7 +76,8 @@ const ROOFTOP_LIFTS = [
 ];
 
 export const InteractiveTerminals: React.FC<InteractiveTerminalsProps> = ({ teleportRef }) => {
-  const holoRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const holoRefs = useRef<(THREE.Group | null)[]>([]);
+  const liftRingRefs = useRef<(THREE.Mesh | null)[]>([]);
 
   useEffect(() => {
     const sys = TerminalSystem.getInstance();
@@ -117,46 +118,125 @@ export const InteractiveTerminals: React.FC<InteractiveTerminalsProps> = ({ tele
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
-    holoRefs.current.forEach((mesh, idx) => {
-      if (mesh) {
-        mesh.rotation.y = t * 1.4 + idx;
-        mesh.position.y = 2.25 + Math.sin(t * 2.2 + idx) * 0.1;
+    holoRefs.current.forEach((grp, idx) => {
+      if (grp) {
+        grp.rotation.y = t * 1.4 + idx;
+        grp.position.y = 2.45 + Math.sin(t * 2.2 + idx) * 0.08;
+      }
+    });
+    liftRingRefs.current.forEach((ring, idx) => {
+      if (ring) {
+        ring.position.y = 0.6 + ((t * 1.1 + idx * 0.9) % 2.2);
       }
     });
   });
 
   return (
     <group name="InteractiveTerminalsAndLifts">
+      {/* Multi-Part Architectural Civic Telemetry Kiosks */}
       {TERMINALS.map((term, idx) => (
         <group key={term.id} position={term.position}>
-          <mesh position={[0, 0.9, 0]} castShadow receiveShadow>
-            <boxGeometry args={[0.72, 1.8, 0.48]} />
-            <meshStandardMaterial color="#0b0f19" metalness={0.9} roughness={0.2} />
+          {/* Stepped Octagonal Base Plinth & Glowing Perimeter Ring */}
+          <mesh position={[0, 0.06, 0]} receiveShadow>
+            <cylinderGeometry args={[0.92, 1.05, 0.12, 8]} />
+            <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.22} />
           </mesh>
-          <mesh position={[0, 1.35, 0.25]} rotation={[-0.2, 0, 0]}>
-            <planeGeometry args={[0.56, 0.42]} />
+          <mesh position={[0, 0.125, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.78, 0.88, 8]} />
+            <meshBasicMaterial color={idx % 2 === 0 ? '#38bdf8' : '#f59e0b'} />
+          </mesh>
+
+          {/* Main Armored Console Monolith */}
+          <mesh position={[0, 1.02, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.76, 1.85, 0.48]} />
+            <meshStandardMaterial color="#0b0f19" metalness={0.92} roughness={0.18} />
+          </mesh>
+          {/* Side Protective Rib Wings */}
+          {([-0.42, 0.42] as const).map((wx, wIdx) => (
+            <mesh key={wIdx} position={[wx, 1.08, 0.06]} castShadow>
+              <boxGeometry args={[0.08, 1.65, 0.56]} />
+              <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.2} />
+            </mesh>
+          ))}
+          {/* Cantilevered Overhead Visor Hood */}
+          <mesh position={[0, 1.98, 0.12]} rotation={[0.15, 0, 0]}>
+            <boxGeometry args={[0.92, 0.1, 0.68]} />
+            <meshStandardMaterial color="#111827" metalness={0.92} roughness={0.18} />
+          </mesh>
+
+          {/* Primary Upper Display & Angled Tactile Input Deck */}
+          <mesh position={[0, 1.42, 0.25]} rotation={[-0.18, 0, 0]}>
+            <planeGeometry args={[0.62, 0.44]} />
             <meshBasicMaterial color="#f59e0b" />
           </mesh>
-          <mesh
+          <mesh position={[0, 0.98, 0.32]} rotation={[-0.65, 0, 0]}>
+            <boxGeometry args={[0.6, 0.04, 0.26]} />
+            <meshStandardMaterial color="#1e293b" emissive="#38bdf8" emissiveIntensity={0.45} metalness={0.85} roughness={0.2} />
+          </mesh>
+
+          {/* Floating Multi-Ring Holographic Gyroscope Beacon */}
+          <group
             ref={(el) => {
               holoRefs.current[idx] = el;
             }}
-            position={[0, 2.25, 0]}
+            position={[0, 2.45, 0]}
           >
-            <octahedronGeometry args={[0.24, 0]} />
-            <meshBasicMaterial color="#38bdf8" wireframe />
-          </mesh>
+            <mesh>
+              <octahedronGeometry args={[0.24, 0]} />
+              <meshBasicMaterial color="#38bdf8" wireframe />
+            </mesh>
+            <mesh rotation={[Math.PI / 3, 0, 0]}>
+              <torusGeometry args={[0.38, 0.018, 8, 24]} />
+              <meshBasicMaterial color="#f59e0b" />
+            </mesh>
+          </group>
         </group>
       ))}
 
-      {ROOFTOP_LIFTS.map((lift) => (
+      {/* Express Skybridge Lift Portals */}
+      {ROOFTOP_LIFTS.map((lift, idx) => (
         <group key={lift.id} position={lift.ground}>
-          <mesh position={[0, 1.4, 0]}>
-            <cylinderGeometry args={[0.45, 0.55, 2.8, 12]} />
-            <meshStandardMaterial color="#111827" metalness={0.85} roughness={0.2} emissive="#f59e0b" emissiveIntensity={0.35} />
+          {/* Base Platform */}
+          <mesh position={[0, 0.05, 0]} receiveShadow>
+            <cylinderGeometry args={[0.95, 1.08, 0.1, 16]} />
+            <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
           </mesh>
-          <mesh position={[0, 2.9, 0]}>
-            <torusGeometry args={[0.52, 0.04, 8, 24]} />
+          {/* Glazed Lift Core Cylinder */}
+          <mesh position={[0, 1.5, 0]}>
+            <cylinderGeometry args={[0.48, 0.54, 2.9, 14]} />
+            <meshStandardMaterial
+              color="#111827"
+              metalness={0.88}
+              roughness={0.16}
+              emissive="#f59e0b"
+              emissiveIntensity={0.32}
+            />
+          </mesh>
+          {/* Twin Structural Guide-Rail Columns */}
+          {([-0.68, 0.68] as const).map((gx, gIdx) => (
+            <mesh key={gIdx} position={[gx, 1.55, 0]}>
+              <boxGeometry args={[0.14, 3.0, 0.22]} />
+              <meshStandardMaterial color="#1e293b" metalness={0.92} roughness={0.2} />
+            </mesh>
+          ))}
+          {/* Overhead Portal Crown Header */}
+          <mesh position={[0, 3.05, 0]}>
+            <boxGeometry args={[1.65, 0.22, 0.48]} />
+            <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.18} />
+          </mesh>
+          {/* Animated Ascending Energy Ring */}
+          <mesh
+            ref={(el) => {
+              liftRingRefs.current[idx] = el;
+            }}
+            position={[0, 1.4, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+          >
+            <torusGeometry args={[0.58, 0.035, 8, 24]} />
+            <meshBasicMaterial color="#38bdf8" />
+          </mesh>
+          <mesh position={[0, 2.95, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.56, 0.04, 8, 24]} />
             <meshBasicMaterial color="#f59e0b" />
           </mesh>
         </group>

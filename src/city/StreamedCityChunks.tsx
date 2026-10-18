@@ -13,7 +13,7 @@ import { PlanterBushDef } from './VegetationGenerator';
 import { ProceduralTree } from './ProceduralTree';
 import { RoadGenerator } from './RoadGenerator';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
-import { ProceduralTextures } from '../core/ProceduralTextures';
+import { FacadeStyleVariant, ProceduralTextures } from '../core/ProceduralTextures';
 import { WeatherSystem } from '../world/WeatherSystem';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 
@@ -58,57 +58,147 @@ const LowDetailChunks: React.FC<{ chunks: ChunkInfo[]; facadeTex: THREE.CanvasTe
 const StreamedBuilding: React.FC<{
   building: StreamedBuildingDef;
   lod: ChunkLOD;
-  facadeTex: THREE.CanvasTexture;
+  facadeTextures: Record<FacadeStyleVariant, THREE.CanvasTexture>;
   claddingNormal?: THREE.CanvasTexture;
   shadows: boolean;
   envScale: number;
-}> = React.memo(({ building, lod, facadeTex, claddingNormal, shadows, envScale }) => {
-  const { position, size, accentColor, emissiveColor, tiers, antenna } = building;
+}> = React.memo(({ building, lod, facadeTextures, claddingNormal, shadows, envScale }) => {
+  const { position, size, accentColor, emissiveColor, facadeVariant, tiers, antenna } = building;
+  const facadeTex = facadeTextures[facadeVariant] || facadeTextures.CURTAIN_GLASS;
+  const isHigh = lod === 'HIGH';
+  const topTier = tiers[tiers.length - 1];
+
   return (
     <group position={[position.x, 0, position.z]}>
-      {tiers.map((tier, idx) => (
-        <group key={idx} position={[tier.offset.x, tier.offset.y, tier.offset.z]}>
-          <mesh
-            geometry={SHARED_UNIT_BOX}
-            scale={[tier.size.x, tier.size.y, tier.size.z]}
-            castShadow={shadows && lod === 'HIGH'}
-            receiveShadow={shadows}
-          >
-            <meshStandardMaterial
-              map={facadeTex}
-              normalMap={lod === 'HIGH' ? claddingNormal : undefined}
-              normalScale={new THREE.Vector2(0.5, 0.5)}
-              roughness={0.32}
-              metalness={0.82}
-              envMapIntensity={envScale}
-            />
-          </mesh>
-          <mesh
-            position={[0, tier.size.y / 2 - 0.25, 0]}
-            geometry={SHARED_UNIT_BOX}
-            scale={[tier.size.x + 0.14, 0.45, tier.size.z + 0.14]}
-          >
-            <meshBasicMaterial color={lod === 'HIGH' ? accentColor : emissiveColor} />
-          </mesh>
-        </group>
-      ))}
-      {/* Ground-level illuminated storefront podium */}
+      {/* Wrap-Around Street-Level Podium & 4-Sided Illuminated Storefront */}
       <mesh
-        position={[0, 2.0, size.z / 2 + 0.05]}
+        position={[0, 2.4, 0]}
         geometry={SHARED_UNIT_BOX}
-        scale={[size.x * 0.68, 4.0, 0.32]}
+        scale={[size.x + 0.7, 4.8, size.z + 0.7]}
+        receiveShadow={shadows}
+      >
+        <meshStandardMaterial color="#0b1120" metalness={0.88} roughness={0.26} envMapIntensity={envScale * 0.75} />
+      </mesh>
+      <mesh
+        position={[0, 2.1, 0]}
+        geometry={SHARED_UNIT_BOX}
+        scale={[size.x * 0.74, 3.8, size.z + 0.85]}
       >
         <meshStandardMaterial
           color="#09111f"
           emissive={accentColor}
-          emissiveIntensity={0.28}
+          emissiveIntensity={0.32}
           metalness={0.9}
-          roughness={0.2}
+          roughness={0.18}
         />
       </mesh>
+      <mesh
+        position={[0, 2.1, 0]}
+        geometry={SHARED_UNIT_BOX}
+        scale={[size.x + 0.85, 3.8, size.z * 0.74]}
+      >
+        <meshStandardMaterial
+          color="#09111f"
+          emissive={emissiveColor}
+          emissiveIntensity={0.28}
+          metalness={0.9}
+          roughness={0.18}
+        />
+      </mesh>
+      {/* Cantilevered Podium Canopy */}
+      <mesh
+        position={[0, 4.7, 0]}
+        geometry={SHARED_UNIT_BOX}
+        scale={[size.x + 1.8, 0.25, size.z + 1.8]}
+      >
+        <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
+      </mesh>
+
+      {/* Stepped Architectural Tiers */}
+      {tiers.map((tier, idx) => {
+        const tw = tier.size.x;
+        const th = tier.size.y;
+        const td = tier.size.z;
+        return (
+          <group key={idx} position={[tier.offset.x, tier.offset.y, tier.offset.z]}>
+            <mesh
+              geometry={SHARED_UNIT_BOX}
+              scale={[tw, th, td]}
+              castShadow={shadows && isHigh}
+              receiveShadow={shadows}
+            >
+              <meshStandardMaterial
+                map={facadeTex}
+                normalMap={isHigh ? claddingNormal : undefined}
+                normalScale={new THREE.Vector2(0.55, 0.55)}
+                roughness={0.3}
+                metalness={0.84}
+                envMapIntensity={envScale}
+              />
+            </mesh>
+
+            {/* 4 Corner Structural Exoskeleton Columns & Center Brise-Soleil Fins on High LOD */}
+            {isHigh && (
+              <>
+                {(
+                  [
+                    [-1, -1],
+                    [1, -1],
+                    [-1, 1],
+                    [1, 1],
+                  ] as const
+                ).map(([cx, cz], cIdx) => (
+                  <mesh
+                    key={cIdx}
+                    position={[(cx * tw) / 2, 0, (cz * td) / 2]}
+                    geometry={SHARED_UNIT_BOX}
+                    scale={[0.7, th, 0.7]}
+                  >
+                    <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.22} />
+                  </mesh>
+                ))}
+                <mesh geometry={SHARED_UNIT_BOX} scale={[0.3, th * 0.94, td + 0.32]}>
+                  <meshStandardMaterial color="#111c33" metalness={0.9} roughness={0.22} />
+                </mesh>
+                <mesh geometry={SHARED_UNIT_BOX} scale={[tw + 0.32, th * 0.94, 0.3]}>
+                  <meshStandardMaterial color="#111c33" metalness={0.9} roughness={0.22} />
+                </mesh>
+              </>
+            )}
+
+            {/* Tier Cornice Light Band */}
+            <mesh
+              position={[0, th / 2 - 0.25, 0]}
+              geometry={SHARED_UNIT_BOX}
+              scale={[tw + 0.22, 0.42, td + 0.22]}
+            >
+              <meshBasicMaterial color={idx % 2 === 0 ? accentColor : emissiveColor} />
+            </mesh>
+          </group>
+        );
+      })}
+
+      {/* Sculpted Rooftop Lantern Crown */}
+      {topTier && (
+        <mesh
+          position={[0, size.y + 1.4, 0]}
+          geometry={SHARED_UNIT_BOX}
+          scale={[topTier.size.x * 0.68, 2.6, topTier.size.z * 0.68]}
+        >
+          <meshStandardMaterial
+            color="#0b1326"
+            emissive={accentColor}
+            emissiveIntensity={0.35}
+            metalness={0.9}
+            roughness={0.18}
+          />
+        </mesh>
+      )}
+
+      {/* Rooftop Spire & Aviation Beacon */}
       {antenna && (
-        <group position={[0, size.y, 0]}>
-          <mesh position={[0, antenna.height / 2, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[0.5, antenna.height, 0.5]}>
+        <group position={[0, size.y + 2.6, 0]}>
+          <mesh position={[0, antenna.height / 2, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[0.45, antenna.height, 0.45]}>
             <meshStandardMaterial color="#475569" metalness={0.9} roughness={0.2} />
           </mesh>
           <mesh position={[0, antenna.height + 0.4, 0]} geometry={SHARED_BEACON_SPHERE}>
@@ -259,11 +349,11 @@ const StreamedChunkView: React.FC<{
   wetnessFactor: number;
   quality: QualitySettings;
   asphaltTex: THREE.CanvasTexture;
-  facadeTex: THREE.CanvasTexture;
+  facadeTextures: Record<FacadeStyleVariant, THREE.CanvasTexture>;
   asphaltNormal: THREE.CanvasTexture;
   claddingNormal: THREE.CanvasTexture;
 }> = React.memo(
-  ({ chunkInfo, wetnessFactor, quality, asphaltTex, facadeTex, asphaltNormal, claddingNormal }) => {
+  ({ chunkInfo, wetnessFactor, quality, asphaltTex, facadeTextures, asphaltNormal, claddingNormal }) => {
     const data: StreamedChunkData = useMemo(
       () => ProceduralChunkGenerator.getChunkData(chunkInfo.cx, chunkInfo.cz),
       [chunkInfo.cx, chunkInfo.cz]
@@ -332,7 +422,7 @@ const StreamedChunkView: React.FC<{
             key={b.id}
             building={b}
             lod={chunkInfo.lod}
-            facadeTex={facadeTex}
+            facadeTextures={facadeTextures}
             claddingNormal={quality.normalMapsEnabled ? claddingNormal : undefined}
             shadows={quality.shadows}
             envScale={envScale}
@@ -364,7 +454,15 @@ export const StreamedCityChunks: React.FC = () => {
   const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
   const asphaltTex = useMemo(() => RoadGenerator.getAsphaltTexture(), []);
-  const facadeTex = useMemo(() => ProceduralTextures.getBuildingFacadeTexture(0.58), []);
+  const facadeTextures = useMemo<Record<FacadeStyleVariant, THREE.CanvasTexture>>(
+    () => ({
+      CURTAIN_GLASS: ProceduralTextures.getBuildingFacadeTexture(0.58, 'CURTAIN_GLASS'),
+      DIAGRID_HEX: ProceduralTextures.getBuildingFacadeTexture(0.6, 'DIAGRID_HEX'),
+      BRUTALIST_RIBBED: ProceduralTextures.getBuildingFacadeTexture(0.54, 'BRUTALIST_RIBBED'),
+      ARCOLOGY_TERRACE: ProceduralTextures.getBuildingFacadeTexture(0.62, 'ARCOLOGY_TERRACE'),
+    }),
+    []
+  );
   const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
   const claddingNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
   const prevSigRef = useRef('');
@@ -395,7 +493,7 @@ export const StreamedCityChunks: React.FC = () => {
 
   return (
     <group name="StreamedCityChunksLayer">
-      <LowDetailChunks chunks={lowChunks} facadeTex={facadeTex} />
+      <LowDetailChunks chunks={lowChunks} facadeTex={facadeTextures.CURTAIN_GLASS} />
       {detailedChunks.map((chunk) => (
         <StreamedChunkView
           key={chunk.key}
@@ -403,7 +501,7 @@ export const StreamedCityChunks: React.FC = () => {
           wetnessFactor={weatherState.wetnessFactor}
           quality={quality}
           asphaltTex={asphaltTex}
-          facadeTex={facadeTex}
+          facadeTextures={facadeTextures}
           asphaltNormal={asphaltNormal}
           claddingNormal={claddingNormal}
         />

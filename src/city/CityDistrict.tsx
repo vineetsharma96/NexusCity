@@ -6,7 +6,7 @@ import { RoadGenerator } from './RoadGenerator';
 import { VegetationGenerator, TreeDef } from './VegetationGenerator';
 import { ProceduralTree } from './ProceduralTree';
 import { CyberVideoBillboard } from './CyberVideoBillboard';
-import { ProceduralTextures } from '../core/ProceduralTextures';
+import { FacadeStyleVariant, ProceduralTextures } from '../core/ProceduralTextures';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
@@ -15,6 +15,7 @@ import { NavigationSystem } from '../map/NavigationSystem';
 import { LivingCityEventState, LivingCityEventSystem } from '../world/LivingCityEventSystem';
 
 const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
 
 interface CityDistrictProps {
   seed?: number;
@@ -24,6 +25,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const cityData: CityData = useMemo(() => CityGenerator.generateDistrict(seed), [seed]);
   const trees: TreeDef[] = useMemo(() => VegetationGenerator.generateTrees(seed), [seed]);
   const astrolabeRef = useRef<THREE.Group>(null);
+  const droneGroupRef = useRef<THREE.Group>(null);
 
   const [timeState, setTimeState] = useState<TimeLightingState>(() => TimeSystem.getInstance().getState());
   const [weatherState, setWeatherState] = useState<WeatherState>(() => WeatherSystem.getInstance().getState());
@@ -53,13 +55,32 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
     };
   }, []);
 
-  useFrame((_, delta) => {
+  useFrame(({ clock }, delta) => {
+    const t = clock.getElapsedTime();
     if (astrolabeRef.current) {
       astrolabeRef.current.rotation.y += delta * 0.45;
       astrolabeRef.current.children.forEach((child, idx) => {
         if (idx > 0) {
           child.rotation.x += delta * (0.3 + idx * 0.15);
         }
+      });
+    }
+    if (droneGroupRef.current) {
+      droneGroupRef.current.children.forEach((drone, idx) => {
+        const radius = 34 + idx * 14;
+        const speed = (idx % 2 === 0 ? 1 : -1) * (0.22 + idx * 0.04);
+        const angle = t * speed + idx * 1.57;
+        const nextAngle = angle + speed * 0.1;
+        drone.position.set(
+          Math.cos(angle) * radius,
+          19 + idx * 3.5 + Math.sin(t * 1.8 + idx) * 0.8,
+          Math.sin(angle) * radius
+        );
+        drone.lookAt(
+          Math.cos(nextAngle) * radius,
+          drone.position.y,
+          Math.sin(nextAngle) * radius
+        );
       });
     }
   });
@@ -83,7 +104,15 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
   const asphaltTex = useMemo(() => RoadGenerator.getAsphaltTexture(), []);
   const sidewalkTex = useMemo(() => RoadGenerator.getSidewalkTexture(), []);
-  const facadeTex = useMemo(() => ProceduralTextures.getBuildingFacadeTexture(0.64), []);
+  const facadeTextures = useMemo<Record<FacadeStyleVariant, THREE.CanvasTexture>>(
+    () => ({
+      CURTAIN_GLASS: ProceduralTextures.getBuildingFacadeTexture(0.64, 'CURTAIN_GLASS'),
+      DIAGRID_HEX: ProceduralTextures.getBuildingFacadeTexture(0.66, 'DIAGRID_HEX'),
+      BRUTALIST_RIBBED: ProceduralTextures.getBuildingFacadeTexture(0.58, 'BRUTALIST_RIBBED'),
+      ARCOLOGY_TERRACE: ProceduralTextures.getBuildingFacadeTexture(0.68, 'ARCOLOGY_TERRACE'),
+    }),
+    []
+  );
   const plazaTex = useMemo(() => ProceduralTextures.getPlazaGridTexture(), []);
   const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
   const puddleRoughness = useMemo(() => ProceduralTextures.getWetPuddleRoughnessMap(), []);
@@ -248,112 +277,386 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         </group>
       ))}
 
-      {/* Architectural Monoliths */}
-      {cityData.buildings.map((bldg) => (
-        <group key={bldg.id} position={bldg.position}>
-          {bldg.tiers.map((tier, tIdx) => (
-            <group key={tIdx} position={tier.offset}>
+      {/* Detailed Multi-Tier Architectural Monoliths */}
+      {cityData.buildings.map((bldg) => {
+        const bldgFacadeTex = facadeTextures[bldg.facadeVariant] || facadeTextures.CURTAIN_GLASS;
+        const topTier = bldg.tiers[bldg.tiers.length - 1];
+        const topW = topTier.size.x;
+        const topD = topTier.size.z;
+        const totalH = bldg.totalSize.y;
+
+        return (
+          <group key={bldg.id} position={bldg.position} name={bldg.name}>
+            {/* 1. Wrap-Around Street-Level Granite Podium & 4-Sided Colonnade Storefront Arcade */}
+            <group name="StreetLevelPodium">
+              {/* Podium Base Plinth */}
               <mesh
+                position={[0, 2.8, 0]}
                 geometry={SHARED_UNIT_BOX}
-                scale={[tier.size.x, tier.size.y, tier.size.z]}
+                scale={[bldg.totalSize.x + 0.9, 5.6, bldg.totalSize.z + 0.9]}
                 castShadow={quality.shadows}
                 receiveShadow={quality.shadows}
               >
+                <meshStandardMaterial color="#0b1120" metalness={0.88} roughness={0.26} envMapIntensity={envScale * 0.8} />
+              </mesh>
+
+              {/* 4-Sided Illuminated Recessed Atrium Lobbies (North, South, East, West) */}
+              <mesh
+                position={[0, 2.5, 0]}
+                geometry={SHARED_UNIT_BOX}
+                scale={[bldg.totalSize.x * 0.78, 4.6, bldg.totalSize.z + 1.05]}
+              >
                 <meshStandardMaterial
-                  map={facadeTex}
-                  normalMap={quality.normalMapsEnabled ? claddingNormal : undefined}
-                  normalScale={new THREE.Vector2(isUltra ? 0.75 : 0.55, isUltra ? 0.75 : 0.55)}
-                  roughness={isUltra ? 0.24 : 0.32}
-                  metalness={0.86}
-                  envMapIntensity={envScale}
+                  color="#091326"
+                  emissive={bldg.storefrontColor}
+                  emissiveIntensity={gridIsOut ? 0.03 : 0.36}
+                  metalness={0.92}
+                  roughness={0.14}
+                  envMapIntensity={envScale * 1.2}
                 />
               </mesh>
-              {/* Structural Corner Exoskeleton Columns */}
-              {(
-                [
-                  [-1, -1],
-                  [1, -1],
-                  [-1, 1],
-                  [1, 1],
-                ] as const
-              ).map(([cx, cz], cIdx) => (
-                <mesh
-                  key={cIdx}
-                  position={[(cx * tier.size.x) / 2, 0, (cz * tier.size.z) / 2]}
-                  geometry={SHARED_UNIT_BOX}
-                  scale={[0.65, tier.size.y, 0.65]}
-                >
-                  <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.22} />
-                </mesh>
+              <mesh
+                position={[0, 2.5, 0]}
+                geometry={SHARED_UNIT_BOX}
+                scale={[bldg.totalSize.x + 1.05, 4.6, bldg.totalSize.z * 0.78]}
+              >
+                <meshStandardMaterial
+                  color="#091326"
+                  emissive={bldg.secondaryAccentColor}
+                  emissiveIntensity={gridIsOut ? 0.03 : 0.3}
+                  metalness={0.92}
+                  roughness={0.14}
+                  envMapIntensity={envScale * 1.2}
+                />
+              </mesh>
+
+              {/* 4-Sided Cantilevered Entrance Marquee Canopies & Under-Soffit Light Bars */}
+              <mesh
+                position={[0, 5.35, 0]}
+                geometry={SHARED_UNIT_BOX}
+                scale={[bldg.totalSize.x + 2.4, 0.32, bldg.totalSize.z * 0.84]}
+                castShadow={quality.shadows}
+              >
+                <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.2} />
+              </mesh>
+              <mesh
+                position={[0, 5.35, 0]}
+                geometry={SHARED_UNIT_BOX}
+                scale={[bldg.totalSize.x * 0.84, 0.32, bldg.totalSize.z + 2.4]}
+                castShadow={quality.shadows}
+              >
+                <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.2} />
+              </mesh>
+              <mesh
+                position={[0, 5.15, 0]}
+                geometry={SHARED_UNIT_BOX}
+                scale={[bldg.totalSize.x + 2.5, 0.08, bldg.totalSize.z * 0.8]}
+              >
+                <meshBasicMaterial color={gridIsOut ? '#1e293b' : bldg.storefrontColor} />
+              </mesh>
+              <mesh
+                position={[0, 5.15, 0]}
+                geometry={SHARED_UNIT_BOX}
+                scale={[bldg.totalSize.x * 0.8, 0.08, bldg.totalSize.z + 2.5]}
+              >
+                <meshBasicMaterial color={gridIsOut ? '#1e293b' : bldg.secondaryAccentColor} />
+              </mesh>
+
+              {/* Perimeter Colonnade Structural Piers */}
+              {([-0.32, 0.32] as const).map((frac, pIdx) => (
+                <React.Fragment key={`pier-${pIdx}`}>
+                  <mesh
+                    position={[bldg.totalSize.x * frac, 2.7, bldg.totalSize.z / 2 + 0.55]}
+                    geometry={SHARED_UNIT_BOX}
+                    scale={[0.55, 5.4, 0.55]}
+                  >
+                    <meshStandardMaterial color="#111827" metalness={0.9} roughness={0.22} />
+                  </mesh>
+                  <mesh
+                    position={[bldg.totalSize.x * frac, 2.7, -bldg.totalSize.z / 2 - 0.55]}
+                    geometry={SHARED_UNIT_BOX}
+                    scale={[0.55, 5.4, 0.55]}
+                  >
+                    <meshStandardMaterial color="#111827" metalness={0.9} roughness={0.22} />
+                  </mesh>
+                  <mesh
+                    position={[bldg.totalSize.x / 2 + 0.55, 2.7, bldg.totalSize.z * frac]}
+                    geometry={SHARED_UNIT_BOX}
+                    scale={[0.55, 5.4, 0.55]}
+                  >
+                    <meshStandardMaterial color="#111827" metalness={0.9} roughness={0.22} />
+                  </mesh>
+                  <mesh
+                    position={[-bldg.totalSize.x / 2 - 0.55, 2.7, bldg.totalSize.z * frac]}
+                    geometry={SHARED_UNIT_BOX}
+                    scale={[0.55, 5.4, 0.55]}
+                  >
+                    <meshStandardMaterial color="#111827" metalness={0.9} roughness={0.22} />
+                  </mesh>
+                </React.Fragment>
               ))}
             </group>
-          ))}
 
-          {/* Street-Level Illuminated Lobby & Cantilevered Canopy */}
-          <mesh
-            position={[0, 2.4, bldg.totalSize.z / 2 + 0.06]}
-            geometry={SHARED_UNIT_BOX}
-            scale={[bldg.totalSize.x * 0.72, 4.8, 0.42]}
-          >
-            <meshStandardMaterial
-              color="#09111f"
-              emissive={bldg.storefrontColor}
-              emissiveIntensity={gridIsOut ? 0.04 : 0.32}
-              metalness={0.9}
-              roughness={0.16}
-            />
-          </mesh>
-          <mesh
-            position={[0, 4.95, bldg.totalSize.z / 2 + 0.85]}
-            geometry={SHARED_UNIT_BOX}
-            scale={[bldg.totalSize.x * 0.78, 0.24, 1.8]}
-          >
-            <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
-          </mesh>
+            {/* 2. Stepped Architectural Tiers with Corner Exoskeletons, Brise-Soleil Fins & Belt Courses */}
+            {bldg.tiers.map((tier, tIdx) => {
+              const tw = tier.size.x;
+              const th = tier.size.y;
+              const td = tier.size.z;
+              return (
+                <group key={tIdx} position={tier.offset}>
+                  {/* Primary Curtain-Wall Volume */}
+                  <mesh
+                    geometry={SHARED_UNIT_BOX}
+                    scale={[tw, th, td]}
+                    castShadow={quality.shadows}
+                    receiveShadow={quality.shadows}
+                  >
+                    <meshStandardMaterial
+                      map={bldgFacadeTex}
+                      normalMap={quality.normalMapsEnabled ? claddingNormal : undefined}
+                      normalScale={new THREE.Vector2(isUltra ? 0.8 : 0.58, isUltra ? 0.8 : 0.58)}
+                      roughness={isUltra ? 0.22 : 0.3}
+                      metalness={0.86}
+                      envMapIntensity={envScale}
+                    />
+                  </mesh>
 
-          {bldg.lightStrips.map((strip, sIdx) => (
-            <mesh
-              key={sIdx}
-              position={strip.position}
-              geometry={SHARED_UNIT_BOX}
-              scale={[strip.size.x, strip.size.y, strip.size.z]}
-            >
-              <meshBasicMaterial color={gridIsOut ? '#1e293b' : strip.color} />
-            </mesh>
-          ))}
+                  {/* 4 Heavy Corner Megacolumns */}
+                  {(
+                    [
+                      [-1, -1],
+                      [1, -1],
+                      [-1, 1],
+                      [1, 1],
+                    ] as const
+                  ).map(([cx, cz], cIdx) => (
+                    <mesh
+                      key={`col-${cIdx}`}
+                      position={[(cx * tw) / 2, 0, (cz * td) / 2]}
+                      geometry={SHARED_UNIT_BOX}
+                      scale={[0.85, th + 0.2, 0.85]}
+                      castShadow={quality.shadows}
+                    >
+                      <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.2} envMapIntensity={envScale * 0.7} />
+                    </mesh>
+                  ))}
 
-          {bldg.rooftopEquipment.map((eq, eIdx) => (
-            <group key={eIdx} position={eq.position}>
-              {eq.type === 'ANTENNA' ? (
-                <>
-                  <mesh>
-                    <cylinderGeometry args={[0.08, 0.28, eq.size.y, 8]} />
-                    <meshStandardMaterial color="#334155" metalness={0.9} />
-                  </mesh>
-                  <mesh position={[0, eq.size.y / 2, 0]}>
-                    <sphereGeometry args={[0.32, 8, 8]} />
-                    <meshBasicMaterial color="#f59e0b" />
-                  </mesh>
-                </>
-              ) : eq.type === 'HELIPAD' ? (
-                <group>
-                  <mesh geometry={SHARED_UNIT_BOX} scale={[eq.size.x, eq.size.y, eq.size.z]}>
-                    <meshStandardMaterial color="#0f172a" metalness={0.8} roughness={0.3} />
-                  </mesh>
-                  <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, eq.size.y / 2 + 0.02, 0]}>
-                    <ringGeometry args={[eq.size.x * 0.32, eq.size.x * 0.38, 24]} />
-                    <meshBasicMaterial color="#38bdf8" />
+                  {/* Vertical Architectural Brise-Soleil Mullion Fins on all 4 facades */}
+                  {([-0.26, 0, 0.26] as const).map((frac, fIdx) => (
+                    <React.Fragment key={`fin-${fIdx}`}>
+                      <mesh
+                        position={[tw * frac, 0, 0]}
+                        geometry={SHARED_UNIT_BOX}
+                        scale={[0.32, th * 0.96, td + 0.42]}
+                      >
+                        <meshStandardMaterial color="#111c33" metalness={0.9} roughness={0.22} />
+                      </mesh>
+                      <mesh
+                        position={[0, 0, td * frac]}
+                        geometry={SHARED_UNIT_BOX}
+                        scale={[tw + 0.42, th * 0.96, 0.32]}
+                      >
+                        <meshStandardMaterial color="#111c33" metalness={0.9} roughness={0.22} />
+                      </mesh>
+                    </React.Fragment>
+                  ))}
+
+                  {/* Horizontal Spandrel Belt Courses & Mechanical Louver Collars */}
+                  {([-0.25, 0.25] as const).map((yFrac, bIdx) => (
+                    <mesh
+                      key={`belt-${bIdx}`}
+                      position={[0, th * yFrac, 0]}
+                      geometry={SHARED_UNIT_BOX}
+                      scale={[tw + 0.52, 0.55, td + 0.52]}
+                    >
+                      <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.22} />
+                    </mesh>
+                  ))}
+
+                  {/* Tier Setback Terrace Glass Parapet & Planter Rim */}
+                  <mesh
+                    position={[0, th / 2 + 0.45, 0]}
+                    geometry={SHARED_UNIT_BOX}
+                    scale={[tw + 0.24, 0.85, td + 0.24]}
+                  >
+                    <meshStandardMaterial
+                      color="#1e293b"
+                      metalness={0.9}
+                      roughness={0.18}
+                      envMapIntensity={envScale}
+                    />
                   </mesh>
                 </group>
-              ) : (
-                <mesh geometry={SHARED_UNIT_BOX} scale={[eq.size.x, eq.size.y, eq.size.z]}>
-                  <meshStandardMaterial color="#1e293b" metalness={0.85} roughness={0.3} />
+              );
+            })}
+
+            {/* 3. Recessed Illuminated Sky-Lobby Mezzanines Between Tiers */}
+            {bldg.skyLobbyFloors.map((sl, slIdx) => (
+              <group key={`skylobby-${slIdx}`} position={[0, sl.y, 0]}>
+                <mesh geometry={SHARED_UNIT_BOX} scale={[sl.width, sl.height, sl.depth]}>
+                  <meshStandardMaterial
+                    color="#0f172a"
+                    emissive={slIdx % 2 === 0 ? bldg.storefrontColor : bldg.secondaryAccentColor}
+                    emissiveIntensity={gridIsOut ? 0.04 : 0.48}
+                    metalness={0.85}
+                    roughness={0.15}
+                  />
                 </mesh>
+              </group>
+            ))}
+
+            {/* 4. Sculpted Architectural Skyscraper Crown */}
+            <group position={[0, totalH, 0]} name="BuildingCrown">
+              {bldg.crownType === 'PYRAMID_LANTERN' && (
+                <group>
+                  <mesh position={[0, 1.8, 0]} geometry={SHARED_UNIT_BOX} scale={[topW * 0.72, 3.4, topD * 0.72]}>
+                    <meshStandardMaterial
+                      color="#0b1326"
+                      emissive={bldg.storefrontColor}
+                      emissiveIntensity={gridIsOut ? 0.04 : 0.42}
+                      metalness={0.92}
+                      roughness={0.15}
+                    />
+                  </mesh>
+                  <mesh position={[0, 4.2, 0]} geometry={SHARED_UNIT_BOX} scale={[topW * 0.44, 2.2, topD * 0.44]}>
+                    <meshStandardMaterial
+                      color="#0f172a"
+                      emissive={bldg.secondaryAccentColor}
+                      emissiveIntensity={gridIsOut ? 0.04 : 0.55}
+                      metalness={0.92}
+                      roughness={0.12}
+                    />
+                  </mesh>
+                </group>
+              )}
+
+              {bldg.crownType === 'TWIN_FIN_CREST' && (
+                <group>
+                  {([-1, 1] as const).map((side) => (
+                    <mesh
+                      key={side}
+                      position={[(side * topW) / 2, 2.6, 0]}
+                      geometry={SHARED_UNIT_BOX}
+                      scale={[0.65, 5.2, topD * 0.86]}
+                    >
+                      <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.18} />
+                    </mesh>
+                  ))}
+                  <mesh position={[0, 4.4, 0]} geometry={SHARED_UNIT_BOX} scale={[topW, 0.35, topD * 0.5]}>
+                    <meshBasicMaterial color={gridIsOut ? '#1e293b' : bldg.storefrontColor} />
+                  </mesh>
+                </group>
+              )}
+
+              {bldg.crownType === 'HALO_RING_CROWN' && (
+                <group position={[0, 2.8, 0]}>
+                  <mesh rotation={[Math.PI / 2, 0, 0]}>
+                    <torusGeometry args={[Math.min(topW, topD) * 0.42, 0.28, 10, 32]} />
+                    <meshBasicMaterial color={gridIsOut ? '#1e293b' : bldg.storefrontColor} />
+                  </mesh>
+                  <mesh position={[0, -1.4, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[2.2, 2.8, 2.2]}>
+                    <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
+                  </mesh>
+                </group>
+              )}
+
+              {bldg.crownType === 'SLANTED_BLADE' && (
+                <group>
+                  <mesh position={[0, 2.2, 0]} geometry={SHARED_UNIT_BOX} scale={[topW * 0.82, 4.2, topD * 0.82]}>
+                    <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.2} />
+                  </mesh>
+                  <mesh position={[0, 4.4, 0]} geometry={SHARED_UNIT_BOX} scale={[topW * 0.86, 0.32, topD * 0.86]}>
+                    <meshBasicMaterial color={gridIsOut ? '#1e293b' : bldg.secondaryAccentColor} />
+                  </mesh>
+                </group>
               )}
             </group>
-          ))}
-        </group>
-      ))}
+
+            {/* 5. Vertical & Horizontal Emissive Neon Light Strips */}
+            {bldg.lightStrips.map((strip, sIdx) => (
+              <mesh
+                key={sIdx}
+                position={strip.position}
+                geometry={SHARED_UNIT_BOX}
+                scale={[strip.size.x, strip.size.y, strip.size.z]}
+              >
+                <meshBasicMaterial color={gridIsOut ? '#1e293b' : strip.color} />
+              </mesh>
+            ))}
+
+            {/* 6. Detailed Rooftop Mechanical & Communications Complex */}
+            {bldg.rooftopEquipment.map((eq, eIdx) => (
+              <group key={eIdx} position={eq.position}>
+                {eq.type === 'ANTENNA' ? (
+                  <group>
+                    {/* Lower Structural Lattice Base */}
+                    <mesh position={[0, -eq.size.y * 0.25, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[0.75, eq.size.y * 0.5, 0.75]}>
+                      <meshStandardMaterial color="#1e293b" metalness={0.92} roughness={0.2} />
+                    </mesh>
+                    {/* Upper Tapered Mast */}
+                    <mesh>
+                      <cylinderGeometry args={[0.07, 0.28, eq.size.y, 8]} />
+                      <meshStandardMaterial color="#475569" metalness={0.92} roughness={0.18} />
+                    </mesh>
+                    {/* Telemetry Cross-Arms */}
+                    <mesh position={[0, eq.size.y * 0.15, 0]} geometry={SHARED_UNIT_BOX} scale={[2.2, 0.08, 0.08]}>
+                      <meshStandardMaterial color="#334155" metalness={0.9} />
+                    </mesh>
+                    {/* Dual Aviation Warning Beacons */}
+                    <mesh position={[0, eq.size.y / 2, 0]}>
+                      <sphereGeometry args={[0.34, 8, 8]} />
+                      <meshBasicMaterial color="#f59e0b" />
+                    </mesh>
+                    <mesh position={[0, eq.size.y * 0.18, 0]}>
+                      <sphereGeometry args={[0.22, 8, 8]} />
+                      <meshBasicMaterial color="#f43f5e" />
+                    </mesh>
+                  </group>
+                ) : eq.type === 'HELIPAD' ? (
+                  <group>
+                    <mesh geometry={SHARED_UNIT_BOX} scale={[eq.size.x, eq.size.y, eq.size.z]}>
+                      <meshStandardMaterial color="#0f172a" metalness={0.85} roughness={0.28} />
+                    </mesh>
+                    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, eq.size.y / 2 + 0.02, 0]}>
+                      <ringGeometry args={[eq.size.x * 0.34, eq.size.x * 0.4, 24]} />
+                      <meshBasicMaterial color="#38bdf8" />
+                    </mesh>
+                  </group>
+                ) : eq.type === 'COOLING_TOWER' ? (
+                  <group>
+                    <mesh geometry={SHARED_UNIT_CYLINDER} scale={[eq.size.x, eq.size.y, eq.size.z]}>
+                      <meshStandardMaterial color="#1e293b" metalness={0.88} roughness={0.26} />
+                    </mesh>
+                    <mesh position={[0, eq.size.y / 2 + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                      <ringGeometry args={[eq.size.x * 0.25, eq.size.x * 0.44, 16]} />
+                      <meshBasicMaterial color="#38bdf8" />
+                    </mesh>
+                  </group>
+                ) : eq.type === 'DISH' ? (
+                  <group>
+                    <mesh position={[0, -0.4, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[0.35, 1.2, 0.35]}>
+                      <meshStandardMaterial color="#334155" metalness={0.9} />
+                    </mesh>
+                    <mesh position={[0, 0.35, 0]} rotation={[0.55, 0.4, 0]}>
+                      <coneGeometry args={[0.95, 0.55, 14, 1, true]} />
+                      <meshStandardMaterial color="#e2e8f0" metalness={0.85} roughness={0.2} side={THREE.DoubleSide} />
+                    </mesh>
+                  </group>
+                ) : (
+                  <group>
+                    <mesh geometry={SHARED_UNIT_BOX} scale={[eq.size.x, eq.size.y, eq.size.z]}>
+                      <meshStandardMaterial color="#1e293b" metalness={0.88} roughness={0.28} />
+                    </mesh>
+                    <mesh position={[0, eq.size.y / 2 + 0.03, 0]} geometry={SHARED_UNIT_BOX} scale={[eq.size.x * 0.85, 0.05, eq.size.z * 0.85]}>
+                      <meshBasicMaterial color="#38bdf8" />
+                    </mesh>
+                  </group>
+                )}
+              </group>
+            ))}
+          </group>
+        );
+      })}
 
       {/* Elevated Glazed Skybridges */}
       {quality.streetFurnitureEnabled &&
@@ -502,6 +805,88 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
       <StreetSign position={[0, 4.25, -62]} rotationY={Math.PI} label={landmarkNames.get('north_crossway') ?? 'North Crossing Avenue'} direction="N" accent="#38bdf8" />
       <StreetSign position={[28, 4.25, 28]} rotationY={Math.PI / 2} label={landmarkNames.get('apex_tower') ?? 'Apex Monolith Tower'} direction="E" accent="#f59e0b" />
       <StreetSign position={[62, 4.25, 62]} rotationY={-Math.PI / 2} label={landmarkNames.get('park_sanctuary') ?? 'Central Park Sanctuary'} direction="E" accent="#10b981" />
+
+      {/* Overhead Avenue Holographic Wayfinding Gantry Arches */}
+      {quality.streetFurnitureEnabled &&
+        (
+          [
+            [0, -48, 0, '#38bdf8'],
+            [0, 48, 0, '#f59e0b'],
+            [-48, 0, Math.PI / 2, '#10b981'],
+            [48, 0, Math.PI / 2, '#38bdf8'],
+          ] as const
+        ).map(([gx, gz, rot, accent], idx) => (
+          <group key={`ave-arch-${idx}`} position={[gx, 0, gz]} rotation={[0, rot, 0]}>
+            {([-8.2, 8.2] as const).map((px, pIdx) => (
+              <mesh key={pIdx} position={[px, 4.6, 0]} geometry={SHARED_UNIT_BOX} scale={[0.48, 9.2, 0.55]}>
+                <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.2} />
+              </mesh>
+            ))}
+            <mesh position={[0, 9.1, 0]} geometry={SHARED_UNIT_BOX} scale={[17.4, 0.55, 0.68]}>
+              <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.18} />
+            </mesh>
+            <mesh position={[0, 8.75, 0]} geometry={SHARED_UNIT_BOX} scale={[15.8, 0.1, 0.72]}>
+              <meshBasicMaterial color={gridIsOut ? '#1e293b' : accent} />
+            </mesh>
+            {/* Lane Guidance Indicators */}
+            {([-3.4, 3.4] as const).map((lx, lIdx) => (
+              <mesh key={lIdx} position={[lx, 8.45, 0]} geometry={SHARED_UNIT_BOX} scale={[1.8, 0.28, 0.14]}>
+                <meshBasicMaterial color={lIdx === 0 ? '#10b981' : '#38bdf8'} />
+              </mesh>
+            ))}
+          </group>
+        ))}
+
+      {/* Autonomous Aerial Recon & Atmospheric Drones */}
+      {quality.trafficEnabled && (
+        <group ref={droneGroupRef} name="AerialReconDrones">
+          {[0, 1, 2, 3].map((dIdx) => {
+            const droneAccent = dIdx % 2 === 0 ? '#38bdf8' : '#f59e0b';
+            return (
+              <group key={`drone-${dIdx}`} position={[25, 22, 25]}>
+                {/* Central Sensor Pod */}
+                <mesh geometry={SHARED_UNIT_BOX} scale={[0.95, 0.34, 1.35]}>
+                  <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.18} />
+                </mesh>
+                {/* Quad Rotor Outrigger Arms & Glowing Shrouds */}
+                {(
+                  [
+                    [-0.75, 0.65],
+                    [0.75, 0.65],
+                    [-0.75, -0.65],
+                    [0.75, -0.65],
+                  ] as const
+                ).map(([rx, rz], rIdx) => (
+                  <mesh
+                    key={rIdx}
+                    position={[rx, 0.02, rz]}
+                    geometry={SHARED_UNIT_CYLINDER}
+                    scale={[0.48, 0.1, 0.48]}
+                  >
+                    <meshBasicMaterial color={droneAccent} />
+                  </mesh>
+                ))}
+                {/* Forward Optical Eye */}
+                <mesh position={[0, -0.04, 0.7]}>
+                  <sphereGeometry args={[0.14, 8, 8]} />
+                  <meshBasicMaterial color="#f43f5e" />
+                </mesh>
+                {/* Downward Volumetric Scan Cone */}
+                <mesh position={[0, -4.2, 0.4]} rotation={[0.15, 0, 0]}>
+                  <coneGeometry args={[2.2, 8.2, 10, 1, true]} />
+                  <meshBasicMaterial
+                    color={droneAccent}
+                    transparent
+                    opacity={0.075}
+                    depthWrite={false}
+                    side={THREE.DoubleSide}
+                  />
+                </mesh>
+              </group>
+            );
+          })}
+        </group>
+      )}
     </group>
   );
 };

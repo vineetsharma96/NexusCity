@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 
+export type FacadeStyleVariant = 'CURTAIN_GLASS' | 'DIAGRID_HEX' | 'BRUTALIST_RIBBED' | 'ARCOLOGY_TERRACE';
+
 /**
  * High-definition procedural canvas-based architectural texture generator.
- * Produces crisp basalt paving, multi-story curtain-wall facades with interior depth,
+ * Produces crisp basalt paving, multi-archetype curtain-wall facades with interior room depth,
  * and surface normal/roughness maps.
  */
 export class ProceduralTextures {
@@ -78,74 +80,137 @@ export class ProceduralTextures {
     return texture;
   }
 
-  public static getBuildingFacadeTexture(litRatio: number = 0.6): THREE.CanvasTexture {
-    const key = `facade-${litRatio}`;
+  public static getBuildingFacadeTexture(
+    litRatio: number = 0.6,
+    variant: FacadeStyleVariant = 'CURTAIN_GLASS'
+  ): THREE.CanvasTexture {
+    const key = `facade-${litRatio}-${variant}`;
     const existing = this.cache.get(key);
     if (existing) return existing;
 
     const w = 512;
     const h = 1024;
     const [canvas, ctx] = this.createCanvas(w, h);
-    ctx.fillStyle = '#070b13';
+    ctx.fillStyle = '#060a12';
     ctx.fillRect(0, 0, w, h);
 
-    // Vertical structural mullions & corner pilasters
-    ctx.fillStyle = '#111827';
+    // Base anodized titanium cladding frame
+    ctx.fillStyle = '#0f172a';
     for (let x = 0; x < w; x += 32) {
       ctx.fillRect(x, 0, 4, h);
     }
     ctx.fillStyle = '#1e293b';
     for (let x = 0; x < w; x += 128) {
-      ctx.fillRect(x, 0, 8, h);
+      ctx.fillRect(x, 0, 9, h);
     }
 
-    const cols = 16;
+    const cols = variant === 'BRUTALIST_RIBBED' ? 12 : 16;
     const rows = 36;
-    const padX = 5;
+    const padX = variant === 'BRUTALIST_RIBBED' ? 8 : 5;
     const padY = 6;
     const winW = (w - (cols + 1) * padX) / cols;
     const winH = (h - (rows + 1) * padY) / rows;
 
-    let hash = Math.floor(litRatio * 1000) + 17;
+    let hash = Math.floor(litRatio * 1000) + variant.charCodeAt(0) * 31 + 17;
     for (let r = 0; r < rows; r++) {
-      // Every 9th floor is a dark mechanical louver floor with accent piping
+      const y = padY + r * (winH + padY);
+
+      // Every 9th floor is a recessed mechanical louver & telemetry conduit floor
       if (r % 9 === 4) {
-        const y = padY + r * (winH + padY);
-        ctx.fillStyle = '#0b111e';
+        ctx.fillStyle = '#090e1a';
         ctx.fillRect(0, y - 2, w, winH + 4);
-        ctx.fillStyle = '#38bdf8';
-        ctx.fillRect(0, y + winH * 0.45, w, 2);
+        // Horizontal louver slats
+        ctx.fillStyle = '#1e293b';
+        for (let ly = y + 2; ly < y + winH - 2; ly += 4) {
+          ctx.fillRect(0, ly, w, 1.5);
+        }
+        ctx.fillStyle = variant === 'ARCOLOGY_TERRACE' ? '#10b981' : variant === 'DIAGRID_HEX' ? '#f59e0b' : '#38bdf8';
+        ctx.fillRect(0, y + winH * 0.5, w, 2);
         continue;
       }
+
+      // Horizontal spandrel slab beam
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, y - 3, w, 3);
 
       for (let c = 0; c < cols; c++) {
         hash = (hash * 1664525 + 1013904223) >>> 0;
         const rnd = (hash & 0xffff) / 0xffff;
         const x = padX + c * (winW + padX);
-        const y = padY + r * (winH + padY);
 
         if (rnd < litRatio) {
           const tone = ((hash >>> 16) & 0xff) / 255;
-          const topColor = tone > 0.56 ? '#fde68a' : tone > 0.24 ? '#bae6fd' : tone > 0.08 ? '#f59e0b' : '#6ee7b7';
-          const botColor = tone > 0.56 ? '#d97706' : tone > 0.24 ? '#0284c7' : '#b45309';
+          let topColor = '#bae6fd';
+          let botColor = '#0284c7';
 
+          if (variant === 'ARCOLOGY_TERRACE') {
+            topColor = tone > 0.52 ? '#a7f3d0' : tone > 0.22 ? '#fde68a' : '#bae6fd';
+            botColor = tone > 0.52 ? '#059669' : tone > 0.22 ? '#d97706' : '#0284c7';
+          } else if (variant === 'DIAGRID_HEX') {
+            topColor = tone > 0.48 ? '#fde68a' : tone > 0.18 ? '#fed7aa' : '#7dd3fc';
+            botColor = tone > 0.48 ? '#d97706' : tone > 0.18 ? '#c2410c' : '#0369a1';
+          } else {
+            topColor = tone > 0.56 ? '#fde68a' : tone > 0.24 ? '#bae6fd' : tone > 0.08 ? '#f59e0b' : '#6ee7b7';
+            botColor = tone > 0.56 ? '#d97706' : tone > 0.24 ? '#0284c7' : '#b45309';
+          }
+
+          // Room ceiling glow & depth gradient
           const grad = ctx.createLinearGradient(x, y, x, y + winH);
-          grad.addColorStop(0, topColor);
+          grad.addColorStop(0, '#ffffff');
+          grad.addColorStop(0.18, topColor);
           grad.addColorStop(1, botColor);
           ctx.fillStyle = grad;
           ctx.fillRect(x, y, winW, winH);
 
-          // Interior horizontal blind / mezzanine silhouette for architectural depth
-          if (((hash >>> 8) & 3) === 0) {
-            ctx.fillStyle = 'rgba(7, 11, 19, 0.55)';
-            ctx.fillRect(x, y + winH * 0.55, winW, 3);
+          // Interior room partitions, desks, & venetian blind silhouettes
+          const interiorDetail = (hash >>> 8) & 7;
+          if (interiorDetail === 0 || interiorDetail === 1) {
+            ctx.fillStyle = 'rgba(7, 11, 19, 0.58)';
+            ctx.fillRect(x, y + winH * 0.52, winW, 3);
+          } else if (interiorDetail === 2) {
+            // Half-drawn architectural shade
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.48)';
+            ctx.fillRect(x, y, winW, winH * 0.42);
+          } else if (interiorDetail === 3) {
+            // Vertical office partition pillar inside room
+            ctx.fillStyle = 'rgba(7, 11, 19, 0.65)';
+            ctx.fillRect(x + winW * 0.45, y, 3, winH);
           }
+
+          // Subtle window sub-frame mullion
+          ctx.strokeStyle = 'rgba(15, 23, 42, 0.65)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + 0.5, y + 0.5, winW - 1, winH - 1);
         } else {
-          ctx.fillStyle = '#0d1526';
+          // Unlit reflective dark architectural glass with sky-tint top edge
+          const darkGrad = ctx.createLinearGradient(x, y, x, y + winH);
+          darkGrad.addColorStop(0, '#111c33');
+          darkGrad.addColorStop(1, '#090f1d');
+          ctx.fillStyle = darkGrad;
           ctx.fillRect(x, y, winW, winH);
-          ctx.fillStyle = 'rgba(56, 189, 248, 0.08)';
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
           ctx.fillRect(x, y, winW, 2);
         }
+      }
+    }
+
+    // Structural Exoskeleton Overlay for DIAGRID_HEX or BRUTALIST_RIBBED
+    if (variant === 'DIAGRID_HEX') {
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 7;
+      const stepY = 128;
+      for (let y = -stepY; y < h + stepY; y += stepY) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y + stepY * 2);
+        ctx.moveTo(w, y);
+        ctx.lineTo(0, y + stepY * 2);
+        ctx.stroke();
+      }
+    } else if (variant === 'BRUTALIST_RIBBED') {
+      ctx.fillStyle = '#1e293b';
+      for (let x = 0; x < w; x += 64) {
+        ctx.fillRect(x, 0, 10, h);
       }
     }
 
@@ -230,15 +295,15 @@ export class ProceduralTextures {
     ctx.fillRect(0, 0, size, size);
 
     const step = 32;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     for (let i = 0; i <= size; i += step) {
-      ctx.strokeStyle = '#6e80ff';
+      ctx.strokeStyle = '#6278ff';
       ctx.beginPath();
       ctx.moveTo(0, i - 1);
       ctx.lineTo(size, i - 1);
       ctx.stroke();
 
-      ctx.strokeStyle = '#806eff';
+      ctx.strokeStyle = '#9c80ff';
       ctx.beginPath();
       ctx.moveTo(i - 1, 0);
       ctx.lineTo(i - 1, size);

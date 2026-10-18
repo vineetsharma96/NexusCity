@@ -1,10 +1,31 @@
 import * as THREE from 'three';
 import { SeedRandom } from '../core/SeedRandom';
 import { KinematicCollisionSolver, CollisionBox } from '../player/KinematicCollision';
+import { FacadeStyleVariant } from '../core/ProceduralTextures';
+
+export type BuildingArchetype =
+  | 'HELIX_CITADEL'
+  | 'DIAG_MONOLITH'
+  | 'TERRACED_ARCOLOGY'
+  | 'CANTILEVER_TOWER'
+  | 'CORPORATE_SPIRE';
+
+export type BuildingCrownType =
+  | 'PYRAMID_LANTERN'
+  | 'TWIN_FIN_CREST'
+  | 'HALO_RING_CROWN'
+  | 'SLANTED_BLADE';
 
 export interface BuildingTier {
   offset: THREE.Vector3;
   size: THREE.Vector3;
+}
+
+export interface SkyLobbyFloor {
+  y: number;
+  width: number;
+  depth: number;
+  height: number;
 }
 
 export interface RooftopProp {
@@ -22,12 +43,17 @@ export interface LightStrip {
 export interface BuildingDef {
   id: string;
   name: string;
+  archetype: BuildingArchetype;
+  facadeVariant: FacadeStyleVariant;
+  crownType: BuildingCrownType;
   position: THREE.Vector3;
   totalSize: THREE.Vector3;
   tiers: BuildingTier[];
+  skyLobbyFloors: SkyLobbyFloor[];
   rooftopEquipment: RooftopProp[];
   lightStrips: LightStrip[];
   storefrontColor: string;
+  secondaryAccentColor: string;
   collisionBounds: CollisionBox[];
 }
 
@@ -66,6 +92,28 @@ export interface CityData {
   skybridges: SkybridgeDef[];
   streetProps: CentralStreetPropDef[];
 }
+
+const ARCHETYPES: BuildingArchetype[] = [
+  'HELIX_CITADEL',
+  'DIAG_MONOLITH',
+  'TERRACED_ARCOLOGY',
+  'CANTILEVER_TOWER',
+  'CORPORATE_SPIRE',
+];
+
+const FACADE_VARIANTS: FacadeStyleVariant[] = [
+  'CURTAIN_GLASS',
+  'DIAGRID_HEX',
+  'BRUTALIST_RIBBED',
+  'ARCOLOGY_TERRACE',
+];
+
+const CROWN_TYPES: BuildingCrownType[] = [
+  'PYRAMID_LANTERN',
+  'TWIN_FIN_CREST',
+  'HALO_RING_CROWN',
+  'SLANTED_BLADE',
+];
 
 export class CityGenerator {
   public static generateDistrict(seed: number = 847291): CityData {
@@ -140,78 +188,129 @@ export class CityGenerator {
         return;
       }
 
+      const archetype = ARCHETYPES[idx % ARCHETYPES.length];
+      const facadeVariant = FACADE_VARIANTS[idx % FACADE_VARIANTS.length];
+      const crownType = CROWN_TYPES[idx % CROWN_TYPES.length];
+      const stripColor = neonPalette[idx % neonPalette.length];
+      const secondaryColor = neonPalette[(idx + 2) % neonPalette.length];
+
       const tiers: BuildingTier[] = [];
-      const h1 = totalH * rng.range(0.45, 0.6);
+      const skyLobbyFloors: SkyLobbyFloor[] = [];
+
+      const h1 = totalH * rng.range(0.45, 0.58);
       tiers.push({
         offset: new THREE.Vector3(0, h1 / 2, 0),
         size: new THREE.Vector3(baseW, h1, baseD),
       });
 
-      const w2 = baseW * rng.range(0.72, 0.84);
-      const d2 = baseD * rng.range(0.72, 0.84);
-      const h2 = (totalH - h1) * 0.65;
+      const w2 = baseW * rng.range(0.74, 0.84);
+      const d2 = baseD * rng.range(0.74, 0.84);
+      const h2 = (totalH - h1) * 0.62;
       tiers.push({
         offset: new THREE.Vector3(0, h1 + h2 / 2, 0),
         size: new THREE.Vector3(w2, h2, d2),
       });
+      skyLobbyFloors.push({
+        y: h1,
+        width: w2 * 0.92,
+        depth: d2 * 0.92,
+        height: 3.2,
+      });
 
-      const w3 = w2 * rng.range(0.65, 0.78);
-      const d3 = d2 * rng.range(0.65, 0.78);
+      const w3 = w2 * rng.range(0.68, 0.78);
+      const d3 = d2 * rng.range(0.68, 0.78);
       const h3 = totalH - h1 - h2;
       tiers.push({
         offset: new THREE.Vector3(0, h1 + h2 + h3 / 2, 0),
         size: new THREE.Vector3(w3, h3, d3),
+      });
+      skyLobbyFloors.push({
+        y: h1 + h2,
+        width: w3 * 0.92,
+        depth: d3 * 0.92,
+        height: 2.8,
       });
 
       const rooftopEquipment: RooftopProp[] = [
         {
           type: 'ANTENNA',
           position: new THREE.Vector3(0, totalH + 7, 0),
-          size: new THREE.Vector3(0.4, 14, 0.4),
+          size: new THREE.Vector3(0.45, 14, 0.45),
         },
         {
           type: idx % 2 === 0 ? 'COOLING_TOWER' : 'HVAC',
-          position: new THREE.Vector3(w3 * 0.22, totalH + 1.2, d3 * 0.22),
-          size: new THREE.Vector3(2.6, 2.4, 2.6),
+          position: new THREE.Vector3(w3 * 0.24, totalH + 1.2, d3 * 0.24),
+          size: new THREE.Vector3(2.8, 2.4, 2.8),
         },
         {
           type: idx % 3 === 0 ? 'HELIPAD' : 'SOLAR_ARRAY',
-          position: new THREE.Vector3(-w3 * 0.18, totalH + 0.25, -d3 * 0.18),
-          size: new THREE.Vector3(w3 * 0.42, 0.35, d3 * 0.42),
+          position: new THREE.Vector3(-w3 * 0.2, totalH + 0.25, -d3 * 0.2),
+          size: new THREE.Vector3(w3 * 0.44, 0.35, d3 * 0.44),
+        },
+        {
+          type: 'DISH',
+          position: new THREE.Vector3(-w3 * 0.24, totalH + 1.4, d3 * 0.24),
+          size: new THREE.Vector3(1.6, 2.2, 1.6),
         },
       ];
 
-      const stripColor = neonPalette[idx % neonPalette.length];
       const lightStrips: LightStrip[] = [
+        // Tier 1 vertical center & intermediate facade light fins
         {
-          position: new THREE.Vector3(baseW / 2 + 0.06, h1 / 2, 0),
-          size: new THREE.Vector3(0.12, h1 * 0.88, 0.35),
+          position: new THREE.Vector3(baseW / 2 + 0.08, h1 / 2, 0),
+          size: new THREE.Vector3(0.14, h1 * 0.9, 0.38),
           color: stripColor,
         },
         {
-          position: new THREE.Vector3(-baseW / 2 - 0.06, h1 / 2, 0),
-          size: new THREE.Vector3(0.12, h1 * 0.88, 0.35),
+          position: new THREE.Vector3(-baseW / 2 - 0.08, h1 / 2, 0),
+          size: new THREE.Vector3(0.14, h1 * 0.9, 0.38),
           color: stripColor,
         },
         {
-          position: new THREE.Vector3(0, h1 / 2, baseD / 2 + 0.06),
-          size: new THREE.Vector3(0.35, h1 * 0.88, 0.12),
+          position: new THREE.Vector3(0, h1 / 2, baseD / 2 + 0.08),
+          size: new THREE.Vector3(0.38, h1 * 0.9, 0.14),
           color: stripColor,
         },
         {
-          position: new THREE.Vector3(0, h1 / 2, -baseD / 2 - 0.06),
-          size: new THREE.Vector3(0.35, h1 * 0.88, 0.12),
+          position: new THREE.Vector3(0, h1 / 2, -baseD / 2 - 0.08),
+          size: new THREE.Vector3(0.38, h1 * 0.9, 0.14),
           color: stripColor,
         },
-        // Horizontal tier cornice light bands
+        // Tier 2 vertical corner neon trace strips
+        {
+          position: new THREE.Vector3(w2 / 2 + 0.06, h1 + h2 / 2, d2 / 2 + 0.06),
+          size: new THREE.Vector3(0.18, h2 * 0.92, 0.18),
+          color: secondaryColor,
+        },
+        {
+          position: new THREE.Vector3(-w2 / 2 - 0.06, h1 + h2 / 2, d2 / 2 + 0.06),
+          size: new THREE.Vector3(0.18, h2 * 0.92, 0.18),
+          color: secondaryColor,
+        },
+        {
+          position: new THREE.Vector3(w2 / 2 + 0.06, h1 + h2 / 2, -d2 / 2 - 0.06),
+          size: new THREE.Vector3(0.18, h2 * 0.92, 0.18),
+          color: secondaryColor,
+        },
+        {
+          position: new THREE.Vector3(-w2 / 2 - 0.06, h1 + h2 / 2, -d2 / 2 - 0.06),
+          size: new THREE.Vector3(0.18, h2 * 0.92, 0.18),
+          color: secondaryColor,
+        },
+        // Horizontal tier cornice & spandrel light bands
         {
           position: new THREE.Vector3(0, h1, 0),
-          size: new THREE.Vector3(baseW + 0.22, 0.4, baseD + 0.22),
+          size: new THREE.Vector3(baseW + 0.35, 0.42, baseD + 0.35),
           color: stripColor,
         },
         {
           position: new THREE.Vector3(0, h1 + h2, 0),
-          size: new THREE.Vector3(w2 + 0.2, 0.35, d2 + 0.2),
+          size: new THREE.Vector3(w2 + 0.3, 0.36, d2 + 0.3),
+          color: secondaryColor,
+        },
+        {
+          position: new THREE.Vector3(0, totalH, 0),
+          size: new THREE.Vector3(w3 + 0.32, 0.45, d3 + 0.32),
           color: stripColor,
         },
       ];
@@ -226,12 +325,17 @@ export class CityGenerator {
       buildings.push({
         id: `bldg_${idx}`,
         name: blk.name,
+        archetype,
+        facadeVariant,
+        crownType,
         position: bldgPos,
         totalSize: bldgSize,
         tiers,
+        skyLobbyFloors,
         rooftopEquipment,
         lightStrips,
         storefrontColor: stripColor,
+        secondaryAccentColor: secondaryColor,
         collisionBounds: [box],
       });
     });
