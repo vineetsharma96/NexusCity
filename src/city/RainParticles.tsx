@@ -20,6 +20,7 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
   const rainMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const weatherRef = useRef<WeatherState>(WeatherSystem.getInstance().getState());
   const windSystem = WindSystem.getInstance();
+  const prevPlayerPosRef = useRef(new THREE.Vector3());
 
   useEffect(() => {
     return WeatherSystem.getInstance().subscribe((w) => {
@@ -45,6 +46,9 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
         x: (Math.random() - 0.5) * 76,
         y: 0.3 + Math.random() * 18,
         z: (Math.random() - 0.5) * 76,
+        vx: 0,
+        vy: 0,
+        vz: 0,
         phase: Math.random() * Math.PI * 2,
         scale: 0.06 + Math.random() * 0.08,
       })),
@@ -55,6 +59,7 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
   const emberGeo = useMemo(() => new THREE.DodecahedronGeometry(0.45, 0), []);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const upVec = useMemo(() => new THREE.Vector3(0, -1, 0), []);
+  const combinedRainVec = useMemo(() => new THREE.Vector3(), []);
   const quat = useMemo(() => new THREE.Quaternion(), []);
 
   useFrame(({ clock }, delta) => {
@@ -63,11 +68,17 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
     const pPos = playerPosRef.current;
     const quality = QualityManager.current;
     const density = quality.particlesDensity;
+    const windVec = windSystem.getVector();
+    const gust = windSystem.getGustFactor();
 
-    // 1. Update Rain Streaks
+    const pvx = (pPos.x - prevPlayerPosRef.current.x) / Math.max(0.001, dt);
+    const pvz = (pPos.z - prevPlayerPosRef.current.z) / Math.max(0.001, dt);
+    prevPlayerPosRef.current.copy(pPos);
+
+    // 1. Update Rain Streaks (dynamically slanted & accelerated by WindSystem gusts)
     const rainActive = quality.rainParticlesEnabled && density > 0.02 && weather.rainIntensity > 0.02;
     if (rainMatRef.current) {
-      rainMatRef.current.opacity = rainActive ? Math.min(0.62, weather.rainIntensity * 0.58) : 0;
+      rainMatRef.current.opacity = rainActive ? Math.min(0.65, weather.rainIntensity * 0.6) : 0;
       rainMatRef.current.visible = rainActive;
     }
 
@@ -80,15 +91,21 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
           drops.length,
           Math.max(60, Math.round(BASE_DROP_COUNT * density))
         );
-        const wind = weather.windVector;
-        quat.setFromUnitVectors(upVec, wind.clone().normalize());
+
+        // Combine gravity fall with live WindSystem vector so rain slants dynamically with the wind
+        combinedRainVec.set(
+          weather.windVector.x + windVec.x * 0.85,
+          weather.windVector.y - gust * 2.5,
+          weather.windVector.z + windVec.z * 0.85
+        );
+        quat.setFromUnitVectors(upVec, combinedRainVec.clone().normalize());
 
         for (let i = 0; i < activeDrops; i++) {
           const d = drops[i];
           if (!d) continue;
-          d.x += wind.x * dt * d.speed;
-          d.y += wind.y * dt * d.speed;
-          d.z += wind.z * dt * d.speed;
+          d.x += combinedRainVec.x * dt * d.speed;
+          d.y += combinedRainVec.y * dt * d.speed;
+          d.z += combinedRainVec.z * dt * d.speed;
 
           if (d.y < pPos.y - 1) {
             d.y = pPos.y + 26 + Math.random() * 5;
@@ -97,7 +114,7 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
           }
           dummy.position.set(d.x, d.y, d.z);
           dummy.quaternion.copy(quat);
-          dummy.scale.set(1, d.len, 1);
+          dummy.scale.set(1, d.len * (0.9 + gust * 0.15), 1);
           dummy.updateMatrix();
           rainMeshRef.current.setMatrixAt(i, dummy.matrix);
         }
@@ -106,7 +123,7 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
       }
     }
 
-    // 2. Update Wind-Driven Atmospheric Motes
+    // 2. Update Wind-Driven Atmospheric Motes (affected by WindSystem & player slipstream)
     if (emberMeshRef.current) {
       if (!quality.windParticlesEnabled || density <= 0.02) {
         emberMeshRef.current.visible = false;
@@ -114,8 +131,6 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
       }
       emberMeshRef.current.visible = true;
       const t = clock.getElapsedTime();
-      const windVec = windSystem.getVector();
-      const gust = windSystem.getGustFactor();
       const activeEmbers = Math.min(
         embers.length,
         Math.max(24, Math.round(BASE_EMBER_COUNT * density))
@@ -124,9 +139,30 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
       for (let i = 0; i < activeEmbers; i++) {
         const e = embers[i];
         if (!e) continue;
-        e.x += (windVec.x * 0.32 + Math.sin(t * 1.8 + e.phase) * 0.6) * dt * gust;
-        e.y += Math.cos(t * 1.4 + e.phase) * 0.35 * dt;
-        e.z += (windVec.z * 0.32 + Math.cos(t * 1.6 + e.phase) * 0.6) * dt * gust;
+
+        // Player wake deflection on low-floating atmospheric motes
+        const dx = e.x - pPos.x;
+        const dy = e.y - (pPos.y + 1.0);
+        const dz = e.z - pPos.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq < 9.0 && distSq > 0.001) {
+          const dist = Math.sqrt(distSq);
+          const push = (1 - dist / 3.0) * 5.5;
+          e.vx += (dx / dist) * push * dt + pvx * 0.25 * dt;
+          e.vy += 1.8 * push * dt;
+          e.vz += (dz / dist) * push * dt + pvz * 0.25 * dt;
+        }
+
+        e.vx *= Math.max(0, 1 - dt * 3.0);
+        e.vy *= Math.max(0, 1 - dt * 3.0);
+        e.vz *= Math.max(0, 1 - dt * 3.0);
+
+        e.x += (windVec.x * 0.55 + Math.sin(t * 1.8 + e.phase) * 0.6) * dt * gust + e.vx * dt;
+        e.y += (Math.cos(t * 1.4 + e.phase) * 0.35 + windVec.y * 0.25) * dt + e.vy * dt;
+        e.z += (windVec.z * 0.55 + Math.cos(t * 1.6 + e.phase) * 0.6) * dt * gust + e.vz * dt;
+
+        if (e.y < 0.25) e.y = 0.25 + Math.random() * 2.5;
+        if (e.y > 20) e.y = 2.0 + Math.random() * 8;
 
         if (e.x - pPos.x > 40) e.x -= 80;
         else if (e.x - pPos.x < -40) e.x += 80;

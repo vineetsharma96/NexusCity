@@ -24,6 +24,7 @@ async function systems() {
       export { NPCManager } from './src/npc/NPCManager';
       export { CityGenerator } from './src/city/CityGenerator';
       export { WeatherSystem } from './src/world/WeatherSystem';
+      export { WindSystem } from './src/world/WindSystem';
     ` },
     bundle: true, platform: 'node', format: 'esm', write: false,
   });
@@ -213,3 +214,24 @@ test('generated building footprints keep the dedicated sanctuary clear', async (
     assert.ok(box.max.x <= 39 || box.min.x >= 111 || box.max.z <= 39 || box.min.z >= 111);
   }
 });
+
+test('switching weather to FOG immediately activates high fog density and WindSystem scales wind velocity', async () => {
+  const { WeatherSystem, WindSystem } = await systems();
+  const weather = WeatherSystem.getInstance();
+  assert.equal(weather.getState().fogDensityMultiplier, 1.0);
+
+  weather.setWeather('FOG');
+  assert.equal(weather.getState().currentWeather, 'FOG');
+  assert.ok(weather.getState().fogDensityMultiplier > 5.0);
+
+  const wind = WindSystem.getInstance();
+  wind.setWindMultiplier(0.5);
+  wind.update(0.1, 0);
+  const calmSpeed = wind.getSpeed();
+
+  wind.setWindMultiplier(2.5);
+  wind.update(0.1, 0);
+  const tempestSpeed = wind.getSpeed();
+  assert.ok(tempestSpeed > calmSpeed * 3.5);
+});
+

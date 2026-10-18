@@ -7,6 +7,8 @@ import { PlayerController } from '../player/PlayerController';
 import { NPCCrowd } from '../npc/NPCCrowd';
 import { WorldManager } from '../world/WorldManager';
 import { RainParticles } from '../city/RainParticles';
+import { SteamVentSystem } from '../city/SteamVentSystem';
+import { FallingLeavesSystem } from '../city/FallingLeavesSystem';
 import { TrafficSystem } from '../city/TrafficSystem';
 import { TrafficLightGantry } from '../city/TrafficLightGantry';
 import { ParkSanctuary } from '../city/ParkSanctuary';
@@ -170,6 +172,8 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
         <RideableTransitLayer playerPosRef={playerPosRef} />
         <TrafficLightGantry position={[0, 0, 0]} />
         <ParkSanctuary position={[75, 0, 75]} />
+        {quality.streetFurnitureEnabled && <SteamVentSystem playerPosRef={playerPosRef} />}
+        {quality.vegetationEnabled && <FallingLeavesSystem playerPosRef={playerPosRef} seed={847291} />}
         {quality.particlesDensity > 0.02 &&
           (quality.rainParticlesEnabled || quality.windParticlesEnabled) && (
             <RainParticles playerPosRef={playerPosRef} />

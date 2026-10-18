@@ -8,6 +8,7 @@ import {
 import { QualityManager, QualityPreset, QualitySettings } from '../rendering/QualityManager';
 import { TimeSystem } from '../world/TimeSystem';
 import { WeatherSystem, WeatherType } from '../world/WeatherSystem';
+import { WindSystem } from '../world/WindSystem';
 import { NavigationSystem } from '../map/NavigationSystem';
 import { CityHistoryEntry, SaveSystem } from '../core/SaveSystem';
 import { VehicleInteractionSystem } from '../vehicle/VehicleInteractionSystem';
@@ -285,6 +286,30 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
                       style={{ padding: 10, fontSize: '0.7rem' }}
                     >
                       {w === 'HEAVY_RAIN' ? 'MONSOON STORM' : w}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="menu-section-label">GLOBAL WIND FORCE (ALL PARTICLES)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 8 }}>
+                  {(
+                    [
+                      ['CALM', 0.45],
+                      ['BREEZE', 1.0],
+                      ['GALE', 1.75],
+                      ['TEMPEST', 2.6],
+                    ] as const
+                  ).map(([label, mult]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      className="cyber-btn"
+                      onClick={() => WindSystem.getInstance().setWindMultiplier(mult)}
+                      style={{ padding: '8px 4px', fontSize: '0.62rem' }}
+                    >
+                      {label}
                     </button>
                   ))}
                 </div>

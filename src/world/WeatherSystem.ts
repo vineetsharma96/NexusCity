@@ -59,22 +59,35 @@ export class WeatherSystem {
       case 'RAIN':
         this.targetRain = 0.55;
         this.targetWetness = 0.78;
-        this.targetFogMult = 1.6;
+        this.targetFogMult = 1.85;
         this.state.windVector.set(3.2, -22.0, 1.8);
         break;
       case 'HEAVY_RAIN':
         this.targetRain = 1.0;
         this.targetWetness = 1.0;
-        this.targetFogMult = 2.4;
+        this.targetFogMult = 2.8;
         this.state.windVector.set(5.8, -28.0, 3.2);
         break;
       case 'FOG':
-        this.targetRain = 0.08;
-        this.targetWetness = 0.55;
-        this.targetFogMult = 3.5;
-        this.state.windVector.set(0.8, -14.0, 0.5);
+        this.targetRain = 0.06;
+        this.targetWetness = 0.58;
+        this.targetFogMult = 6.2;
+        this.state.windVector.set(1.2, -14.0, 0.7);
         break;
     }
+
+    // When manually triggered by user, immediately apply a strong step toward the target weather
+    // so changing to FOG or RAIN is instantaneously visible without waiting 10 seconds.
+    if (!keepAutoCycle) {
+      this.state.rainIntensity = THREE.MathUtils.lerp(this.state.rainIntensity, this.targetRain, 0.85);
+      this.state.wetnessFactor = THREE.MathUtils.lerp(this.state.wetnessFactor, this.targetWetness, 0.85);
+      this.state.fogDensityMultiplier = THREE.MathUtils.lerp(
+        this.state.fogDensityMultiplier,
+        this.targetFogMult,
+        0.92
+      );
+    }
+
     this.notify();
   }
 
@@ -94,27 +107,34 @@ export class WeatherSystem {
     }
 
     let changed = false;
-    const lerpSpeed = delta * 0.45;
+    const lerpSpeed = Math.min(1, delta * 1.6);
 
     if (Math.abs(this.state.rainIntensity - this.targetRain) > 0.005) {
       this.state.rainIntensity = THREE.MathUtils.lerp(this.state.rainIntensity, this.targetRain, lerpSpeed);
       changed = true;
-    } else {
+    } else if (this.state.rainIntensity !== this.targetRain) {
       this.state.rainIntensity = this.targetRain;
+      changed = true;
     }
 
     if (Math.abs(this.state.wetnessFactor - this.targetWetness) > 0.005) {
-      this.state.wetnessFactor = THREE.MathUtils.lerp(this.state.wetnessFactor, this.targetWetness, delta * 0.25);
+      this.state.wetnessFactor = THREE.MathUtils.lerp(this.state.wetnessFactor, this.targetWetness, delta * 0.8);
       changed = true;
-    } else {
+    } else if (this.state.wetnessFactor !== this.targetWetness) {
       this.state.wetnessFactor = this.targetWetness;
+      changed = true;
     }
 
     if (Math.abs(this.state.fogDensityMultiplier - this.targetFogMult) > 0.005) {
-      this.state.fogDensityMultiplier = THREE.MathUtils.lerp(this.state.fogDensityMultiplier, this.targetFogMult, lerpSpeed);
+      this.state.fogDensityMultiplier = THREE.MathUtils.lerp(
+        this.state.fogDensityMultiplier,
+        this.targetFogMult,
+        lerpSpeed
+      );
       changed = true;
-    } else {
+    } else if (this.state.fogDensityMultiplier !== this.targetFogMult) {
       this.state.fogDensityMultiplier = this.targetFogMult;
+      changed = true;
     }
 
     if (this.state.currentWeather === 'HEAVY_RAIN') {

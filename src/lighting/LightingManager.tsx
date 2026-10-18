@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { QualitySettings } from '../rendering/QualityManager';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
+import { WindSystem } from '../world/WindSystem';
 import { ChunkManager } from '../world/ChunkManager';
 import { DistrictInfo } from '../city/DistrictGenerator';
 import { CelestialVolumetricRays } from './CelestialVolumetricRays';
@@ -14,9 +15,16 @@ interface LightingManagerProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
 }
 
+const FOG_PUFF_COUNT = 64;
+
 export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playerPosRef }) => {
   const { scene, gl } = useThree();
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
+  const fogBankMeshRef = useRef<THREE.InstancedMesh>(null);
+  const fogBankMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const windSystem = WindSystem.getInstance();
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+
   const skyUniforms = useMemo(
     () => ({
       topColor: { value: new THREE.Color('#04070f') },
@@ -142,7 +150,38 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     };
   }, [scene, quality.reflectionQuality]);
 
-  useFrame(({ gl: renderer }) => {
+  // Volumetric low-lying street fog puffs that drift with the wind when FOG or storm mist is active
+  const fogPuffs = useMemo(
+    () =>
+      Array.from({ length: FOG_PUFF_COUNT }, (_, i) => ({
+        x: ((i * 73) % 150) - 75,
+        y: 1.4 + (i % 6) * 1.45,
+        z: ((i * 137) % 150) - 75,
+        sx: 14 + (i % 5) * 4.5,
+        sy: 1.6 + (i % 3) * 0.8,
+        sz: 14 + ((i + 2) % 5) * 4.5,
+        phase: i * 0.85,
+      })),
+    []
+  );
+  const fogPuffGeo = useMemo(() => new THREE.DodecahedronGeometry(1, 1), []);
+
+  const fogStrength = THREE.MathUtils.clamp((weatherState.fogDensityMultiplier - 1.0) / 4.2, 0, 1);
+
+  const fogColorFinal = useMemo(() => {
+    const baseFog = new THREE.Color(timeState.fogColor).lerp(new THREE.Color(district.fogColor), 0.5);
+    // In dense fog, shift toward a rich atmospheric mist tone so buildings silhouette dramatically
+    if (fogStrength > 0.1) {
+      const mistTint = timeState.isNight ? new THREE.Color('#132038') : new THREE.Color('#94a3b8');
+      baseFog.lerp(mistTint, fogStrength * 0.65);
+    }
+    if (weatherState.lightningFlash > 0.1) {
+      baseFog.lerp(new THREE.Color('#e0f2fe'), weatherState.lightningFlash * 0.45);
+    }
+    return `#${baseFog.getHexString()}`;
+  }, [timeState.fogColor, timeState.isNight, district.fogColor, weatherState.lightningFlash, fogStrength]);
+
+  useFrame(({ gl: renderer, clock }, delta) => {
     const envData = (scene as unknown as { __envUpdate?: { cubeCam: THREE.CubeCamera; envScene: THREE.Scene; rendered: boolean } }).__envUpdate;
     if (envData && !envData.rendered) {
       envData.cubeCam.update(renderer, envData.envScene);
@@ -170,8 +209,45 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       topCol.lerp(stormTint, weatherState.rainIntensity * 0.65);
       baseHor.lerp(stormTint, weatherState.rainIntensity * 0.55);
     }
+    // Envelop the sky dome in fog when FOG weather is active
+    if (quality.fogEnabled && fogStrength > 0.05) {
+      const fCol = new THREE.Color(fogColorFinal);
+      topCol.lerp(fCol, fogStrength * 0.88);
+      baseHor.lerp(fCol, fogStrength * 0.95);
+    }
     skyUniforms.topColor.value.copy(topCol);
     skyUniforms.bottomColor.value.copy(baseHor);
+
+    // Update wind-driven volumetric street fog banks around the player
+    if (fogBankMeshRef.current && fogBankMatRef.current) {
+      const showBanks = quality.fogEnabled && fogStrength > 0.08;
+      fogBankMeshRef.current.visible = showBanks;
+      if (showBanks) {
+        const dt = Math.min(delta, 0.05);
+        const t = clock.getElapsedTime();
+        const wind = windSystem.getVector();
+        fogBankMatRef.current.color.set(fogColorFinal);
+        fogBankMatRef.current.opacity = fogStrength * 0.16;
+
+        for (let i = 0; i < FOG_PUFF_COUNT; i++) {
+          const p = fogPuffs[i];
+          p.x += wind.x * 0.55 * dt;
+          p.z += wind.z * 0.55 * dt;
+
+          if (p.x - pPos.x > 75) p.x -= 150;
+          else if (p.x - pPos.x < -75) p.x += 150;
+          if (p.z - pPos.z > 75) p.z -= 150;
+          else if (p.z - pPos.z < -75) p.z += 150;
+
+          dummy.position.set(p.x, p.y + Math.sin(t * 0.6 + p.phase) * 0.35, p.z);
+          dummy.rotation.set(0, t * 0.08 + p.phase, 0);
+          dummy.scale.set(p.sx, p.sy, p.sz);
+          dummy.updateMatrix();
+          fogBankMeshRef.current.setMatrixAt(i, dummy.matrix);
+        }
+        fogBankMeshRef.current.instanceMatrix.needsUpdate = true;
+      }
+    }
   });
 
   const isUltra = quality.name === 'ULTRA';
@@ -191,28 +267,19 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     return pos;
   }, [isUltra]);
 
-  const fogColorFinal = useMemo(() => {
-    const c = new THREE.Color(timeState.fogColor).lerp(new THREE.Color(district.fogColor), 0.5);
-    if (weatherState.lightningFlash > 0.1) {
-      c.lerp(new THREE.Color('#e0f2fe'), weatherState.lightningFlash * 0.45);
-    }
-    return `#${c.getHexString()}`;
-  }, [timeState.fogColor, district.fogColor, weatherState.lightningFlash]);
-
+  // In CLEAR weather, fog starts far away (~130m..650m).
+  // When switching to FOG (fogStrength -> 1.0), fog pulls right into the streets (near = 3m, far = 52m)!
+  const clearFar = Math.min(timeState.fogFar * (isUltra ? 1.35 : 1.0), quality.drawDistance) * district.fogDensity;
   const fogFarFinal = quality.fogEnabled
-    ? Math.max(
-        140,
-        (Math.min(timeState.fogFar * (isUltra ? 1.35 : 1.0), quality.drawDistance) * district.fogDensity) /
-          weatherState.fogDensityMultiplier
-      )
+    ? THREE.MathUtils.lerp(Math.max(180, clearFar), 52, fogStrength)
     : 12000;
   const fogNearFinal = quality.fogEnabled
-    ? Math.max(18, timeState.fogNear / weatherState.fogDensityMultiplier)
+    ? THREE.MathUtils.lerp(timeState.fogNear, 3.0, fogStrength)
     : 9000;
 
   const keyLightIntensity =
     (timeState.isNight ? timeState.moonIntensity : timeState.sunIntensity) *
-      (1.0 - weatherState.rainIntensity * 0.35) *
+      (1.0 - weatherState.rainIntensity * 0.35 - fogStrength * 0.35) *
       cityEvent.lightScale +
     weatherState.lightningFlash * 4.5;
 
@@ -250,6 +317,21 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         />
       </mesh>
 
+      {/* Wind-Driven Street-Level Volumetric Fog Banks */}
+      <instancedMesh
+        ref={fogBankMeshRef}
+        args={[fogPuffGeo, undefined, FOG_PUFF_COUNT]}
+        frustumCulled={false}
+      >
+        <meshBasicMaterial
+          ref={fogBankMatRef}
+          color={fogColorFinal}
+          transparent
+          opacity={0}
+          depthWrite={false}
+        />
+      </instancedMesh>
+
       {/* Horizon Atmospheric Haze Band */}
       {quality.horizonHazeEnabled && (
         <mesh position={[0, 32, 0]}>
@@ -265,22 +347,25 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         </mesh>
       )}
 
-      {quality.starsEnabled && timeState.starOpacity > 0.05 && weatherState.rainIntensity < 0.5 && (
-        <points>
-          <bufferGeometry>
-            <bufferAttribute attach="attributes-position" args={[starPositions, 3]} />
-          </bufferGeometry>
-          <pointsMaterial
-            color="#e2e8f0"
-            size={isUltra ? 2.4 : 2.0}
-            sizeAttenuation={false}
-            transparent
-            opacity={timeState.starOpacity * (1.0 - weatherState.rainIntensity * 2)}
-          />
-        </points>
-      )}
+      {quality.starsEnabled &&
+        timeState.starOpacity > 0.05 &&
+        weatherState.rainIntensity < 0.5 &&
+        fogStrength < 0.45 && (
+          <points>
+            <bufferGeometry>
+              <bufferAttribute attach="attributes-position" args={[starPositions, 3]} />
+            </bufferGeometry>
+            <pointsMaterial
+              color="#e2e8f0"
+              size={isUltra ? 2.4 : 2.0}
+              sizeAttenuation={false}
+              transparent
+              opacity={timeState.starOpacity * (1.0 - weatherState.rainIntensity * 2) * (1.0 - fogStrength * 2)}
+            />
+          </points>
+        )}
 
-      {quality.volumetricRaysEnabled && (
+      {quality.volumetricRaysEnabled && fogStrength < 0.7 && (
         <CelestialVolumetricRays timeState={timeState} weatherState={weatherState} />
       )}
 
