@@ -25,6 +25,7 @@ async function systems() {
       export { CityGenerator } from './src/city/CityGenerator';
       export { WeatherSystem } from './src/world/WeatherSystem';
       export { WindSystem } from './src/world/WindSystem';
+      export { TrafficLightSystem } from './src/city/TrafficLightSystem';
     ` },
     bundle: true, platform: 'node', format: 'esm', write: false,
   });
@@ -272,5 +273,54 @@ test('time-of-day system smoothly interpolates sun position, sky palette, and gl
   assert.ok(stormZenith.sunIntensity < clearZenithSun * 0.6);
   assert.notEqual(stormZenith.skyTopColor, clearZenithTop);
 });
+
+test('pedestrian AI spawns moving sidewalk citizens, obeys crosswalk walk signals, and pauses near player', async () => {
+  const { NPCManager, TrafficLightSystem } = await systems();
+  const npcs = NPCManager.getInstance();
+  const lights = TrafficLightSystem.getInstance();
+
+  assert.equal(npcs.npcs.length, 40);
+  const ambient = npcs.npcs.filter((n) => !n.isStoryNpc);
+  assert.equal(ambient.length, 36);
+
+  // Verify citizens span diverse sidewalk route types
+  const routeTypes = new Set(ambient.map((n) => n.routeType));
+  assert.ok(routeTypes.has('NS_AVENUE'));
+  assert.ok(routeTypes.has('EW_AVENUE'));
+  assert.ok(routeTypes.has('BLOCK_PERIMETER'));
+  assert.ok(routeTypes.has('PARK_PROMENADE'));
+  assert.ok(routeTypes.has('CROSSWAY_LOOP'));
+
+  // Verify citizens advance along their sidewalk waypoints when player is far away
+  const farPlayer = new Vector3(500, 0, 500);
+  const sampleCitizen = ambient.find((n) => n.routeType === 'BLOCK_PERIMETER');
+  const startPos = sampleCitizen.position.clone();
+  npcs.update(0.1, farPlayer);
+  assert.ok(sampleCitizen.position.distanceTo(startPos) > 0.05);
+  assert.equal(sampleCitizen.isWalking, true);
+
+  // Verify crosswalk signal obedience: when ewWalk is false (t = 1.0s), a pedestrian at (-9.8, 0.2, -9.8) heading to (+9.8, 0.2, -9.8) waits at the curb
+  lights.update(1.0); // nsWalk = true, ewWalk = false
+  sampleCitizen.position.set(-9.8, 0.2, -9.8);
+  sampleCitizen.waypoints = [new Vector3(-9.8, 0.2, -9.8), new Vector3(9.8, 0.2, -9.8)];
+  sampleCitizen.currentWaypointIdx = 1;
+  sampleCitizen.waitTimer = 0;
+  npcs.update(0.1, farPlayer);
+  assert.equal(sampleCitizen.aiState, 'WAIT_CROSSWALK');
+  assert.equal(sampleCitizen.isWalking, false);
+
+  // Advance traffic light to ewWalk = true (t = 13.0s) and verify pedestrian resumes walking across the street
+  lights.update(12.0);
+  assert.equal(lights.getState().ewWalk, true);
+  npcs.update(0.1, farPlayer);
+  assert.equal(sampleCitizen.isWalking, true);
+
+  // Verify citizen pauses and faces player when player approaches within 2.6m
+  const closePlayer = sampleCitizen.position.clone().add(new Vector3(1.2, 0, 0));
+  npcs.update(0.1, closePlayer);
+  assert.equal(sampleCitizen.aiState, 'CONVERSING');
+  assert.equal(sampleCitizen.isWalking, false);
+});
+
 
 

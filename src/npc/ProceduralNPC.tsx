@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { NPCDef } from './NPCManager';
 import { QualityManager } from '../rendering/QualityManager';
+import { WeatherSystem } from '../world/WeatherSystem';
 
 interface ProceduralNPCProps {
   npc: NPCDef;
@@ -17,13 +18,17 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
   const leftArmRef = useRef<THREE.Group>(null);
   const rightArmRef = useRef<THREE.Group>(null);
   const headRef = useRef<THREE.Group>(null);
-  const timerRef = useRef(Math.random() * 10);
+  const umbrellaRef = useRef<THREE.Group>(null);
+  const timerRef = useRef(Math.random() * 12);
+
+  const scale = npc.scale ?? 1.0;
+  const secondaryColor = npc.secondaryColor ?? npc.visorColor;
 
   useFrame((state, delta) => {
     if (!rootRef.current) return;
     const camDist = state.camera.position.distanceTo(npc.position);
     const lod = QualityManager.current.LODQuality;
-    const maxDist = lod === 'LOW' ? 55 : lod === 'MEDIUM' ? 85 : 125;
+    const maxDist = lod === 'LOW' ? 65 : lod === 'MEDIUM' ? 105 : 145;
 
     if (camDist > maxDist) {
       rootRef.current.visible = false;
@@ -37,40 +42,100 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
     while (diff < -Math.PI) diff += Math.PI * 2;
     rootRef.current.rotation.y += diff * Math.min(1, delta * 9);
 
+    const activeSpeed = npc.currentSpeed || npc.walkSpeed;
+    const isCheckingPad =
+      !npc.isWalking &&
+      (npc.aiState === 'WINDOW_SHOPPING' || npc.aiState === 'WAIT_CROSSWALK') &&
+      (npc.accessory === 'HOLO_TABLET' || npc.isStoryNpc);
+
     if (npc.isWalking) {
-      timerRef.current += delta * npc.walkSpeed * 3.2;
-      const stride = Math.sin(timerRef.current) * 0.55;
+      timerRef.current += delta * activeSpeed * 3.25;
+      const strideAmp = THREE.MathUtils.clamp(activeSpeed * 0.25, 0.42, 0.68);
+      const stride = Math.sin(timerRef.current) * strideAmp;
       if (bodyRef.current) {
-        bodyRef.current.position.y = 0.95 + Math.abs(Math.sin(timerRef.current)) * 0.035;
+        bodyRef.current.position.y = 0.95 + Math.abs(Math.sin(timerRef.current)) * 0.038;
+        bodyRef.current.rotation.x = THREE.MathUtils.lerp(
+          bodyRef.current.rotation.x,
+          npc.aiState === 'CROSSING_STREET' || npc.aiState === 'SHELTER_SEEKING' ? 0.08 : 0.035,
+          delta * 8
+        );
+        bodyRef.current.rotation.y = Math.sin(timerRef.current) * 0.06;
       }
       if (leftLegRef.current) leftLegRef.current.rotation.x = stride;
       if (rightLegRef.current) rightLegRef.current.rotation.x = -stride;
-      if (leftArmRef.current) leftArmRef.current.rotation.x = -stride * 0.8;
-      if (rightArmRef.current) rightArmRef.current.rotation.x = stride * 0.8;
+      if (leftArmRef.current) leftArmRef.current.rotation.x = -stride * 0.82;
+      if (rightArmRef.current) {
+        // Carry briefcase with dampened swing
+        const swingScale = npc.accessory === 'BRIEFCASE' ? 0.35 : 0.82;
+        rightArmRef.current.rotation.x = stride * swingScale;
+      }
     } else {
       timerRef.current += delta * 1.8;
       if (bodyRef.current) {
         bodyRef.current.position.y = 0.95 + Math.sin(timerRef.current) * 0.015;
+        bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, 0, delta * 6);
+        bodyRef.current.rotation.y = THREE.MathUtils.lerp(bodyRef.current.rotation.y, 0, delta * 6);
       }
-      if (leftLegRef.current) leftLegRef.current.rotation.x = 0;
-      if (rightLegRef.current) rightLegRef.current.rotation.x = 0;
-      if (leftArmRef.current) leftArmRef.current.rotation.x = 0.05;
-      if (rightArmRef.current) rightArmRef.current.rotation.x = 0.05;
+      if (leftLegRef.current) leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, 0, delta * 10);
+      if (rightLegRef.current) rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, 0, delta * 10);
+      if (leftArmRef.current) leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, 0.05, delta * 8);
+      if (rightArmRef.current) {
+        const targetRightArmX = isCheckingPad ? -0.95 : 0.05;
+        rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, targetRightArmX, delta * 8);
+      }
     }
 
     if (headRef.current) {
-      headRef.current.rotation.y = THREE.MathUtils.lerp(headRef.current.rotation.y, 0, delta * 4);
+      const scanOffset =
+        npc.aiState === 'WINDOW_SHOPPING' || npc.aiState === 'WAIT_CROSSWALK'
+          ? Math.sin(timerRef.current * 0.85) * 0.28
+          : npc.headLookYaw || 0;
+      headRef.current.rotation.y = THREE.MathUtils.lerp(headRef.current.rotation.y, scanOffset, delta * 6);
+      headRef.current.rotation.x = THREE.MathUtils.lerp(
+        headRef.current.rotation.x,
+        isCheckingPad ? 0.26 : 0,
+        delta * 6
+      );
+    }
+
+    if (umbrellaRef.current) {
+      const rain = WeatherSystem.getInstance().getState().rainIntensity;
+      const showUmbrella = rain > 0.25 && (npc.accessory === 'UMBRELLA_DRONE' || npc.accessory === 'HOLO_TABLET');
+      umbrellaRef.current.visible = showUmbrella;
+      if (showUmbrella) {
+        umbrellaRef.current.position.y = 1.92 + Math.sin(timerRef.current * 1.5) * 0.03;
+        umbrellaRef.current.rotation.y += delta * 0.8;
+      }
     }
   });
 
   return (
-    <group ref={rootRef} name={`npc-${npc.id}`}>
+    <group ref={rootRef} name={`npc-${npc.id}`} scale={[scale, scale, scale]}>
       {isNearby && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]}>
           <ringGeometry args={[0.68, 0.82, 24]} />
           <meshBasicMaterial color="#f59e0b" transparent opacity={0.85} />
         </mesh>
       )}
+
+      {/* Personal Hovering Rain-Shield Drone (deploys during rain) */}
+      <group ref={umbrellaRef} position={[0, 1.92, 0]} visible={false}>
+        <mesh>
+          <cylinderGeometry args={[0.06, 0.56, 0.16, 12, 1, true]} />
+          <meshBasicMaterial
+            color={npc.visorColor}
+            transparent
+            opacity={0.34}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh position={[0, 0.09, 0]}>
+          <cylinderGeometry args={[0.08, 0.08, 0.04, 10]} />
+          <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
+        </mesh>
+      </group>
+
       <group ref={bodyRef} position={[0, 0.95, 0]}>
         {/* Pelvis & Utility Belt */}
         <mesh castShadow>
@@ -98,14 +163,18 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
             <circleGeometry args={[0.045, 12]} />
             <meshBasicMaterial color={npc.visorColor} />
           </mesh>
-          {/* Dorsal Courier Pack */}
-          <mesh position={[0, 0.02, -0.15]} castShadow>
+          {/* Dorsal Courier Pack (larger for COURIER_PACK specialists) */}
+          <mesh
+            position={[0, 0.02, -0.15]}
+            castShadow
+            scale={npc.accessory === 'COURIER_PACK' ? [1.22, 1.25, 1.35] : [1, 1, 1]}
+          >
             <boxGeometry args={[0.24, 0.26, 0.09]} />
             <meshStandardMaterial color="#0b1120" metalness={0.88} roughness={0.22} />
           </mesh>
-          <mesh position={[0, 0.02, -0.2]}>
+          <mesh position={[0, 0.02, npc.accessory === 'COURIER_PACK' ? -0.22 : -0.2]}>
             <boxGeometry args={[0.14, 0.025, 0.01]} />
-            <meshBasicMaterial color={npc.visorColor} />
+            <meshBasicMaterial color={secondaryColor} />
           </mesh>
         </group>
 
@@ -141,7 +210,7 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
           </mesh>
         </group>
 
-        {/* Right Arm with Pauldron & Cuff */}
+        {/* Right Arm with Pauldron, Cuff & Pedestrian Accessory (Holo-Tablet or Briefcase) */}
         <group ref={rightArmRef} position={[0.245, 0.4, 0]}>
           <mesh position={[0.02, -0.01, 0]}>
             <boxGeometry args={[0.11, 0.1, 0.12]} />
@@ -155,6 +224,34 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
             <boxGeometry args={[0.06, 0.065, 0.065]} />
             <meshStandardMaterial color="#090d16" metalness={0.9} roughness={0.2} />
           </mesh>
+
+          {/* Handheld Holographic Datapad */}
+          {npc.accessory === 'HOLO_TABLET' && (
+            <group position={[0, -0.38, 0.09]} rotation={[0.45, 0, 0]}>
+              <mesh>
+                <boxGeometry args={[0.13, 0.014, 0.18]} />
+                <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
+              </mesh>
+              <mesh position={[0, 0.01, 0]}>
+                <boxGeometry args={[0.11, 0.006, 0.15]} />
+                <meshBasicMaterial color={npc.visorColor} transparent opacity={0.85} />
+              </mesh>
+            </group>
+          )}
+
+          {/* Commuter Cyber-Briefcase */}
+          {npc.accessory === 'BRIEFCASE' && (
+            <group position={[0.04, -0.48, 0.02]}>
+              <mesh castShadow>
+                <boxGeometry args={[0.055, 0.22, 0.3]} />
+                <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.2} />
+              </mesh>
+              <mesh position={[0.03, 0, 0]}>
+                <boxGeometry args={[0.008, 0.03, 0.24]} />
+                <meshBasicMaterial color={secondaryColor} />
+              </mesh>
+            </group>
+          )}
         </group>
 
         {/* Left Leg & Boot */}
