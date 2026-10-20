@@ -344,6 +344,9 @@ export class TimeSystem {
   private colA = new THREE.Color();
   private colB = new THREE.Color();
   private colEnv = new THREE.Color();
+  private sunDir = new THREE.Vector3();
+  private moonDir = new THREE.Vector3();
+  private notifyAccum = 0;
 
   private constructor() {
     this.state = this.computeState(this.timeOfDay);
@@ -358,6 +361,7 @@ export class TimeSystem {
 
   public update(delta: number): void {
     const dt = Math.min(Math.max(0, delta), 0.1);
+    if (dt <= 0) return;
 
     // Smooth animated transition when a target solar phase is gliding, or steady diurnal progression
     if (this.targetTimeOfDay !== null) {
@@ -371,12 +375,18 @@ export class TimeSystem {
       } else {
         this.timeOfDay = (((this.timeOfDay + diff * Math.min(1, dt * 6.5)) % 24) + 24) % 24;
       }
+      this.state = this.computeState(this.timeOfDay);
+      this.notifyAccum = 0;
+      this.notify();
     } else if (!this.isPaused && this.timeScaleMultiplier > 0) {
       this.timeOfDay = (this.timeOfDay + dt * this.baseTimeSpeed * this.timeScaleMultiplier) % 24;
+      this.state = this.computeState(this.timeOfDay);
+      this.notifyAccum += dt;
+      if (this.notifyAccum >= 0.065) {
+        this.notifyAccum = 0;
+        this.notify();
+      }
     }
-
-    this.state = this.computeState(this.timeOfDay);
-    this.notify();
   }
 
   /**
@@ -447,8 +457,8 @@ export class TimeSystem {
     const sunX = Math.cos(sunOrbitalAngle);
     const sunY = Math.sin(sunOrbitalAngle);
     const sunZ = 0.28 * Math.sin(sunOrbitalAngle * 0.5 + 0.35);
-    const sunDirection = new THREE.Vector3(sunX, sunY, sunZ).normalize();
-    const moonDirection = new THREE.Vector3(-sunX, -sunY, -sunZ + 0.18).normalize();
+    const sunDirection = this.sunDir.set(sunX, sunY, sunZ).normalize();
+    const moonDirection = this.moonDir.set(-sunX, -sunY, -sunZ + 0.18).normalize();
 
     const sunElevationDeg = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(sunDirection.y, -1, 1)));
     const sunAzimuthDeg = (THREE.MathUtils.radToDeg(Math.atan2(sunDirection.x, sunDirection.z)) + 360) % 360;

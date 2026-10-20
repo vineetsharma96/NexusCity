@@ -39,9 +39,7 @@ export const NPCCrowd: React.FC<NPCCrowdProps> = ({ playerPosRef }) => {
   }, []);
 
   useFrame((_, delta) => {
-    const pPos = playerPosRef.current;
-    manager.current.update(delta, pPos);
-    InteractionSystem.getInstance().updatePlayerPosition(pPos);
+    manager.current.update(delta, playerPosRef.current);
   });
 
   return (

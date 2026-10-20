@@ -39,6 +39,7 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
   );
 
   const cameraYaw = useRef(0);
+  const lastReportedPos = useRef(new THREE.Vector3(NaN, NaN, NaN));
 
   const teleport = useCallback(
     (newPos: THREE.Vector3) => {
@@ -169,9 +170,14 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
     if (playerPosRef) playerPosRef.current.copy(updated.position);
 
     InteractionSystem.getInstance().updatePlayerPosition(updated.position);
-    SaveSystem.getInstance().updatePlayerPosition(updated.position, updated.rotationY);
-    DiscoverySystem.getInstance().update(updated.position);
-    NavigationSystem.getInstance().updatePlayerPosition(updated.position);
+    const dx = updated.position.x - lastReportedPos.current.x;
+    const dz = updated.position.z - lastReportedPos.current.z;
+    if (!Number.isFinite(dx) || dx * dx + dz * dz >= 0.0064) {
+      lastReportedPos.current.copy(updated.position);
+      SaveSystem.getInstance().updatePlayerPosition(updated.position, updated.rotationY);
+      DiscoverySystem.getInstance().update(updated.position);
+      NavigationSystem.getInstance().updatePlayerPosition(updated.position);
+    }
   });
 
   const posRef = playerPosRef || ({ current: kinematicState.position } as React.MutableRefObject<THREE.Vector3>);

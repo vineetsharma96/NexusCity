@@ -109,7 +109,7 @@ export class ProceduralChunkGenerator {
     const parks: PocketParkDef[] = [];
     const collisionBoxes: CollisionBox[] = [];
 
-    if (Math.abs(cx) <= 1 && Math.abs(cz) <= 1) {
+    if ((cx === -1 || cx === 0) && (cz === -1 || cz === 0)) {
       const empty: StreamedChunkData = {
         key,
         cx,
@@ -154,10 +154,16 @@ export class ProceduralChunkGenerator {
     quadrantOffsets.forEach((q, qIdx) => {
       const lotCenterX = centerX + q.qx;
       const lotCenterZ = centerZ + q.qz;
+
+      // Avoid overlapping the extended Central District monolith ring [-155..165, -155..155]
+      if (lotCenterX >= -155 && lotCenterX <= 165 && lotCenterZ >= -155 && lotCenterZ <= 155) {
+        return;
+      }
+
       const isGreen = district.type === 'GREEN_DISTRICT';
       const isPark =
         (isGreen && (rng.next() < 0.65 || qIdx === 0)) ||
-        (!isGreen && district.foliageDensity >= 0.4 && rng.next() < 0.2);
+        (!isGreen && district.foliageDensity >= 0.4 && rng.next() < 0.22);
 
       if (isPark) {
         const parkId = `stream-park-${key}-${qIdx}`;
@@ -173,8 +179,8 @@ export class ProceduralChunkGenerator {
 
         const parkTrees: TreeDef[] = [];
         const speciesPool: TreeSpecies[] = isGreen ? ['SAKURA', 'WILLOW', 'GINKGO'] : ['GINKGO', 'EMERALD'];
-        for (let pt = 0; pt < 3; pt++) {
-          const angle = (pt / 3) * Math.PI * 2 + rng.range(-0.2, 0.2);
+        for (let pt = 0; pt < 4; pt++) {
+          const angle = (pt / 4) * Math.PI * 2 + rng.range(-0.2, 0.2);
           const dist = rng.range(8, subSize * 0.36);
           const sp = rng.pick(speciesPool);
           parkTrees.push({
@@ -217,6 +223,8 @@ export class ProceduralChunkGenerator {
           benches: [
             { position: new THREE.Vector3(lotCenterX - 6, 0.2, lotCenterZ), rotationY: Math.PI / 2 },
             { position: new THREE.Vector3(lotCenterX + 6, 0.2, lotCenterZ), rotationY: -Math.PI / 2 },
+            { position: new THREE.Vector3(lotCenterX, 0.2, lotCenterZ - 6), rotationY: 0 },
+            { position: new THREE.Vector3(lotCenterX, 0.2, lotCenterZ + 6), rotationY: Math.PI },
           ],
           trees: parkTrees,
           bushes: [],
@@ -291,62 +299,177 @@ export class ProceduralChunkGenerator {
 
     const furniture: StreetFurnitureDef[] = [
       {
-        id: `fur-sl-${key}-w`,
+        id: `fur-sl-${key}-nw`,
         type: 'STREETLIGHT',
-        position: new THREE.Vector3(centerX - 8.2, 0, centerZ - 30),
-        rotationY: Math.PI / 2,
+        position: new THREE.Vector3(centerX - 8.2, 0, centerZ - 34),
+        rotationY: 0,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
       },
       {
-        id: `fur-sl-${key}-e`,
+        id: `fur-sl-${key}-se`,
         type: 'STREETLIGHT',
-        position: new THREE.Vector3(centerX + 8.2, 0, centerZ + 30),
+        position: new THREE.Vector3(centerX + 8.2, 0, centerZ + 34),
+        rotationY: Math.PI,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `fur-sl-${key}-ne`,
+        type: 'STREETLIGHT',
+        position: new THREE.Vector3(centerX + 8.2, 0, centerZ - 34),
+        rotationY: Math.PI,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `fur-sl-${key}-sw`,
+        type: 'STREETLIGHT',
+        position: new THREE.Vector3(centerX - 8.2, 0, centerZ + 34),
+        rotationY: 0,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `fur-sl-${key}-ew-w`,
+        type: 'STREETLIGHT',
+        position: new THREE.Vector3(centerX - 34, 0, centerZ - 8.2),
         rotationY: -Math.PI / 2,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
       },
       {
-        id: `fur-bench-${key}`,
+        id: `fur-sl-${key}-ew-e`,
+        type: 'STREETLIGHT',
+        position: new THREE.Vector3(centerX + 34, 0, centerZ + 8.2),
+        rotationY: Math.PI / 2,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `fur-bench-${key}-w`,
         type: 'BENCH',
         position: new THREE.Vector3(centerX - 9.8, 0.12, centerZ - 18),
         rotationY: Math.PI / 2,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
       },
-    ];
-
-    if ((Math.abs(cx) + Math.abs(cz)) % 2 === 0) {
-      furniture.push({
-        id: `fur-bus-${key}`,
-        type: 'BUS_STOP',
-        position: new THREE.Vector3(centerX + 9.6, 0.12, centerZ - 20),
-        rotationY: Math.PI,
+      {
+        id: `fur-bench-${key}-e`,
+        type: 'BENCH',
+        position: new THREE.Vector3(centerX + 9.8, 0.12, centerZ + 18),
+        rotationY: -Math.PI / 2,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
-      });
-    }
+      },
+      {
+        id: `fur-kiosk-${key}`,
+        type: 'CYBER_KIOSK',
+        position: new THREE.Vector3(centerX - 11.2, 0.12, centerZ + 15),
+        rotationY: Math.PI / 4,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `fur-bollard-${key}-n`,
+        type: 'BOLLARD',
+        position: new THREE.Vector3(centerX - 9.2, 0.12, centerZ - 11.5),
+        rotationY: 0,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `fur-bollard-${key}-s`,
+        type: 'BOLLARD',
+        position: new THREE.Vector3(centerX + 9.2, 0.12, centerZ + 11.5),
+        rotationY: 0,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `fur-trash-${key}`,
+        type: 'TRASH_RECEPTACLE',
+        position: new THREE.Vector3(centerX + 10.6, 0.12, centerZ - 14),
+        rotationY: -Math.PI / 2,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `fur-bus-${key}-ns`,
+        type: 'BUS_STOP',
+        position: new THREE.Vector3(centerX + 9.6, 0.12, centerZ - 22),
+        rotationY: -Math.PI / 2,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `fur-bus-${key}-ew`,
+        type: 'BUS_STOP',
+        position: new THREE.Vector3(centerX - 22, 0.12, centerZ - 9.6),
+        rotationY: 0,
+        accentColor: district.accentColor,
+        emissiveColor: district.primaryLightColor,
+      },
+    ];
+
+    const primaryBiomeType: BiomePropType =
+      district.type === 'INDUSTRIAL_DISTRICT'
+        ? 'STORAGE_TANK'
+        : district.type === 'NEURAL_DISTRICT'
+        ? 'SERVER_NODE'
+        : district.type === 'GREEN_DISTRICT'
+        ? 'PLANTER_VASE'
+        : district.type === 'OLD_CITY'
+        ? 'HISTORIC_PILLAR'
+        : district.type === 'SKY_DISTRICT'
+        ? 'AERO_MAST'
+        : 'CITY_TOTEM';
+
+    const secondaryBiomeType: BiomePropType =
+      district.type === 'INDUSTRIAL_DISTRICT'
+        ? 'INDUSTRIAL_PIPE'
+        : district.type === 'NEURAL_DISTRICT'
+        ? 'CONDUIT_LINE'
+        : district.type === 'GREEN_DISTRICT'
+        ? 'CITY_TOTEM'
+        : 'STEAM_VENT';
 
     const biomeProps: BiomePropDef[] = [
       {
-        id: `biome-prop-${key}`,
-        type:
-          district.type === 'INDUSTRIAL_DISTRICT'
-            ? 'STORAGE_TANK'
-            : district.type === 'NEURAL_DISTRICT'
-            ? 'SERVER_NODE'
-            : district.type === 'GREEN_DISTRICT'
-            ? 'PLANTER_VASE'
-            : district.type === 'OLD_CITY'
-            ? 'HISTORIC_PILLAR'
-            : district.type === 'SKY_DISTRICT'
-            ? 'AERO_MAST'
-            : 'CITY_TOTEM',
-        position: new THREE.Vector3(centerX + 10.0, 0, centerZ + 18),
+        id: `biome-prop-${key}-0`,
+        type: primaryBiomeType,
+        position: new THREE.Vector3(centerX + 10.5, 0, centerZ + 22),
         rotationY: 0,
-        size: new THREE.Vector3(1.6, 4.2, 1.6),
+        size: new THREE.Vector3(1.8, 4.6, 1.8),
         color: '#1e293b',
         emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `biome-prop-${key}-1`,
+        type: secondaryBiomeType,
+        position: new THREE.Vector3(centerX - 10.5, 0, centerZ - 22),
+        rotationY: Math.PI / 2,
+        size: new THREE.Vector3(1.6, 3.8, 1.6),
+        color: '#0f172a',
+        emissiveColor: district.accentColor,
+      },
+      {
+        id: `biome-prop-${key}-2`,
+        type: primaryBiomeType,
+        position: new THREE.Vector3(centerX + 22, 0, centerZ - 10.5),
+        rotationY: Math.PI / 4,
+        size: new THREE.Vector3(1.7, 4.2, 1.7),
+        color: '#1e293b',
+        emissiveColor: district.primaryLightColor,
+      },
+      {
+        id: `biome-prop-${key}-3`,
+        type: 'CITY_TOTEM',
+        position: new THREE.Vector3(centerX - 22, 0, centerZ + 10.5),
+        rotationY: 0,
+        size: new THREE.Vector3(1.3, 4.8, 1.3),
+        color: '#111827',
+        emissiveColor: district.secondaryLightColor,
       },
     ];
 

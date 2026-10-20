@@ -23,6 +23,7 @@ export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = (
   const smoothDirRef = useRef(new THREE.Vector3(0.4, 0.7, 0.2).normalize());
   const smoothColorRef = useRef(new THREE.Color('#fef3c7'));
   const smoothShaftColorRef = useRef(new THREE.Color('#f59e0b'));
+  const scratchColorRef = useRef(new THREE.Color());
 
   const rayShafts = useMemo(
     () => [
@@ -65,8 +66,8 @@ export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = (
 
     const discTargetHex = isNight ? '#e0f2fe' : timeState.goldenHourFactor > 0.4 ? '#fde68a' : '#fffbeb';
     const shaftTargetHex = isNight ? '#38bdf8' : timeState.solarGlowColor;
-    smoothColorRef.current.lerp(new THREE.Color(discTargetHex), lerpAlpha);
-    smoothShaftColorRef.current.lerp(new THREE.Color(shaftTargetHex), lerpAlpha);
+    smoothColorRef.current.lerp(scratchColorRef.current.set(discTargetHex), lerpAlpha);
+    smoothShaftColorRef.current.lerp(scratchColorRef.current.set(shaftTargetHex), lerpAlpha);
 
     if (discMatRef.current) {
       discMatRef.current.color.copy(smoothColorRef.current);

@@ -39,6 +39,9 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const smoothHemiGround = useRef(new THREE.Color('#090d16'));
   const smoothBounceColor = useRef(new THREE.Color('#1d4ed8'));
   const smoothFogColor = useRef(new THREE.Color('#070d1c'));
+  const scratchColor = useRef(new THREE.Color());
+  const fallbackPos = useRef(new THREE.Vector3(0, 0, 0));
+  const lastShadowTarget = useRef(new THREE.Vector3(NaN, 0, NaN));
   const lastEnvPhaseKey = useRef<string>('');
 
   const skyUniforms = useMemo(
@@ -268,19 +271,25 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     // 2. Smoothly interpolate Sun / Moon Orbital Direction & Key Light Position
     const activeDir = timeState.isNight ? timeState.moonDirection : timeState.sunDirection;
     smoothLightDir.current.lerp(activeDir, dampAlpha).normalize();
-    const pPos = playerPosRef?.current || new THREE.Vector3(0, 0, 0);
+    const pPos = playerPosRef?.current || fallbackPos.current;
 
     if (dirLightRef.current) {
+      // Snap shadow camera target to 2m texel grid to prevent shadow swimming and redundant matrix updates
+      const snappedX = Math.round(pPos.x * 0.5) * 2;
+      const snappedZ = Math.round(pPos.z * 0.5) * 2;
       dirLightRef.current.position.set(
-        pPos.x + smoothLightDir.current.x * 115,
+        snappedX + smoothLightDir.current.x * 115,
         Math.max(30, smoothLightDir.current.y * 135),
-        pPos.z + smoothLightDir.current.z * 115
+        snappedZ + smoothLightDir.current.z * 115
       );
-      dirLightRef.current.target.position.set(pPos.x, 0, pPos.z);
-      dirLightRef.current.target.updateMatrixWorld();
+      if (lastShadowTarget.current.x !== snappedX || lastShadowTarget.current.z !== snappedZ) {
+        lastShadowTarget.current.set(snappedX, 0, snappedZ);
+        dirLightRef.current.target.position.set(snappedX, 0, snappedZ);
+        dirLightRef.current.target.updateMatrixWorld();
+      }
 
       const keyColorTarget = weatherState.lightningFlash > 0.2 ? '#e0f2fe' : timeState.sunColor;
-      smoothKeyColor.current.lerp(new THREE.Color(keyColorTarget), dampAlpha);
+      smoothKeyColor.current.lerp(scratchColor.current.set(keyColorTarget), dampAlpha);
       dirLightRef.current.color.copy(smoothKeyColor.current);
 
       const targetKeyIntensity =
@@ -300,7 +309,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         48,
         pPos.z - smoothLightDir.current.z * 85
       );
-      smoothBounceColor.current.lerp(new THREE.Color(timeState.giBounceColor), dampAlpha);
+      smoothBounceColor.current.lerp(scratchColor.current.set(timeState.giBounceColor), dampAlpha);
       bounceLightRef.current.color.copy(smoothBounceColor.current);
       bounceLightRef.current.intensity = THREE.MathUtils.lerp(
         bounceLightRef.current.intensity,
@@ -311,8 +320,8 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
 
     // 4. Smoothly interpolate Hemisphere GI & Ambient Illumination
     if (hemiLightRef.current) {
-      smoothHemiSky.current.lerp(new THREE.Color(timeState.hemiSkyColor), dampAlpha);
-      smoothHemiGround.current.lerp(new THREE.Color(timeState.hemiGroundColor), dampAlpha);
+      smoothHemiSky.current.lerp(scratchColor.current.set(timeState.hemiSkyColor), dampAlpha);
+      smoothHemiGround.current.lerp(scratchColor.current.set(timeState.hemiGroundColor), dampAlpha);
       hemiLightRef.current.color.copy(smoothHemiSky.current);
       hemiLightRef.current.groundColor.copy(smoothHemiGround.current);
       hemiLightRef.current.intensity = THREE.MathUtils.lerp(
@@ -323,7 +332,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     }
 
     if (ambientLightRef.current) {
-      smoothAmbientColor.current.lerp(new THREE.Color(timeState.ambientColor), dampAlpha);
+      smoothAmbientColor.current.lerp(scratchColor.current.set(timeState.ambientColor), dampAlpha);
       ambientLightRef.current.color.copy(smoothAmbientColor.current);
       ambientLightRef.current.intensity = THREE.MathUtils.lerp(
         ambientLightRef.current.intensity,
@@ -333,10 +342,10 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     }
 
     // 5. Smoothly interpolate 3-Stop Sky Dome Palette & Solar Mie Scatter Glow
-    skyUniforms.topColor.value.lerp(new THREE.Color(timeState.skyTopColor), dampAlpha);
-    skyUniforms.midColor.value.lerp(new THREE.Color(timeState.skyMidColor), dampAlpha);
-    skyUniforms.bottomColor.value.lerp(new THREE.Color(timeState.skyHorizonColor), dampAlpha);
-    skyUniforms.solarGlowColor.value.lerp(new THREE.Color(timeState.solarGlowColor), dampAlpha);
+    skyUniforms.topColor.value.lerp(scratchColor.current.set(timeState.skyTopColor), dampAlpha);
+    skyUniforms.midColor.value.lerp(scratchColor.current.set(timeState.skyMidColor), dampAlpha);
+    skyUniforms.bottomColor.value.lerp(scratchColor.current.set(timeState.skyHorizonColor), dampAlpha);
+    skyUniforms.solarGlowColor.value.lerp(scratchColor.current.set(timeState.solarGlowColor), dampAlpha);
     skyUniforms.sunDir.value.copy(smoothLightDir.current);
 
     const targetGlowStrength =
@@ -350,7 +359,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     );
 
     // 6. Smoothly interpolate Fog & Background Color/Distances
-    smoothFogColor.current.lerp(new THREE.Color(fogColorTarget), dampAlpha);
+    smoothFogColor.current.lerp(scratchColor.current.set(fogColorTarget), dampAlpha);
     if (bgColorRef.current) {
       bgColorRef.current.copy(smoothFogColor.current);
     }

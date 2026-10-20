@@ -95,6 +95,10 @@ export class ChunkManager {
     return this.discoveredChunks.has(`${cx}_${cz}`);
   }
 
+  public getCurrentDistrict(): DistrictInfo {
+    return this.currentDistrict;
+  }
+
   public updatePlayerPosition(playerPos: THREE.Vector3, elapsedSeconds: number = 0): void {
     const cx = Math.floor(playerPos.x / this.CHUNK_SIZE);
     const cz = Math.floor(playerPos.z / this.CHUNK_SIZE);

@@ -26,7 +26,10 @@ export class VehicleInteractionSystem {
   private state: VehicleState;
   private vehiclePosition = new THREE.Vector3(4.5, 0.45, 10);
   private transitPosition = new THREE.Vector3(-7, 0.62, 10);
-  private rideables = new Map<string, { id: string; label: string; kind: 'vehicle' | 'transit'; position: THREE.Vector3 }>();
+  private rideables = new Map<
+    string,
+    { id: string; label: string; kind: 'vehicle' | 'transit'; position: THREE.Vector3; rotationY: number }
+  >();
 
   private constructor() {
     const upgrades = this.save.getData().vehicleUpgrades;
@@ -56,6 +59,20 @@ export class VehicleInteractionSystem {
     return this.vehiclePosition.clone();
   }
 
+  public getRideablePosition(id: string): THREE.Vector3 {
+    if (this.state.mode === 'RIDING' && this.state.activeId === id) {
+      return this.vehiclePosition.clone();
+    }
+    return this.rideables.get(id)?.position.clone() ?? this.vehiclePosition.clone();
+  }
+
+  public getRideableRotationY(id: string): number {
+    if (this.state.mode === 'RIDING' && this.state.activeId === id) {
+      return this.state.vehicleRotationY;
+    }
+    return this.rideables.get(id)?.rotationY ?? 0;
+  }
+
   public getMountedPosition(): THREE.Vector3 {
     return this.state.mode === 'TRANSIT_LINKED' ? this.transitPosition.clone() : this.vehiclePosition.clone();
   }
@@ -76,10 +93,28 @@ export class VehicleInteractionSystem {
     return () => this.listeners.delete(listener);
   }
 
-  public registerRideable(id: string, label: string, position: THREE.Vector3, kind: 'vehicle' | 'transit'): void {
+  public registerRideable(
+    id: string,
+    label: string,
+    position: THREE.Vector3,
+    kind: 'vehicle' | 'transit',
+    rotationY: number = 0
+  ): void {
     const stored = position.clone();
-    this.rideables.set(id, { id, label, kind, position: stored });
-    if (kind === 'vehicle' && this.state.mode !== 'RIDING') {
+    const existing = this.rideables.get(id);
+    const vehicleCount = Array.from(this.rideables.values()).filter((r) => r.kind === 'vehicle').length;
+    this.rideables.set(id, {
+      id,
+      label,
+      kind,
+      position: existing && this.state.activeId === id ? existing.position : stored,
+      rotationY: existing ? existing.rotationY : rotationY,
+    });
+    if (
+      kind === 'vehicle' &&
+      this.state.mode !== 'RIDING' &&
+      (vehicleCount === 0 || id === 'nexus-hover-01' || id === 'hover')
+    ) {
       this.vehiclePosition.copy(stored);
       this.state = { ...this.state, vehiclePosition: [stored.x, stored.y, stored.z] };
     }
@@ -126,6 +161,12 @@ export class VehicleInteractionSystem {
       return;
     }
 
+    const entry = this.rideables.get(id);
+    if (kind === 'vehicle' && entry) {
+      this.vehiclePosition.copy(entry.position);
+      this.state.vehicleRotationY = entry.rotationY;
+    }
+
     const upgrades = this.save.getData().vehicleUpgrades;
     const speedMultiplier = kind === 'vehicle' ? 1.55 + upgrades.speed * 0.18 : 1.35;
     this.state = {
@@ -152,6 +193,13 @@ export class VehicleInteractionSystem {
   public dismount(): void {
     if (this.state.mode === 'ON_FOOT') return;
     const prevId = this.state.activeId;
+    if (prevId && this.state.mode === 'RIDING') {
+      const entry = this.rideables.get(prevId);
+      if (entry) {
+        entry.position.copy(this.vehiclePosition);
+        entry.rotationY = this.state.vehicleRotationY;
+      }
+    }
     this.state = {
       ...this.state,
       mode: 'ON_FOOT',
@@ -188,7 +236,13 @@ export class VehicleInteractionSystem {
       this.vehiclePosition.set(resolved.x, 0.45, resolved.z);
       this.state.vehicleRotationY = Math.atan2(moveDir.x, moveDir.z);
       this.state.vehiclePosition = [this.vehiclePosition.x, this.vehiclePosition.y, this.vehiclePosition.z];
-      if (this.state.activeId) this.syncRideablePosition(this.state.activeId, this.vehiclePosition);
+      if (this.state.activeId) {
+        const entry = this.rideables.get(this.state.activeId);
+        if (entry) {
+          entry.rotationY = this.state.vehicleRotationY;
+        }
+        this.syncRideablePosition(this.state.activeId, this.vehiclePosition);
+      }
     }
     return this.vehiclePosition;
   }

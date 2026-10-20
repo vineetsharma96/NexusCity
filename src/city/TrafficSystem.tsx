@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { TrafficLightSystem } from './TrafficLightSystem';
 import { LivingCityEventSystem } from '../world/LivingCityEventSystem';
+import { QualityManager } from '../rendering/QualityManager';
 
 interface TrafficSystemProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -10,6 +11,7 @@ interface TrafficSystemProps {
 
 interface VehicleAgent {
   axis: 'NS' | 'EW';
+  avenueCoord: number;
   laneOffset: number;
   coord: number;
   dir: 1 | -1;
@@ -21,10 +23,13 @@ interface VehicleAgent {
   phase: number;
 }
 
-const VEHICLE_COUNT = 32;
-const SKY_VEHICLE_COUNT = 22;
+const VEHICLE_COUNT = 112;
+const SKY_VEHICLE_COUNT = 56;
 
-export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
+const NS_AVENUES = [0, 0, -75, -165, 165, -180, 180, -300, 300, -420, 420];
+const EW_AVENUES = [0, 0, -75, 75, -165, 165, -180, 180, -300, 300, -420, 420];
+
+export const TrafficSystem: React.FC<TrafficSystemProps> = ({ playerPosRef }) => {
   const groundBodyRef = useRef<THREE.InstancedMesh>(null);
   const groundCabinRef = useRef<THREE.InstancedMesh>(null);
   const groundLightBarRef = useRef<THREE.InstancedMesh>(null);
@@ -45,11 +50,14 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
     for (let i = 0; i < VEHICLE_COUNT; i++) {
       const axis = i % 2 === 0 ? 'NS' : 'EW';
       const dir: 1 | -1 = i % 4 < 2 ? 1 : -1;
+      const avenuePool = axis === 'NS' ? NS_AVENUES : EW_AVENUES;
+      const avenueCoord = avenuePool[Math.floor(i / 2) % avenuePool.length];
       const laneOffset = dir === 1 ? 3.4 : -3.4;
-      const coord = ((i * 27) % 320) - 160;
-      const maxSpeed = 13 + (i % 5) * 2.2;
+      const coord = ((i * 53) % 880) - 440;
+      const maxSpeed = 14 + (i % 6) * 2.4;
       list.push({
         axis,
+        avenueCoord,
         laneOffset,
         coord,
         dir,
@@ -66,19 +74,22 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
 
   const skyAgents = useMemo<VehicleAgent[]>(() => {
     const list: VehicleAgent[] = [];
+    const skyCorridors = [-420, -300, -180, -90, -24, 24, 90, 180, 300, 420];
     for (let i = 0; i < SKY_VEHICLE_COUNT; i++) {
       const axis = i % 2 === 0 ? 'NS' : 'EW';
       const dir: 1 | -1 = i % 4 < 2 ? 1 : -1;
+      const avenueCoord = skyCorridors[Math.floor(i / 2) % skyCorridors.length];
       list.push({
         axis,
-        laneOffset: (dir === 1 ? 18 : -18) + (i % 3) * 5,
-        coord: ((i * 43) % 480) - 240,
+        avenueCoord,
+        laneOffset: (dir === 1 ? 14 : -14) + (i % 3) * 5,
+        coord: ((i * 67) % 1120) - 560,
         dir,
-        speed: 28 + (i % 4) * 5,
-        maxSpeed: 28 + (i % 4) * 5,
-        altitude: 38 + (i % 5) * 13,
+        speed: 28 + (i % 5) * 5.5,
+        maxSpeed: 28 + (i % 5) * 5.5,
+        altitude: 36 + (i % 6) * 12,
         color: '#0f172a',
-        trimColor: i % 2 === 0 ? '#38bdf8' : '#f59e0b',
+        trimColor: i % 3 === 0 ? '#10b981' : i % 2 === 0 ? '#38bdf8' : '#f59e0b',
         phase: i * 1.15,
       });
     }
@@ -95,11 +106,36 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
   const skyCabinGeo = useMemo(() => new THREE.BoxGeometry(1.28, 0.28, 2.2), []);
   const skyThrusterGeo = useMemo(() => new THREE.BoxGeometry(2.35, 0.12, 3.9), []);
 
+  // Upload static vehicle colors once on mount instead of every frame
+  React.useEffect(() => {
+    for (let i = 0; i < groundAgents.length; i++) {
+      const v = groundAgents[i];
+      groundBodyRef.current?.setColorAt(i, colorObj.set(v.color));
+      groundLightBarRef.current?.setColorAt(i, colorObj.set(v.trimColor));
+      groundWingRef.current?.setColorAt(i, colorObj.set(v.trimColor));
+    }
+    if (groundBodyRef.current?.instanceColor) groundBodyRef.current.instanceColor.needsUpdate = true;
+    if (groundLightBarRef.current?.instanceColor) groundLightBarRef.current.instanceColor.needsUpdate = true;
+    if (groundWingRef.current?.instanceColor) groundWingRef.current.instanceColor.needsUpdate = true;
+
+    for (let i = 0; i < skyAgents.length; i++) {
+      const s = skyAgents[i];
+      skyThrusterRef.current?.setColorAt(i, colorObj.set(s.trimColor));
+    }
+    if (skyThrusterRef.current?.instanceColor) skyThrusterRef.current.instanceColor.needsUpdate = true;
+  }, [groundAgents, skyAgents, colorObj]);
+
   useFrame(({ clock }, delta) => {
     const dt = Math.min(delta, 0.05);
     const t = clock.getElapsedTime();
     const lights = TrafficLightSystem.getInstance();
     const speedScale = LivingCityEventSystem.getInstance().getState().trafficSpeedMultiplier;
+    const pPos = playerPosRef?.current;
+    const playerX = pPos ? pPos.x : 0;
+    const playerZ = pPos ? pPos.z : 0;
+    const lod = QualityManager.current.LODQuality;
+    const activeGroundCount = lod === 'LOW' ? 40 : lod === 'MEDIUM' ? 76 : groundAgents.length;
+    const activeSkyCount = lod === 'LOW' ? 20 : lod === 'MEDIUM' ? 38 : skyAgents.length;
 
     if (
       groundBodyRef.current &&
@@ -108,15 +144,33 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
       groundThrusterRef.current &&
       groundWingRef.current
     ) {
-      for (let i = 0; i < groundAgents.length; i++) {
+      const wrapSpan = 460;
+      for (let i = 0; i < activeGroundCount; i++) {
         const v = groundAgents[i];
-        const canGo = lights.canProceed(v.axis, v.coord, v.dir);
+        const canGo = v.avenueCoord === 0 ? lights.canProceed(v.axis, v.coord, v.dir) : true;
         const targetSpeed = canGo ? v.maxSpeed * speedScale : 0;
         v.speed = THREE.MathUtils.lerp(v.speed, targetSpeed, dt * 5);
         v.coord += v.speed * v.dir * dt;
 
-        if (v.coord > 175) v.coord = -175;
-        else if (v.coord < -175) v.coord = 175;
+        const anchorAlong = v.axis === 'NS' ? playerZ : playerX;
+        const anchorPerp = v.axis === 'NS' ? playerX : playerZ;
+
+        if (v.coord > anchorAlong + wrapSpan) {
+          v.coord = anchorAlong - wrapSpan;
+        } else if (v.coord < anchorAlong - wrapSpan) {
+          v.coord = anchorAlong + wrapSpan;
+        }
+
+        // Keep outer-fleet vehicles streamed onto chunk avenues near the player when exploring outer districts
+        if (i >= 36 && Math.abs(v.avenueCoord - anchorPerp) > 420) {
+          const baseChunk = Math.floor(anchorPerp / 120);
+          const ringOffset = (i % 5) - 2;
+          let candidateAve = (baseChunk + ringOffset + 0.5) * 120;
+          if (v.axis === 'NS' && Math.abs(candidateAve - 75) < 40) {
+            candidateAve = -60;
+          }
+          v.avenueCoord = candidateAve;
+        }
 
         const rotY =
           v.axis === 'NS'
@@ -126,8 +180,9 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
             : v.dir === 1
             ? Math.PI / 2
             : -Math.PI / 2;
-        const px = v.axis === 'NS' ? v.laneOffset : v.coord;
-        const pz = v.axis === 'NS' ? v.coord : v.laneOffset;
+        const roadLine = v.avenueCoord + v.laneOffset;
+        const px = v.axis === 'NS' ? roadLine : v.coord;
+        const pz = v.axis === 'NS' ? v.coord : roadLine;
         const hoverY = v.altitude + Math.sin(t * 3.2 + v.phase) * 0.025;
 
         // 1. Lower Aerodynamic Monocoque Chassis
@@ -135,7 +190,6 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
         dummy.rotation.set(0, rotY, 0);
         dummy.updateMatrix();
         groundBodyRef.current.setMatrixAt(i, dummy.matrix);
-        groundBodyRef.current.setColorAt(i, colorObj.set(v.color));
 
         // 2. Glazed Cockpit Canopy
         dummy.position.set(px, hoverY + 0.35, pz);
@@ -151,7 +205,6 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
         dummy.position.set(px, hoverY - 0.05, pz);
         dummy.updateMatrix();
         groundLightBarRef.current.setMatrixAt(i, dummy.matrix);
-        groundLightBarRef.current.setColorAt(i, colorObj.set(v.trimColor));
 
         // 5. Elevated Rear Aero Wing
         const rearOffsetX = Math.sin(rotY) * -1.65;
@@ -159,24 +212,33 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
         dummy.position.set(px + rearOffsetX, hoverY + 0.34, pz + rearOffsetZ);
         dummy.updateMatrix();
         groundWingRef.current.setMatrixAt(i, dummy.matrix);
-        groundWingRef.current.setColorAt(i, colorObj.set(v.trimColor));
       }
+      groundBodyRef.current.count = activeGroundCount;
+      groundCabinRef.current.count = activeGroundCount;
+      groundThrusterRef.current.count = activeGroundCount;
+      groundLightBarRef.current.count = activeGroundCount;
+      groundWingRef.current.count = activeGroundCount;
       groundBodyRef.current.instanceMatrix.needsUpdate = true;
       groundCabinRef.current.instanceMatrix.needsUpdate = true;
       groundThrusterRef.current.instanceMatrix.needsUpdate = true;
       groundLightBarRef.current.instanceMatrix.needsUpdate = true;
       groundWingRef.current.instanceMatrix.needsUpdate = true;
-      if (groundBodyRef.current.instanceColor) groundBodyRef.current.instanceColor.needsUpdate = true;
-      if (groundLightBarRef.current.instanceColor) groundLightBarRef.current.instanceColor.needsUpdate = true;
-      if (groundWingRef.current.instanceColor) groundWingRef.current.instanceColor.needsUpdate = true;
     }
 
     if (skyBodyRef.current && skyCabinRef.current && skyThrusterRef.current) {
-      for (let i = 0; i < skyAgents.length; i++) {
+      const skyWrap = 580;
+      for (let i = 0; i < activeSkyCount; i++) {
         const s = skyAgents[i];
         s.coord += s.speed * s.dir * dt;
-        if (s.coord > 240) s.coord = -240;
-        else if (s.coord < -240) s.coord = 240;
+        const anchorAlong = s.axis === 'NS' ? playerZ : playerX;
+        const anchorPerp = s.axis === 'NS' ? playerX : playerZ;
+
+        if (s.coord > anchorAlong + skyWrap) s.coord = anchorAlong - skyWrap;
+        else if (s.coord < anchorAlong - skyWrap) s.coord = anchorAlong + skyWrap;
+
+        if (Math.abs(s.avenueCoord - anchorPerp) > 520) {
+          s.avenueCoord = anchorPerp + ((i % 7) - 3) * 120;
+        }
 
         const rotY =
           s.axis === 'NS'
@@ -186,8 +248,9 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
             : s.dir === 1
             ? Math.PI / 2
             : -Math.PI / 2;
-        const px = s.axis === 'NS' ? s.laneOffset : s.coord;
-        const pz = s.axis === 'NS' ? s.coord : s.laneOffset;
+        const skyLine = s.avenueCoord + s.laneOffset;
+        const px = s.axis === 'NS' ? skyLine : s.coord;
+        const pz = s.axis === 'NS' ? s.coord : skyLine;
         const skyY = s.altitude + Math.sin(t * 2.4 + s.phase) * 0.25;
 
         dummy.position.set(px, skyY, pz);
@@ -195,16 +258,17 @@ export const TrafficSystem: React.FC<TrafficSystemProps> = () => {
         dummy.updateMatrix();
         skyBodyRef.current.setMatrixAt(i, dummy.matrix);
         skyThrusterRef.current.setMatrixAt(i, dummy.matrix);
-        skyThrusterRef.current.setColorAt(i, colorObj.set(s.trimColor));
 
         dummy.position.set(px, skyY + 0.3, pz);
         dummy.updateMatrix();
         skyCabinRef.current.setMatrixAt(i, dummy.matrix);
       }
+      skyBodyRef.current.count = activeSkyCount;
+      skyCabinRef.current.count = activeSkyCount;
+      skyThrusterRef.current.count = activeSkyCount;
       skyBodyRef.current.instanceMatrix.needsUpdate = true;
       skyCabinRef.current.instanceMatrix.needsUpdate = true;
       skyThrusterRef.current.instanceMatrix.needsUpdate = true;
-      if (skyThrusterRef.current.instanceColor) skyThrusterRef.current.instanceColor.needsUpdate = true;
     }
   });
 

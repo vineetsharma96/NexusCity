@@ -246,6 +246,29 @@ export class NPCManager {
     routes.push({ routeType: 'PARK_PROMENADE', waypoints: parkRing });
     routes.push({ routeType: 'PARK_PROMENADE', waypoints: [...parkRing].reverse() });
 
+    // 6. Extended Outer Metropolitan Boulevard & District Loops (±165m to ±220m)
+    const outerDistrictCenters = [
+      { cx: -115, cz: -115, halfW: 26, halfD: 26 },
+      { cx: 115, cz: -115, halfW: 26, halfD: 26 },
+      { cx: -115, cz: 115, halfW: 26, halfD: 26 },
+      { cx: 136, cz: 115, halfW: 22, halfD: 26 },
+      { cx: -180, cz: -180, halfW: 28, halfD: 28 },
+      { cx: 180, cz: -180, halfW: 28, halfD: 28 },
+      { cx: 180, cz: 180, halfW: 28, halfD: 28 },
+      { cx: -180, cz: 180, halfW: 28, halfD: 28 },
+    ];
+    for (const od of outerDistrictCenters) {
+      routes.push({
+        routeType: 'BLOCK_PERIMETER',
+        waypoints: [
+          new THREE.Vector3(od.cx - od.halfW, y, od.cz - od.halfD),
+          new THREE.Vector3(od.cx + od.halfW, y, od.cz - od.halfD),
+          new THREE.Vector3(od.cx + od.halfW, y, od.cz + od.halfD),
+          new THREE.Vector3(od.cx - od.halfW, y, od.cz + od.halfD),
+        ],
+      });
+    }
+
     // Shuffle slightly for variety while remaining deterministic
     if (rng.next() > 0.5) {
       routes.push({ routeType: 'CROSSWAY_LOOP', waypoints: centralCrosswalkLoop });

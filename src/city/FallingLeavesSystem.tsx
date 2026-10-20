@@ -39,7 +39,7 @@ interface LeafAgent {
   color: string;
 }
 
-const MAX_LEAVES = 560;
+const MAX_LEAVES = 760;
 
 export const FallingLeavesSystem: React.FC<FallingLeavesSystemProps> = ({
   playerPosRef,
@@ -174,8 +174,11 @@ export const FallingLeavesSystem: React.FC<FallingLeavesSystemProps> = ({
 
     const activeCount = Math.min(
       MAX_LEAVES,
-      Math.max(120, Math.round(380 * Math.min(1.45, quality.particlesDensity)))
+      Math.max(160, Math.round(520 * Math.min(1.45, quality.particlesDensity)))
     );
+
+    const sectorShiftX = Math.abs(pPos.x) > 190 ? Math.round(pPos.x / 240) * 240 : 0;
+    const sectorShiftZ = Math.abs(pPos.z) > 190 ? Math.round(pPos.z / 240) * 240 : 0;
 
     for (let i = 0; i < activeCount; i++) {
       const leaf = leaves[i];
@@ -228,9 +231,11 @@ export const FallingLeavesSystem: React.FC<FallingLeavesSystemProps> = ({
         if (leaf.restTimer > 3.8) {
           const angle = Math.random() * Math.PI * 2;
           const r = Math.sqrt(Math.random()) * src.radius;
-          leaf.x = src.x + Math.cos(angle) * r;
+          const shiftX = i % 2 === 0 ? sectorShiftX : 0;
+          const shiftZ = i % 2 === 0 ? sectorShiftZ : 0;
+          leaf.x = src.x + shiftX + Math.cos(angle) * r;
           leaf.y = src.y + (Math.random() - 0.3) * 1.4;
-          leaf.z = src.z + Math.sin(angle) * r;
+          leaf.z = src.z + shiftZ + Math.sin(angle) * r;
           leaf.vx = 0;
           leaf.vy = -0.95 - Math.random() * 0.6;
           leaf.vz = 0;

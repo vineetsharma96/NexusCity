@@ -130,6 +130,55 @@ export const TrafficLightGantry: React.FC<TrafficLightGantryProps> = ({ position
           ))}
         </group>
       ))}
+
+      {/* Extended Secondary Intersection Crosswalks & Signal Archway Nodes */}
+      {(
+        [
+          [0, 0, -75],
+          [0, 0, 75],
+          [-75, 0, 0],
+          [75, 0, 0],
+          [0, 0, -165],
+          [0, 0, 165],
+        ] as [number, number, number][]
+      ).map(([ix, iy, iz], nodeIdx) => (
+        <group key={`outer-int-${nodeIdx}`} position={[ix, iy, iz]}>
+          {CROSSWALKS.map((cw, cwIdx) => (
+            <group key={`ocw-${cwIdx}`} position={cw.pos} rotation={[0, cw.rot, 0]}>
+              <mesh position={[0, -0.004, 0]} receiveShadow>
+                <boxGeometry args={[12.4, 0.008, 3.2]} />
+                <meshStandardMaterial
+                  color="#070b14"
+                  roughness={0.55}
+                  metalness={0.4}
+                  polygonOffset
+                  polygonOffsetFactor={-1}
+                  polygonOffsetUnits={-1}
+                />
+              </mesh>
+              <mesh position={[0, 0.006, -2.0]}>
+                <boxGeometry args={[11.8, 0.014, 0.28]} />
+                <meshBasicMaterial color="#f59e0b" />
+              </mesh>
+              {STRIPE_OFFSETS.map((x, sIdx) => (
+                <mesh key={sIdx} position={[x, 0.008, 0]} receiveShadow>
+                  <boxGeometry args={[0.72, 0.016, 2.5]} />
+                  <meshStandardMaterial
+                    color="#e2e8f0"
+                    emissive="#38bdf8"
+                    emissiveIntensity={0.14}
+                    roughness={0.35}
+                    metalness={0.2}
+                    polygonOffset
+                    polygonOffsetFactor={-3}
+                    polygonOffsetUnits={-3}
+                  />
+                </mesh>
+              ))}
+            </group>
+          ))}
+        </group>
+      ))}
     </group>
   );
 };

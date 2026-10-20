@@ -45,9 +45,22 @@ const VENT_SOURCES: VentSource[] = [
   // Central Park Sanctuary Geothermal Spring Steam Vents
   { id: 'vent_park_spring_sw', position: [56, 0.26, 92], rotationY: 0.4, accentColor: '#10b981', smokeTint: '#a7f3d0', intensity: 1.2 },
   { id: 'vent_park_spring_se', position: [94, 0.26, 92], rotationY: -0.4, accentColor: '#38bdf8', smokeTint: '#bae6fd', intensity: 1.2 },
+  // Extended Outer Avenue & District Thermal Vents
+  { id: 'vent_north_crossing_w', position: [-5.6, 0.03, -98], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.15 },
+  { id: 'vent_north_crossing_e', position: [5.6, 0.03, -148], rotationY: 0, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.15 },
+  { id: 'vent_south_crossing_w', position: [-5.6, 0.03, 98], rotationY: 0, accentColor: '#f43f5e', smokeTint: '#e2e8f0', intensity: 1.15 },
+  { id: 'vent_south_crossing_e', position: [5.6, 0.03, 148], rotationY: 0, accentColor: '#10b981', smokeTint: '#cbd5e1', intensity: 1.15 },
+  { id: 'vent_west_neural_1', position: [-98, 0.03, -5.6], rotationY: Math.PI / 2, accentColor: '#38bdf8', smokeTint: '#bae6fd', intensity: 1.1 },
+  { id: 'vent_west_neural_2', position: [-148, 0.03, 5.6], rotationY: Math.PI / 2, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.2 },
+  { id: 'vent_east_aero_1', position: [98, 0.03, -5.6], rotationY: Math.PI / 2, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.1 },
+  { id: 'vent_east_aero_2', position: [148, 0.03, 5.6], rotationY: Math.PI / 2, accentColor: '#10b981', smokeTint: '#ccfbf1', intensity: 1.2 },
+  { id: 'vent_nw_sector', position: [-75, 0.03, -95], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#bae6fd', intensity: 1.15 },
+  { id: 'vent_ne_sector', position: [75, 0.03, -95], rotationY: 0, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.15 },
+  { id: 'vent_sw_foundry', position: [-75, 0.03, 95], rotationY: 0, accentColor: '#f43f5e', smokeTint: '#fecdd3', intensity: 1.25 },
+  { id: 'vent_se_arboretum', position: [120, 0.03, 120], rotationY: Math.PI / 4, accentColor: '#10b981', smokeTint: '#a7f3d0', intensity: 1.2 },
 ];
 
-const PARTICLES_PER_VENT = 36;
+const PARTICLES_PER_VENT = 30;
 const TOTAL_SMOKE_PARTICLES = VENT_SOURCES.length * PARTICLES_PER_VENT;
 
 export const SteamVentSystem: React.FC<SteamVentSystemProps> = ({ playerPosRef }) => {
@@ -83,6 +96,15 @@ export const SteamVentSystem: React.FC<SteamVentSystemProps> = ({ playerPosRef }
     return list;
   }, []);
 
+  const ventColors = useMemo(
+    () =>
+      VENT_SOURCES.map((v) => ({
+        accent: new THREE.Color(v.accentColor),
+        tint: new THREE.Color(v.smokeTint),
+      })),
+    []
+  );
+
   const puffGeo = useMemo(() => new THREE.DodecahedronGeometry(1, 1), []);
 
   useFrame(({ clock }, delta) => {
@@ -106,16 +128,29 @@ export const SteamVentSystem: React.FC<SteamVentSystemProps> = ({ playerPosRef }
     const pvz = (pPos.z - prevPlayerPosRef.current.z) / Math.max(0.001, dt);
     prevPlayerPosRef.current.copy(pPos);
 
-    for (let i = 0; i < TOTAL_SMOKE_PARTICLES; i++) {
+    // Sector offset for outer streamed chunks so steam plumes appear around the player anywhere in the city
+    const sectorShiftX = Math.abs(pPos.x) > 190 ? Math.round(pPos.x / 240) * 240 : 0;
+    const sectorShiftZ = Math.abs(pPos.z) > 190 ? Math.round(pPos.z / 240) * 240 : 0;
+
+    const activeParticles = Math.min(
+      TOTAL_SMOKE_PARTICLES,
+      Math.max(120, Math.round(TOTAL_SMOKE_PARTICLES * Math.min(1.0, quality.particlesDensity)))
+    );
+
+    for (let i = 0; i < activeParticles; i++) {
       const p = particles[i];
       const src = VENT_SOURCES[p.ventIndex];
+      const vc = ventColors[p.ventIndex];
       p.age += dt;
+
+      const spawnX = src.position[0] + (p.ventIndex >= 10 ? sectorShiftX : 0);
+      const spawnZ = src.position[2] + (p.ventIndex >= 10 ? sectorShiftZ : 0);
 
       if (p.age >= p.maxLife) {
         p.age = 0;
-        p.x = src.position[0] + (Math.random() - 0.5) * 0.85;
+        p.x = spawnX + (Math.random() - 0.5) * 0.85;
         p.y = src.position[1] + 0.08;
-        p.z = src.position[2] + (Math.random() - 0.5) * 0.55;
+        p.z = spawnZ + (Math.random() - 0.5) * 0.55;
         p.vx = (Math.random() - 0.5) * 0.35;
         p.vy = (1.55 + Math.random() * 0.65) * src.intensity;
         p.vz = (Math.random() - 0.5) * 0.35;
@@ -159,11 +194,12 @@ export const SteamVentSystem: React.FC<SteamVentSystemProps> = ({ playerPosRef }
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
 
-      // Warm core near nozzle cooling into misty slate/cyan smoke aloft
-      colorObj.set(src.accentColor).lerp(new THREE.Color(src.smokeTint), Math.min(1, lifeRatio * 1.35));
+      // Warm core near nozzle cooling into misty slate/cyan smoke aloft (zero allocation)
+      colorObj.copy(vc.accent).lerp(vc.tint, Math.min(1, lifeRatio * 1.35));
       mesh.setColorAt(i, colorObj);
     }
 
+    mesh.count = activeParticles;
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   });

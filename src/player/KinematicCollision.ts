@@ -9,10 +9,13 @@ export class KinematicCollisionSolver {
   public static readonly WORLD_HALF_EXTENT = 1380;
   public static boxes: CollisionBox[] = [];
   private static chunkBoxes = new Map<string, CollisionBox[]>();
+  private static allBoxesCache: CollisionBox[] | null = null;
+  private static readonly scratchCandidate = new THREE.Vector3();
 
   public static clear(): void {
     this.boxes = [];
     this.chunkBoxes.clear();
+    this.allBoxesCache = null;
   }
 
   public static addBox(center: THREE.Vector3, size: THREE.Vector3): CollisionBox {
@@ -22,6 +25,7 @@ export class KinematicCollisionSolver {
       max: center.clone().add(half),
     };
     this.boxes.push(box);
+    this.allBoxesCache = null;
     return box;
   }
 
@@ -32,23 +36,28 @@ export class KinematicCollisionSolver {
       const midZ = (b.min.z + b.max.z) * 0.5;
       return Math.hypot(midX - center.x, midY - center.y, midZ - center.z) > epsilon;
     });
+    this.allBoxesCache = null;
   }
 
   public static setChunkBoxes(chunkKey: string, boxes: CollisionBox[]): void {
     this.chunkBoxes.set(chunkKey, boxes);
+    this.allBoxesCache = null;
   }
 
   public static removeChunkBoxes(chunkKey: string): void {
     this.chunkBoxes.delete(chunkKey);
+    this.allBoxesCache = null;
   }
 
   public static getAllBoxes(): CollisionBox[] {
+    if (this.allBoxesCache) return this.allBoxesCache;
     const all = [...this.boxes];
     for (const chunkList of this.chunkBoxes.values()) {
       for (let i = 0; i < chunkList.length; i++) {
         all.push(chunkList[i]);
       }
     }
+    this.allBoxesCache = all;
     return all;
   }
 
@@ -56,9 +65,20 @@ export class KinematicCollisionSolver {
     const resolved = pos.clone();
     const playerMinY = resolved.y + 0.25;
     const playerMaxY = resolved.y + height;
+    const rSq = radius * radius;
 
-    for (const box of allBoxes) {
+    for (let i = 0, len = allBoxes.length; i < len; i++) {
+      const box = allBoxes[i];
       if (playerMaxY <= box.min.y || playerMinY >= box.max.y) continue;
+      // Fast scalar AABB broadphase rejection
+      if (
+        resolved.x + radius <= box.min.x ||
+        resolved.x - radius >= box.max.x ||
+        resolved.z + radius <= box.min.z ||
+        resolved.z - radius >= box.max.z
+      ) {
+        continue;
+      }
 
       const closestX = Math.max(box.min.x, Math.min(resolved.x, box.max.x));
       const closestZ = Math.max(box.min.z, Math.min(resolved.z, box.max.z));
@@ -66,7 +86,7 @@ export class KinematicCollisionSolver {
       const dz = resolved.z - closestZ;
       const distSq = dx * dx + dz * dz;
 
-      if (distSq < radius * radius) {
+      if (distSq < rSq) {
         const dist = Math.sqrt(distSq);
         if (dist > 0.0001) {
           const overlap = radius - dist;
@@ -114,7 +134,7 @@ export class KinematicCollisionSolver {
 
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
-      const candidate = new THREE.Vector3(previousPos.x + deltaX * t, pos.y, previousPos.z + deltaZ * t);
+      const candidate = this.scratchCandidate.set(previousPos.x + deltaX * t, pos.y, previousPos.z + deltaZ * t);
       const next = this.resolveStep(candidate, radius, height, allBoxes);
       current.copy(next);
       if (Math.hypot(next.x - candidate.x, next.z - candidate.z) > 1e-4) {
@@ -165,14 +185,19 @@ export class KinematicCollisionSolver {
     let ceiling = Infinity;
     const topY = currentY + height;
     const allBoxes = this.getAllBoxes();
+    const rSq = radius * radius;
 
-    for (const box of allBoxes) {
+    for (let i = 0, len = allBoxes.length; i < len; i++) {
+      const box = allBoxes[i];
       if (box.min.y < topY - 0.15) continue;
+      if (x + radius <= box.min.x || x - radius >= box.max.x || z + radius <= box.min.z || z - radius >= box.max.z) {
+        continue;
+      }
       const closestX = Math.max(box.min.x, Math.min(x, box.max.x));
       const closestZ = Math.max(box.min.z, Math.min(z, box.max.z));
       const dx = x - closestX;
       const dz = z - closestZ;
-      if (dx * dx + dz * dz < radius * radius) {
+      if (dx * dx + dz * dz < rSq) {
         ceiling = Math.min(ceiling, box.min.y);
       }
     }

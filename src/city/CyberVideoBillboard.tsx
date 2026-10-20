@@ -15,22 +15,19 @@ interface CyberVideoBillboardProps {
   channel?: 1 | 2 | 3;
 }
 
-export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
-  position,
-  rotationY = 0,
-  width = 20,
-  height = 12,
-  channel = 1,
-}) => {
-  const tickerRef = useRef(0);
-  const lastDrawRef = useRef(0);
-  const weatherRef = useRef<WeatherState>(WeatherSystem.getInstance().getState());
-  const emergencyRef = useRef<EmergencyState>(EmergencyAlertSystem.getInstance().getState());
-  const eventRef = useRef<LivingCityEventState>(LivingCityEventSystem.getInstance().getState());
-  const discoveryCountRef = useRef(Object.keys(SaveSystem.getInstance().getData().discoveredLandmarks).length);
-  const district = DistrictGenerator.getDistrictAt(position[0], position[2]);
+interface ChannelPoolEntry {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D | null;
+  texture: THREE.CanvasTexture;
+  lastDraw: number;
+  ticker: number;
+}
 
-  const { canvas, texture } = useMemo(() => {
+const channelPool = new Map<number, ChannelPoolEntry>();
+
+function getChannelPool(channel: 1 | 2 | 3): ChannelPoolEntry {
+  let entry = channelPool.get(channel);
+  if (!entry) {
     const c = document.createElement('canvas');
     c.width = 512;
     c.height = 320;
@@ -39,10 +36,34 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
     tex.magFilter = THREE.LinearFilter;
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.generateMipmaps = false;
-    return { canvas: c, texture: tex };
-  }, []);
+    entry = {
+      canvas: c,
+      ctx: c.getContext('2d'),
+      texture: tex,
+      lastDraw: -1,
+      ticker: 0,
+    };
+    channelPool.set(channel, entry);
+  }
+  return entry;
+}
 
-  useEffect(() => () => texture.dispose(), [texture]);
+const BACKING_MAT = new THREE.MeshStandardMaterial({ color: '#070a12', roughness: 0.28, metalness: 0.9 });
+
+export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = React.memo(({
+  position,
+  rotationY = 0,
+  width = 20,
+  height = 12,
+  channel = 1,
+}) => {
+  const weatherRef = useRef<WeatherState>(WeatherSystem.getInstance().getState());
+  const emergencyRef = useRef<EmergencyState>(EmergencyAlertSystem.getInstance().getState());
+  const eventRef = useRef<LivingCityEventState>(LivingCityEventSystem.getInstance().getState());
+  const discoveryCountRef = useRef(Object.keys(SaveSystem.getInstance().getData().discoveredLandmarks).length);
+  const district = useMemo(() => DistrictGenerator.getDistrictAt(position[0], position[2]), [position[0], position[2]]);
+
+  const poolEntry = useMemo(() => getChannelPool(channel), [channel]);
 
   useEffect(() => {
     const uWea = WeatherSystem.getInstance().subscribe((s) => {
@@ -69,22 +90,21 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
   }, []);
 
   useFrame(({ clock, camera }) => {
-    const dist = Math.hypot(
-      camera.position.x - position[0],
-      camera.position.y - position[1],
-      camera.position.z - position[2]
-    );
-    if (dist > 220) return;
+    const dx = camera.position.x - position[0];
+    const dy = camera.position.y - position[1];
+    const dz = camera.position.z - position[2];
+    if (dx * dx + dy * dy + dz * dz > 210 * 210) return;
 
     const time = clock.getElapsedTime();
-    if (time - lastDrawRef.current < 1 / 12) return;
-    lastDrawRef.current = time;
+    // Deduplicate canvas redraw across all billboards sharing the same channel (10 FPS update rate)
+    if (time - poolEntry.lastDraw < 0.1) return;
+    poolEntry.lastDraw = time;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = poolEntry.ctx;
     if (!ctx) return;
 
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = poolEntry.canvas.width;
+    const h = poolEntry.canvas.height;
     const weather = weatherRef.current;
     const emergency = emergencyRef.current;
     const cityEvent = eventRef.current;
@@ -111,7 +131,6 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
     );
 
     if (channel === 1) {
-      // Wireframe orbital rings
       ctx.save();
       ctx.translate(w / 2, h / 2 - 4);
       ctx.strokeStyle = '#38bdf8';
@@ -128,7 +147,6 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
       }
       ctx.restore();
     } else if (channel === 2) {
-      // Architectural waveform bars
       const bars = 24;
       for (let b = 0; b < bars; b++) {
         const bh = 18 + Math.abs(Math.sin(time * 3.5 + b * 0.45)) * 90;
@@ -136,7 +154,6 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
         ctx.fillRect(36 + b * 18, h - 85 - bh, 11, bh);
       }
     } else {
-      // Sector radar sweep
       const rx = w / 2;
       const ry = h / 2 + 4;
       ctx.strokeStyle = 'rgba(16, 185, 129, 0.45)';
@@ -182,26 +199,25 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
     ctx.fillStyle = '#f59e0b';
     ctx.fillRect(0, h - 36, w, 2);
 
-    tickerRef.current = (tickerRef.current - 2.5) % 900;
+    poolEntry.ticker = (poolEntry.ticker - 2.5) % 900;
     const msg = `METROPOLIS TELEMETRY // ${discoveryCountRef.current} LANDMARKS LOGGED // TRANSIT CORRIDORS ACTIVE // `;
     ctx.font = '700 14px monospace';
     ctx.fillStyle = '#f8fafc';
-    ctx.fillText(msg + msg, tickerRef.current, h - 13);
+    ctx.fillText(msg + msg, poolEntry.ticker, h - 13);
 
-    texture.needsUpdate = true;
+    poolEntry.texture.needsUpdate = true;
   });
 
   const rimColor = channel === 1 ? '#f59e0b' : channel === 2 ? '#38bdf8' : '#10b981';
 
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
-      <mesh position={[0, 0, -0.22]} castShadow receiveShadow>
+      <mesh position={[0, 0, -0.22]} material={BACKING_MAT}>
         <boxGeometry args={[width + 1.2, height + 1.2, 0.42]} />
-        <meshStandardMaterial color="#070a12" roughness={0.28} metalness={0.9} />
       </mesh>
       <mesh position={[0, 0, 0.04]}>
         <planeGeometry args={[width, height]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
+        <meshBasicMaterial map={poolEntry.texture} toneMapped={false} />
       </mesh>
       <mesh position={[0, height / 2 + 0.3, 0.06]}>
         <boxGeometry args={[width + 0.6, 0.1, 0.1]} />
@@ -213,4 +229,4 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = ({
       </mesh>
     </group>
   );
-};
+});

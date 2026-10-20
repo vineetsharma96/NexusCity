@@ -40,12 +40,13 @@ export class InteractionSystem {
 
   public updatePlayerPosition(playerPos: THREE.Vector3): void {
     let closest: InteractiveEntity | null = null;
-    let minDist = Infinity;
+    let minDistSq = Infinity;
 
     for (const entity of this.entities.values()) {
-      const dist = playerPos.distanceTo(entity.position);
-      if (dist <= entity.radius && dist < minDist) {
-        minDist = dist;
+      const rSq = entity.radius * entity.radius;
+      const distSq = playerPos.distanceToSquared(entity.position);
+      if (distSq <= rSq && distSq < minDistSq) {
+        minDistSq = distSq;
         closest = entity;
       }
     }

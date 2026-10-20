@@ -58,6 +58,66 @@ const TERMINALS: TerminalNode[] = [
       kind: 'LORE',
     },
   },
+  {
+    id: 'term_north_crossing',
+    name: 'North Crossing Telemetry Pylon',
+    position: new THREE.Vector3(-12, 0, -86),
+    district: 'NORTH CROSSING',
+    objective: {
+      id: 'obj_north_crossing',
+      title: 'NORTH ARTERIAL FLOW LOG',
+      detail: 'Synchronized multi-lane telemetry manages high-speed autonomous transit along the northern corridor.',
+      kind: 'SCAN',
+    },
+  },
+  {
+    id: 'term_neural_nexus',
+    name: 'Quantum Lattice Terminal',
+    position: new THREE.Vector3(-168, 0, -168),
+    district: 'NEURAL QUANTUM SECTOR',
+    objective: {
+      id: 'obj_neural_nexus',
+      title: 'CRYO-CORE SYNAPSE MATRIX',
+      detail: 'Sub-zero photonic processors coordinate city-wide autonomous drone and shuttle navigation.',
+      kind: 'MISSION',
+    },
+  },
+  {
+    id: 'term_aerostrata_spire',
+    name: 'Aerostrata Flight Beacon',
+    position: new THREE.Vector3(168, 0, -168),
+    district: 'AEROSTRATA HIGHLANDS',
+    objective: {
+      id: 'obj_aerostrata_spire',
+      title: 'STRATOSPHERIC FLIGHT VECTOR',
+      detail: 'High-altitude skyway corridors route orbital drop-shuttles and executive hover-coupes.',
+      kind: 'SCAN',
+    },
+  },
+  {
+    id: 'term_arboretum_east',
+    name: 'Solaris Bio-Dome Archive',
+    position: new THREE.Vector3(168, 0, 168),
+    district: 'SOLARIS ARBORETUM',
+    objective: {
+      id: 'obj_arboretum_east',
+      title: 'CANOPY PHOTOSYNTHESIS INDEX',
+      detail: 'Engineered bioluminescent flora convert nocturnal ambient radiation into clean civic grid power.',
+      kind: 'LORE',
+    },
+  },
+  {
+    id: 'term_foundry_west',
+    name: 'Foundry Forge Controller',
+    position: new THREE.Vector3(-168, 0, 168),
+    district: 'CYBER-SYNTH FOUNDRY',
+    objective: {
+      id: 'obj_foundry_west',
+      title: 'TITANIUM ALLOY FABRICATION',
+      detail: 'Automated plasma smelters extrude structural diagrid members for outer ring expansion.',
+      kind: 'MISSION',
+    },
+  },
 ];
 
 const ROOFTOP_LIFTS = [
@@ -72,6 +132,30 @@ const ROOFTOP_LIFTS = [
     name: 'Sanctuary Express Lift',
     ground: new THREE.Vector3(44, 0.2, 54),
     roof: new THREE.Vector3(0, 0.2, 10),
+  },
+  {
+    id: 'lift-neural-express',
+    name: 'Neural Sector Express Portal',
+    ground: new THREE.Vector3(-148, 0.2, -158),
+    roof: new THREE.Vector3(-10, 0.2, -75),
+  },
+  {
+    id: 'lift-aerostrata-express',
+    name: 'Aerostrata Sky-Link Portal',
+    ground: new THREE.Vector3(148, 0.2, -158),
+    roof: new THREE.Vector3(10, 0.2, -75),
+  },
+  {
+    id: 'lift-arboretum-express',
+    name: 'Arboretum Rapid Portal',
+    ground: new THREE.Vector3(148, 0.2, 158),
+    roof: new THREE.Vector3(56, 0.2, 75),
+  },
+  {
+    id: 'lift-foundry-express',
+    name: 'Foundry Transit Portal',
+    ground: new THREE.Vector3(-148, 0.2, 158),
+    roof: new THREE.Vector3(-10, 0.2, 75),
   },
 ];
 

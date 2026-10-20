@@ -31,9 +31,9 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
   const drops = useMemo(
     () =>
       Array.from({ length: MAX_DROP_COUNT }, () => ({
-        x: (Math.random() - 0.5) * 68,
-        y: Math.random() * 30,
-        z: (Math.random() - 0.5) * 68,
+        x: (Math.random() - 0.5) * 136,
+        y: Math.random() * 32,
+        z: (Math.random() - 0.5) * 136,
         speed: 0.85 + Math.random() * 0.35,
         len: 0.65 + Math.random() * 0.4,
       })),
@@ -43,9 +43,9 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
   const embers = useMemo(
     () =>
       Array.from({ length: MAX_EMBER_COUNT }, () => ({
-        x: (Math.random() - 0.5) * 76,
+        x: (Math.random() - 0.5) * 140,
         y: 0.3 + Math.random() * 18,
-        z: (Math.random() - 0.5) * 76,
+        z: (Math.random() - 0.5) * 140,
         vx: 0,
         vy: 0,
         vz: 0,
@@ -60,6 +60,7 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const upVec = useMemo(() => new THREE.Vector3(0, -1, 0), []);
   const combinedRainVec = useMemo(() => new THREE.Vector3(), []);
+  const normRainVec = useMemo(() => new THREE.Vector3(), []);
   const quat = useMemo(() => new THREE.Quaternion(), []);
 
   useFrame(({ clock }, delta) => {
@@ -98,7 +99,7 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
           weather.windVector.y - gust * 2.5,
           weather.windVector.z + windVec.z * 0.85
         );
-        quat.setFromUnitVectors(upVec, combinedRainVec.clone().normalize());
+        quat.setFromUnitVectors(upVec, normRainVec.copy(combinedRainVec).normalize());
 
         for (let i = 0; i < activeDrops; i++) {
           const d = drops[i];
@@ -109,8 +110,8 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
 
           if (d.y < pPos.y - 1) {
             d.y = pPos.y + 26 + Math.random() * 5;
-            d.x = pPos.x + (Math.random() - 0.5) * 68;
-            d.z = pPos.z + (Math.random() - 0.5) * 68;
+            d.x = pPos.x + (Math.random() - 0.5) * 136;
+            d.z = pPos.z + (Math.random() - 0.5) * 136;
           }
           dummy.position.set(d.x, d.y, d.z);
           dummy.quaternion.copy(quat);
@@ -164,10 +165,10 @@ export const RainParticles: React.FC<RainParticlesProps> = ({ playerPosRef }) =>
         if (e.y < 0.25) e.y = 0.25 + Math.random() * 2.5;
         if (e.y > 20) e.y = 2.0 + Math.random() * 8;
 
-        if (e.x - pPos.x > 40) e.x -= 80;
-        else if (e.x - pPos.x < -40) e.x += 80;
-        if (e.z - pPos.z > 40) e.z -= 80;
-        else if (e.z - pPos.z < -40) e.z += 80;
+        if (e.x - pPos.x > 70) e.x -= 140;
+        else if (e.x - pPos.x < -70) e.x += 140;
+        if (e.z - pPos.z > 70) e.z -= 140;
+        else if (e.z - pPos.z < -70) e.z += 140;
 
         dummy.position.set(e.x, Math.max(0.2, e.y), e.z);
         dummy.rotation.set(t + e.phase, t * 0.7, 0);

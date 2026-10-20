@@ -126,6 +126,41 @@ export class VegetationGenerator {
       [-24, 10.5],
       [-48, 10.5],
       [24, 10.5],
+      // Extended North-South & East-West Avenue Boulevards
+      [-10.5, -96],
+      [10.5, -96],
+      [-10.5, -132],
+      [10.5, -132],
+      [-10.5, -196],
+      [10.5, -196],
+      [-10.5, 96],
+      [10.5, 96],
+      [-10.5, 132],
+      [10.5, 132],
+      [-10.5, 196],
+      [10.5, 196],
+      [-96, -10.5],
+      [-132, -10.5],
+      [-196, -10.5],
+      [96, -10.5],
+      [132, -10.5],
+      [196, -10.5],
+      [-96, 10.5],
+      [-132, 10.5],
+      [-196, 10.5],
+      [132, 10.5],
+      [196, 10.5],
+      // Secondary Cross-Avenue Boulevards (z = -75, z = +75)
+      [-28, -65.5],
+      [28, -65.5],
+      [-64, -65.5],
+      [64, -65.5],
+      [-28, -84.5],
+      [28, -84.5],
+      [-28, 65.5],
+      [-64, 65.5],
+      [-28, 84.5],
+      [-64, 84.5],
     ];
 
     coords.forEach(([x, z], idx) => {
@@ -146,26 +181,29 @@ export class VegetationGenerator {
     const trees: TreeDef[] = [];
     const bushes: PlanterBushDef[] = [];
 
-    if (district.foliageDensity < 0.15) return { trees, bushes };
-
     const centerX = (cx + 0.5) * 120;
     const centerZ = (cz + 0.5) * 120;
     const speciesPool: TreeSpecies[] =
       district.type === 'GREEN_DISTRICT'
         ? ['EMERALD', 'SAKURA', 'WILLOW', 'GINKGO']
-        : district.type === 'NEURAL_DISTRICT'
-        ? ['CYBER_NEON', 'GINKGO']
-        : ['GINKGO', 'EMERALD'];
+        : district.type === 'NEURAL_DISTRICT' || district.type === 'SKY_DISTRICT'
+        ? ['CYBER_NEON', 'GINKGO', 'WILLOW']
+        : ['GINKGO', 'EMERALD', 'SAKURA'];
 
     const offsets: [number, number][] = [
       [-10.2, -26],
       [10.2, -26],
       [-10.2, 26],
       [10.2, 26],
+      [-26, -10.2],
+      [26, -10.2],
+      [-26, 10.2],
+      [26, 10.2],
     ];
 
+    const spawnThreshold = Math.max(0.45, district.foliageDensity + 0.35);
     offsets.forEach(([ox, oz], idx) => {
-      if (rng.next() <= district.foliageDensity + 0.25) {
+      if (rng.next() <= spawnThreshold) {
         const sp = rng.pick(speciesPool);
         trees.push(
           this.createTree(
@@ -179,24 +217,24 @@ export class VegetationGenerator {
       }
     });
 
-    if (district.foliageDensity >= 0.4) {
-      bushes.push({
-        id: `chunk-bush-${cx}-${cz}-0`,
-        position: new THREE.Vector3(centerX - 10.2, 0.28, centerZ - 14),
-        size: new THREE.Vector3(1.8, 0.7, 1.8),
-        color: '#065f46',
-        hasFlowers: true,
-        flowerColor: district.accentColor,
-      });
-      bushes.push({
-        id: `chunk-bush-${cx}-${cz}-1`,
-        position: new THREE.Vector3(centerX + 10.2, 0.28, centerZ + 14),
-        size: new THREE.Vector3(1.8, 0.7, 1.8),
-        color: '#065f46',
-        hasFlowers: true,
-        flowerColor: district.accentColor,
-      });
-    }
+    const bushOffsets: [number, number][] = [
+      [-10.2, -14],
+      [10.2, 14],
+      [-14, 10.2],
+      [14, -10.2],
+    ];
+    bushOffsets.forEach(([bx, bz], bIdx) => {
+      if (district.foliageDensity >= 0.3 || bIdx < 2) {
+        bushes.push({
+          id: `chunk-bush-${cx}-${cz}-${bIdx}`,
+          position: new THREE.Vector3(centerX + bx, 0.28, centerZ + bz),
+          size: new THREE.Vector3(1.8, 0.7, 1.8),
+          color: district.type === 'NEURAL_DISTRICT' ? '#0c4a6e' : '#065f46',
+          hasFlowers: true,
+          flowerColor: district.accentColor,
+        });
+      }
+    });
 
     return { trees, bushes };
   }

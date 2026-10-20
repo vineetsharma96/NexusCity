@@ -49,7 +49,7 @@ export const WorldManager: React.FC<WorldManagerProps> = ({ playerPosRef }) => {
     eventSystem.current.update(delta);
     const currentEvent = eventSystem.current.getState();
     missionSystem.current.update(
-      chunkManager.current.getState().currentDistrict.type,
+      chunkManager.current.getCurrentDistrict().type,
       currentEvent
     );
 
