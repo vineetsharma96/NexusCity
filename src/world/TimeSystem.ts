@@ -113,7 +113,7 @@ const DIURNAL_KEYFRAMES: DiurnalKeyframe[] = [
     solarGlow: '#fb7185',
     sunColor: '#fda4af',
     ambientColor: '#1e2640',
-    hemiSky: '#6366f1',
+    hemiSky: '#3b629b',
     hemiGround: '#0b1020',
     giBounce: '#38bdf8',
     cloudColor: '#292c4c',

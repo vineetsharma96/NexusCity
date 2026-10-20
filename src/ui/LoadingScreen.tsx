@@ -27,7 +27,7 @@ export const LoadingScreen: React.FC = () => {
   return (
     <div className="loading-screen" role="status" aria-live="polite">
       <div className="loading-panel">
-        <span className="menu-section-label">METROPOLITAN DIGITAL TWIN // SEED 847291</span>
+        <span className="section-heading">Metropolitan digital twin · seed 847291</span>
         <h1>NEXUS CITY</h1>
         <p>
           {isTakingLonger

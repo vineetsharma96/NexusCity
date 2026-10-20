@@ -63,7 +63,7 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window || navigator.maxTouchPoints > 0);
     };
     checkMobile();
-    window.addEventListener('resize', checkMobile);
+    window.addEventListener('resize', checkMobile, { passive: true });
 
     const onOpenMenu = () => setIsMenuOpen(true);
     window.addEventListener('nexus:open-menu', onOpenMenu);

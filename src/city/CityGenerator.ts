@@ -167,7 +167,7 @@ export class CityGenerator {
       { x: 136, z: 38, w: 36, d: 40, name: 'East Sanctuary Overlook', minH: 54, maxH: 92 },
     ];
 
-    const neonPalette = ['#38bdf8', '#f59e0b', '#10b981', '#f43f5e', '#a855f7'];
+    const neonPalette = ['#38bdf8', '#f59e0b', '#10b981', '#f43f5e', '#4a8ad6'];
 
     blockCenters.forEach((blk, idx) => {
       sidewalks.push({

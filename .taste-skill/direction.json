@@ -1,0 +1,165 @@
+{
+ "version": 1,
+ "kind": "app",
+ "at": "2026-10-20T00:22:30.140Z",
+ "seed": 629080990,
+ "input": {
+  "kind": "devtools",
+  "brief": "Nexus City 3D Metropolis Simulation HUD, Atlas, and Telemetry Console",
+  "theme": "dark",
+  "screens": [
+   "overview",
+   "settings"
+  ],
+  "keep": [],
+  "style": "data-terminal"
+ },
+ "style": {
+  "id": "data-terminal",
+  "name": "Data terminal",
+  "theme": "dark",
+  "basis": "1 screen: a stock research view. Keep it narrow.",
+  "suits": [
+   "markets",
+   "devtools"
+  ],
+  "idea": "A research or monitoring screen read in long sessions: cards darker than the ground, tabular digits that stack, signs instead of colour, and every selection marked by the same 1px accent line.",
+  "colourBudget": "under 3%; the accent is never more than a 1px line",
+  "tokens": {
+   "ground": "#171719",
+   "surface": "#131217",
+   "raised": "#212023",
+   "border": "#222224",
+   "rule": "#1b1a1f",
+   "control": "#3a3a3e",
+   "text": "#ffffff",
+   "muted": "#8a8c92",
+   "accent": "#4a8ad6",
+   "positive": "#44a282",
+   "negative": "#e5566f",
+   "warning": "#d9a441",
+   "chart": [
+    "#f2f2f3",
+    "#e5566f",
+    "#4a8ad6"
+   ],
+   "pills": {
+    "positive": [
+     "#1b2828",
+     "#5fc39c"
+    ],
+    "negative": [
+     "#2c1a20",
+     "#e5566f"
+    ],
+    "warning": [
+     "#2a2416",
+     "#d9a441"
+    ],
+    "neutral": [
+     "#212023",
+     "#bdbdc0"
+    ]
+   },
+   "shadow": "0 12px 28px rgba(0,0,0,.2)",
+   "radius": {
+    "card": 6,
+    "control": 999
+   },
+   "font": {
+    "family": "Public Sans",
+    "second": null,
+    "fallback": "Inter, system-ui, sans-serif",
+    "sizes": {
+     "title": 26,
+     "section": 20,
+     "kpi": 20,
+     "body": 13,
+     "small": 12
+    },
+    "weights": [
+     400,
+     500,
+     600,
+     700
+    ],
+    "note": "Section titles 20/400 in the muted grey; card titles 16/600; tabular figures everywhere."
+   },
+   "density": "dense",
+   "rowHeight": 42,
+   "sidebarWidth": 50,
+   "gap": 24,
+   "pad": 32,
+   "controlHeight": 34
+  },
+  "shell": "icon-rail",
+  "shellAlternatives": [],
+  "signature": "Every selection (tab, toggle, range, nav item) is a 1px accent line exactly as wide as its label, placed on the nearest existing edge; numbers stay white or grey and carry their sign in the text ('+$24,000,000').",
+  "identity": [
+   "Every figure in a monospace as the style's decision (IBM Plex Mono or JetBrains Mono for each price, count and time, digits that stack), with the text in Public Sans. Lint and the inspector flag mono; give the reason in the report.",
+   "The one accent line from the product's world in place of the dealt blue (the exchange's or the team's hue): still the only selection mark, never violet or indigo.",
+   "A signature of the market or the system as the lead: an order book's depth as two mirrored bar lists, an incident as a minute-by-minute strip, a region map with the list beside it."
+  ],
+  "avoid": [
+   "filled pill tabs or a coloured segmented control",
+   "a chart with no scale and no dates (the studied screen had none and was flagged)",
+   "tertiary text under 4.5:1 (#4c4c4f read at about 2:1 in the study)",
+   "lighter cards with borders and a glow",
+   "green and red on every number; the one column whose job is \"what moved today\" and a negative headline figure may carry the polarity colours"
+  ],
+  "notes": "The studied screen's muted grey #82848a and red #d4405d were lifted to #8a8c92 and #e5566f so text passes 4.5:1 on the card. Its card list rows sit on a 28px pitch and its table rows on 42px."
+ },
+ "shell": {
+  "id": "icon-rail",
+  "name": "Icon rail",
+  "basis": "3 of 23 screens",
+  "suits": [
+   "markets",
+   "devtools",
+   "finance",
+   "wallet"
+  ],
+  "numbers": {
+   "railWidth": "50-60, median 55",
+   "icon": "15-18px outline",
+   "pitch": "34-49",
+   "active": "icon colour alone, or a full-bleed 50px band at a 2% tint, or a 1px accent bar on the rail's border",
+   "groups": "short 20px hairlines, no labels",
+   "utilities": "pushed to the bottom after a gap of about 200px"
+  },
+  "blueprint": "An unlabelled rail of 50-60px carries the brand mark at the top and 15-18px outline icons on a 34-49px pitch; groups are split by 20px hairlines, utilities sit at the bottom. The rail sits on the page ground with a 1px edge, or is white with a faint 4px shadow on a grey ground. It saves about 180px of width against a labelled sidebar, so it suits products with few destinations and screens that need the width. Icons need tooltips and an accessible name.",
+  "phone": "The rail becomes a bottom bar with the same four or five icons, each with a short label under it."
+ },
+ "screens": [
+  {
+   "name": "overview",
+   "pattern": {
+    "id": "deploy-health-lead",
+    "name": "Current deploy and health lead",
+    "screen": "overview",
+    "kinds": [
+     "devtools"
+    ],
+    "basis": "house pattern from testing: built after a flat 24-hour chart filled a whole first screen and lost to a richer layout",
+    "blueprint": "Title row: the project's name as the h1 with a status pill (Healthy, Degraded) and a breadcrumb of team and product above it; repository, branch and a freshness stamp in a 14px grey line under it; the one primary action (Redeploy, or View logs when the latest deploy failed) on the right. Then a full-width card for what is live now: the production deployment's commit message at 16/600, its branch, short SHA in mono, author and age on the left, and three or four facts in divided cells on the right (domain, live since, build time, regions). Then the health strip: three or four KPIs in one divided container, each with its change in words and in the polarity colour when it moved the wrong way. Then a two-column row: the 24-hour chart at two-thirds (deploy markers as 1px ticks with their short SHA, the budget or SLO as a dashed reference line) and, at one-third, the block that explains the worst number (the spike and what reverted it, the status codes behind the error rate). Then the deployments table capped at 6 rows, a failed row carrying its failing step and a View logs action, a building row its elapsed time.",
+    "phone": "The live deployment card becomes a stack of label-value rows; the KPIs a 2x2 grid; the chart full width with its markers; the explanation under it; deployments as two-line rows with region and duration on line 2."
+   }
+  },
+  {
+   "name": "settings",
+   "pattern": {
+    "id": "settings-with-usage",
+    "name": "Settings with usage on top",
+    "screen": "settings",
+    "kinds": [
+     "devtools",
+     "smb-admin",
+     "support"
+    ],
+    "basis": "one settings page",
+    "blueprint": "Use this only when usage is the question of the view (a plan, billing or quota view), and show only numbers no section below repeats, at a size below the h1. When a settings screen also reports usage, put 3-4 usage numbers in one row on top (a 14px grey label, a 30px regular value, a 12px change pinned to the card bottom with its window in words, a grey dash where there is no comparison) and link out to the analytics screen ('View more') instead of drawing a chart. Below, the two-column settings rows. One dark primary per screen. Keep upsell to one surface: the studied settings page carried three nags (a top banner, a setup button and a gated strip) and was flagged for it.",
+    "phone": "The usage row becomes a 2-column grid of label-value pairs; settings rows stack."
+   }
+  }
+ ]
+}

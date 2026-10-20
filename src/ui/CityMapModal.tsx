@@ -583,7 +583,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
           }}
         >
           <label className="map-landmark-picker">
-            <span className="menu-section-label">SELECT SECTOR LANDMARK</span>
+            <span className="section-heading">Select sector landmark</span>
             <select
               className="cyber-select"
               value={selectedLandmark?.id ?? ''}
@@ -609,7 +609,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                 style={{
                   fontFamily: 'var(--font-display)',
                   fontSize: '1.25rem',
-                  fontWeight: 800,
+                  fontWeight: 600,
                   color: 'var(--text-primary)',
                   margin: 0,
                 }}
@@ -622,37 +622,37 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
                   gap: 10,
-                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  backgroundColor: 'var(--raised)',
                   padding: '10px 12px',
                   borderRadius: 4,
                   border: '1px solid var(--border-subtle)',
                 }}
               >
                 <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.64rem', color: 'var(--text-muted)' }}>
-                    DISTANCE
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Distance
                   </div>
                   <div
                     style={{
-                      fontFamily: 'var(--font-mono)',
                       fontSize: '1.05rem',
                       color: 'var(--neon-cyan)',
-                      fontWeight: 700,
+                      fontWeight: 600,
+                      fontVariantNumeric: 'tabular-nums',
                     }}
                   >
                     {selectedDist}m
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.64rem', color: 'var(--text-muted)' }}>
-                    EST. WALK
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Est. walk
                   </div>
                   <div
                     style={{
-                      fontFamily: 'var(--font-mono)',
                       fontSize: '1.05rem',
                       color: 'var(--neon-amber)',
-                      fontWeight: 700,
+                      fontWeight: 600,
+                      fontVariantNumeric: 'tabular-nums',
                     }}
                   >
                     ~{selectedEta}s
@@ -674,14 +674,14 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
 
               <div
                 style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.72rem',
+                  fontSize: '0.74rem',
                   color: 'var(--text-muted)',
                   borderTop: '1px solid var(--border-subtle)',
                   paddingTop: 8,
+                  fontVariantNumeric: 'tabular-nums',
                 }}
               >
-                GRID REF: [{selectedLandmark.position.x.toFixed(0)}, {selectedLandmark.position.z.toFixed(0)}]
+                Grid ref: [{selectedLandmark.position.x.toFixed(0)}, {selectedLandmark.position.z.toFixed(0)}]
               </div>
             </div>
           )}
@@ -691,11 +691,12 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
               <>
                 <button
                   onClick={() => handleSelectDestination(selectedLandmark)}
+                  aria-pressed={navState.activeLandmark?.id === selectedLandmark.id}
                   className="cyber-btn cyber-btn-primary"
                   style={{ padding: '10px 14px', fontSize: '0.76rem', width: '100%' }}
                 >
                   {navState.activeLandmark?.id === selectedLandmark.id
-                    ? '✓ WAYFINDING RIBBON ENGAGED'
+                    ? 'WAYFINDING RIBBON ENGAGED'
                     : 'PLOT WAYFINDING RIBBON'}
                 </button>
 

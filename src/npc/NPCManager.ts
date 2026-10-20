@@ -402,7 +402,7 @@ export class NPCManager {
       '#27272a',
       '#31102f',
     ];
-    const visorPalette = ['#38bdf8', '#f59e0b', '#10b981', '#f43f5e', '#a855f7'];
+    const visorPalette = ['#38bdf8', '#f59e0b', '#10b981', '#f43f5e', '#4a8ad6'];
     const accessories: PedestrianAccessory[] = [
       'HOLO_TABLET',
       'BRIEFCASE',
@@ -412,12 +412,12 @@ export class NPCManager {
     ];
     const routes = this.buildSidewalkRoutes(rng);
     const citizenObservations = [
-      'Pedestrian signals along the Central Plaza sync with the mag-shuttle loop—makes commuting between Helix Citadel and the Sanctuary effortless.',
-      'Have you walked through the Central Park Conservatory at dusk? The bioluminescent lotus lagoon and warm lantern arches are breathtaking.',
+      'Pedestrian signals along the Central Plaza sync with the mag-shuttle loop—makes commuting between Helix Citadel and the Sanctuary direct and predictable.',
+      'Have you walked through the Central Park Conservatory at dusk? The bioluminescent lotus lagoon and warm lantern arches are striking.',
       'The new diagrid exoskeletons on the downtown towers dampen high-altitude wind shear during electrical storms.',
       'If you need to cross the metropolis quickly, hail one of the Solaris Hover-Coupes or hop the autonomous Mag-Shuttle at the avenue shelters.',
       'Keep an eye on the avenue telemetry gantries—whenever a grid surge or weather front rolls in, the whole skyline shifts color temperature.',
-      'I just finished a shift at the North-East Exchange. Even at midnight, the sidewalk colonnades stay bustling.',
+      'I just finished a shift at the North-East Exchange. Even at midnight, the sidewalk colonnades stay active.',
     ];
 
     for (let i = 0; i < 36; i++) {

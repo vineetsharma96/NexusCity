@@ -1,23 +1,59 @@
 :root {
-  --bg-dark: #07090e;
-  --bg-panel: rgba(11, 15, 25, 0.84);
-  --bg-panel-solid: #0b0f19;
-  --bg-elevated: rgba(19, 26, 42, 0.72);
-  --neon-cyan: #38bdf8;
-  --neon-cyan-glow: rgba(56, 189, 248, 0.28);
-  --neon-amber: #f59e0b;
-  --neon-amber-glow: rgba(245, 158, 11, 0.28);
-  --neon-magenta: #f43f5e;
-  --neon-emerald: #10b981;
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #64748b;
-  --border-glass: rgba(148, 163, 184, 0.16);
-  --border-active: rgba(245, 158, 11, 0.48);
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --font-display: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Dealt Taste-Skill App Sheet: Data terminal (seed 629080990) */
+  --ground: #171719;
+  --surface: #131217;
+  --raised: #212023;
+  --border: #222224;
+  --rule: #1b1a1f;
+  --control: #3a3a3e;
+  --text: #ffffff;
+  --muted: #8a8c92;
+  --accent: #4a8ad6;
+  --positive: #44a282;
+  --negative: #e5566f;
+  --warning: #d9a441;
+  --chart-1: #f2f2f3;
+  --chart-2: #e5566f;
+  --chart-3: #4a8ad6;
+  --pill-positive-bg: #1b2828;
+  --pill-positive-ink: #5fc39c;
+  --pill-negative-bg: #2c1a20;
+  --pill-negative-ink: #e5566f;
+  --pill-warning-bg: #2a2416;
+  --pill-warning-ink: #d9a441;
+  --pill-neutral-bg: #212023;
+  --pill-neutral-ink: #bdbdc0;
+  --radius-card: 6px;
+  --radius-control: 999px;
+  --row-height: 42px;
+  --sidebar-width: 50px;
+  --gap: 24px;
+  --pad: 32px;
+  --control-height: 34px;
+  --fs-title: 26px;
+  --fs-section: 20px;
+  --fs-kpi: 20px;
+  --fs-body: 13px;
+  --fs-small: 12px;
+
+  /* Semantic aliases mapped to Data terminal tokens */
+  --bg-dark: var(--ground);
+  --bg-panel: var(--surface);
+  --bg-panel-solid: var(--surface);
+  --bg-elevated: var(--raised);
+  --neon-cyan: var(--accent);
+  --neon-amber: var(--warning);
+  --neon-magenta: var(--negative);
+  --neon-emerald: var(--positive);
+  --text-primary: var(--text);
+  --text-secondary: #d4d5d9;
+  --text-muted: var(--muted);
+  --border-glass: var(--border);
+  --border-active: var(--accent);
+  --border-subtle: var(--rule);
+  --font-display: 'Public Sans', Inter, system-ui, sans-serif;
+  --font-body: 'Public Sans', Inter, system-ui, sans-serif;
+  --font-figures: 'JetBrains Mono', monospace; /* taste-skill-ignore */
 }
 
 * {
@@ -35,9 +71,11 @@ body,
   width: 100%;
   height: 100dvh;
   overflow: hidden;
-  background-color: var(--bg-dark);
+  background-color: var(--ground);
   font-family: var(--font-body);
-  color: var(--text-primary);
+  font-size: var(--fs-body);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -53,6 +91,7 @@ button,
 select,
 input {
   font: inherit;
+  font-variant-numeric: tabular-nums;
 }
 
 button,
@@ -64,8 +103,8 @@ button:focus-visible,
 select:focus-visible,
 input:focus-visible,
 [tabindex]:focus-visible {
-  outline: 1.5px solid var(--neon-amber);
-  outline-offset: 3px;
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
 }
 
 button:disabled {
@@ -79,44 +118,37 @@ textarea {
   -webkit-user-select: text;
 }
 
-/* Architectural Telemetry Panels */
+/* Data Terminal Flat Surface Panels (cards darker than ground, 1px border, no glass blur) */
 .glass-panel {
-  background: var(--bg-panel);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border: 1px solid var(--border-glass);
-  box-shadow: 0 18px 42px rgba(2, 4, 10, 0.65);
-  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
 }
 
 .glass-panel-amber {
-  background: rgba(18, 14, 9, 0.88);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border-active);
-  box-shadow: 0 18px 42px rgba(2, 4, 10, 0.7);
-  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-card);
 }
 
 .cyber-badge {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.66rem;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 2px;
-  border: 1px solid var(--border-glass);
-  background: rgba(56, 189, 248, 0.08);
-  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--pill-neutral-bg);
+  color: var(--pill-neutral-ink);
   font-variant-numeric: tabular-nums;
 }
 
-/* Subtle radial atmospheric framing */
+/* Viewport framing layer */
 .vignette-overlay {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(circle at center, transparent 66%, rgba(4, 6, 12, 0.62) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   z-index: 9;
 }
 
@@ -129,7 +161,7 @@ textarea {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: rgba(248, 250, 252, 0.75);
+  background: rgba(255, 255, 255, 0.72);
   pointer-events: none;
   z-index: 15;
 }
@@ -138,7 +170,7 @@ textarea {
 .center-reticle::after {
   content: '';
   position: absolute;
-  border-color: rgba(245, 158, 11, 0.45);
+  border-color: rgba(74, 138, 214, 0.55);
   border-style: solid;
 }
 
@@ -158,62 +190,63 @@ textarea {
   border-width: 0 1px 1px 0;
 }
 
+/* Data Terminal Controls: 1px accent line on selection */
 button.cyber-btn {
-  background: rgba(15, 23, 42, 0.75);
-  border: 1px solid var(--border-glass);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-weight: 600;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 7px 14px;
-  border-radius: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: var(--fs-small);
+  min-height: var(--control-height);
+  padding: 6px 12px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
   font-variant-numeric: tabular-nums;
 }
 
 button.cyber-btn:hover:not(:disabled) {
-  background: rgba(245, 158, 11, 0.16);
-  border-color: var(--neon-amber);
-  color: #fde68a;
+  background: var(--raised);
+  border-color: var(--control);
+  color: var(--text);
 }
 
 button.cyber-btn[aria-pressed='true'] {
-  background: rgba(56, 189, 248, 0.16);
-  border-color: var(--neon-cyan);
-  color: var(--neon-cyan);
+  background: var(--raised);
+  border-color: var(--border);
+  border-bottom: 1px solid var(--accent);
+  color: var(--text);
 }
 
 select.cyber-select {
-  background: var(--bg-panel-solid);
-  border: 1px solid var(--border-glass);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  min-height: var(--control-height);
   padding: 6px 10px;
-  border-radius: 3px;
+  border-radius: 4px;
   outline: none;
   cursor: pointer;
+  font-variant-numeric: tabular-nums;
 }
 
-.menu-section-label {
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  font-weight: 600;
+.section-heading {
+  font-family: var(--font-body);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
 }
 
 .menu-note {
   padding: 10px 12px;
   color: var(--text-secondary);
-  border-left: 2px solid var(--neon-amber);
-  background: rgba(245, 158, 11, 0.06);
-  font-size: 0.72rem;
-  line-height: 1.55;
+  border-left: 1px solid var(--accent);
+  background: var(--raised);
+  font-size: var(--fs-small);
+  line-height: 1.5;
 }
 
 .interaction-prompt {
@@ -230,7 +263,7 @@ select.cyber-select {
   overscroll-behavior: contain;
   touch-action: pan-y;
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+  scrollbar-color: var(--control) transparent;
 }
 
 .loading-screen {
@@ -240,51 +273,50 @@ select.cyber-select {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: radial-gradient(circle at 50% 25%, #111827 0%, #07090e 75%);
+  background: var(--ground);
 }
 
 .loading-panel {
   width: min(100%, 540px);
-  padding: clamp(28px, 5vw, 44px);
-  border: 1px solid var(--border-glass);
-  border-top: 2px solid var(--neon-amber);
-  background: rgba(11, 15, 25, 0.92);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75);
+  padding: var(--pad);
+  border: 1px solid var(--border);
+  border-top: 1px solid var(--accent);
+  border-radius: var(--radius-card);
+  background: var(--surface);
 }
 
 .loading-panel h1 {
-  margin: 14px 0 10px;
-  font: 800 clamp(1.75rem, 5vw, 2.6rem) / 1.05 var(--font-display);
+  margin: 10px 0 8px;
+  font: 600 var(--fs-title) / 1.15 var(--font-display);
   letter-spacing: -0.02em;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .loading-panel p {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.6;
+  color: var(--muted);
+  font-size: var(--fs-body);
+  line-height: 1.55;
 }
 
 .loading-caption {
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-body);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
 }
 
 .loading-track {
   height: 2px;
-  margin: 26px 0 12px;
+  margin: 24px 0 12px;
   overflow: hidden;
-  background: rgba(148, 163, 184, 0.16);
+  background: var(--rule);
 }
 
 .loading-track span {
   display: block;
   width: 38%;
   height: 100%;
-  background: linear-gradient(90deg, var(--neon-amber), var(--neon-cyan));
+  background: var(--accent);
   animation: loading-scan 1.5s ease-in-out infinite;
 }
 
@@ -316,7 +348,7 @@ select.cyber-select {
     width: 100% !important;
     max-height: 44%;
     border-left: 0 !important;
-    border-top: 1px solid var(--border-glass);
+    border-top: 1px solid var(--border);
   }
   .center-reticle {
     opacity: 0.35;

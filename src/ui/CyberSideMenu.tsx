@@ -61,6 +61,59 @@ const WORLD_ENTITY_TOGGLES: GraphicsToggleItem[] = [
   { key: 'npcsEnabled', label: 'PEDESTRIAN CROWD', accent: 'var(--neon-emerald)' },
 ];
 
+interface GraphicsToggleGridProps {
+  items: GraphicsToggleItem[];
+  qualitySettings: QualitySettings;
+}
+
+const GraphicsToggleGrid: React.FC<GraphicsToggleGridProps> = React.memo(({ items, qualitySettings }) => (
+  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 6 }}>
+    {items.map((item) => {
+      const isOn = Boolean(qualitySettings[item.key]);
+      const accentColor = item.accent || 'var(--accent)';
+      return (
+        <button
+          key={String(item.key)}
+          type="button"
+          aria-pressed={isOn}
+          className="cyber-btn"
+          onClick={() =>
+            QualityManager.updateCustomSettings({
+              [item.key]: !isOn,
+            } as Partial<QualitySettings>)
+          }
+          style={{
+            padding: '7px 8px',
+            fontSize: '0.66rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 6,
+            textAlign: 'left',
+            color: isOn ? 'var(--text)' : 'var(--muted)',
+            borderColor: 'var(--border)',
+            borderBottom: isOn ? `1px solid ${accentColor}` : '1px solid var(--border)',
+            background: isOn ? 'var(--raised)' : 'var(--surface)',
+          }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {item.label}
+          </span>
+          <span
+            style={{
+              fontWeight: 600,
+              color: isOn ? accentColor : 'var(--muted)',
+              flexShrink: 0,
+            }}
+          >
+            {isOn ? 'ON' : 'OFF'}
+          </span>
+        </button>
+      );
+    })}
+  </div>
+));
+
 export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose }) => {
   const [section, setSection] = useState<Section>('WORLD');
   const [quality, setQuality] = useState<QualityPreset>(() => QualityManager.preset);
@@ -118,53 +171,6 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
     setAmbientChannels(AmbientAudioManager.getInstance().getChannelSettings());
   };
 
-  const renderToggleGrid = (items: GraphicsToggleItem[]) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 6 }}>
-      {items.map((item) => {
-        const isOn = Boolean(qualitySettings[item.key]);
-        const accentColor = item.accent || 'var(--neon-cyan)';
-        return (
-          <button
-            key={String(item.key)}
-            type="button"
-            aria-pressed={isOn}
-            className="cyber-btn"
-            onClick={() =>
-              QualityManager.updateCustomSettings({
-                [item.key]: !isOn,
-              } as Partial<QualitySettings>)
-            }
-            style={{
-              padding: '7px 8px',
-              fontSize: '0.6rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 6,
-              textAlign: 'left',
-              color: isOn ? 'var(--text-primary)' : 'var(--text-muted)',
-              borderColor: isOn ? accentColor : 'var(--border-subtle)',
-              background: isOn ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255, 255, 255, 0.02)',
-            }}
-          >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {item.label}
-            </span>
-            <span
-              style={{
-                fontWeight: 800,
-                color: isOn ? accentColor : 'var(--text-muted)',
-                flexShrink: 0,
-              }}
-            >
-              {isOn ? 'ON' : 'OFF'}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-
   return (
     <>
       <button
@@ -176,8 +182,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
           inset: 0,
           zIndex: 140,
           border: 0,
-          background: 'rgba(5, 7, 12, 0.52)',
-          backdropFilter: 'blur(4px)',
+          background: 'rgba(19, 18, 23, 0.68)',
           cursor: 'pointer',
         }}
       />
@@ -199,10 +204,9 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
           display: 'flex',
           flexDirection: 'column',
           gap: 16,
-          background: 'rgba(11, 15, 25, 0.96)',
-          borderRight: '1px solid var(--border-glass)',
-          boxShadow: '20px 0 56px rgba(0, 0, 0, 0.55)',
-          fontFamily: 'var(--font-mono)',
+          background: 'var(--surface)',
+          borderRight: '1px solid var(--border)',
+          fontFamily: 'var(--font-body)',
         }}
       >
         <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -210,23 +214,22 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
             <div
               id="world-menu-title"
               style={{
-                color: 'var(--text-primary)',
+                color: 'var(--text)',
                 fontFamily: 'var(--font-display)',
-                fontWeight: 800,
-                fontSize: '1.1rem',
-                letterSpacing: '0.08em',
+                fontWeight: 600,
+                fontSize: '1.15rem',
               }}
             >
               NEXUS CONSOLE
             </div>
-            <div style={{ marginTop: 3, color: 'var(--neon-amber)', fontSize: '0.66rem', letterSpacing: '0.16em' }}>
-              METROPOLITAN SIMULATION DIRECTIVES
+            <div style={{ marginTop: 3, color: 'var(--muted)', fontSize: '0.75rem' }}>
+              Metropolitan simulation directives
             </div>
           </div>
           <button
             className="cyber-btn"
             onClick={onClose}
-            style={{ padding: '5px 10px', color: 'var(--neon-magenta)', borderColor: 'var(--neon-magenta)' }}
+            style={{ padding: '5px 10px', color: 'var(--negative)', borderColor: 'var(--border)' }}
           >
             CLOSE
           </button>
@@ -241,10 +244,11 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
               onClick={() => setSection(item)}
               style={{
                 padding: '7px 4px',
-                fontSize: '0.64rem',
-                color: section === item ? '#07090e' : 'var(--text-secondary)',
-                background: section === item ? 'var(--neon-cyan)' : 'rgba(255, 255, 255, 0.03)',
-                borderColor: section === item ? 'var(--neon-cyan)' : 'var(--border-subtle)',
+                fontSize: '0.68rem',
+                color: section === item ? 'var(--text)' : 'var(--muted)',
+                background: section === item ? 'var(--raised)' : 'var(--surface)',
+                borderColor: 'var(--border)',
+                borderBottom: section === item ? '1px solid var(--accent)' : '1px solid var(--border)',
               }}
             >
               {item === 'VIEW' ? 'GRAPHICS' : item}
@@ -257,7 +261,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
             <section style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div className="menu-section-label" style={{ margin: 0 }}>
+                  <div className="section-heading" style={{ margin: 0 }}>
                     SOLAR PHASE & GLOBAL ILLUMINATION
                   </div>
                   <span style={{ fontSize: '0.62rem', color: 'var(--neon-amber)', fontWeight: 700 }}>
@@ -430,7 +434,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
                 </div>
               </div>
               <div>
-                <div className="menu-section-label">ATMOSPHERIC PRECIPITATION</div>
+                <div className="section-heading">ATMOSPHERIC PRECIPITATION</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
                   {(['CLEAR', 'RAIN', 'HEAVY_RAIN', 'FOG'] as WeatherType[]).map((w) => (
                     <button
@@ -447,7 +451,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
               </div>
 
               <div>
-                <div className="menu-section-label">GLOBAL WIND FORCE (ALL PARTICLES)</div>
+                <div className="section-heading">GLOBAL WIND FORCE (ALL PARTICLES)</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 8 }}>
                   {(
                     [
@@ -483,7 +487,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div className="menu-section-label" style={{ margin: 0 }}>
+                  <div className="section-heading" style={{ margin: 0 }}>
                     AMBIENT SOUNDSCAPE SYNTH
                   </div>
                   <span style={{ fontSize: '0.6rem', color: 'var(--neon-amber)', fontWeight: 700 }}>
@@ -591,7 +595,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
 
           {section === 'MISSIONS' && (
             <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="menu-section-label">CIVIC ASSIGNMENTS</div>
+              <div className="section-heading">CIVIC ASSIGNMENTS</div>
               {missionState.active && (
                 <div
                   style={{
@@ -641,7 +645,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
                   )}
                 </article>
               ))}
-              <div className="menu-section-label">FACTION STANDING</div>
+              <div className="section-heading">FACTION STANDING</div>
               {Object.entries(missionState.factionRelations).map(([faction, value]) => (
                 <div key={faction} className="menu-note" style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>{faction.replaceAll('_', ' ')}</span>
@@ -657,7 +661,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
           {section === 'VIEW' && (
             <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <div className="menu-section-label">RENDERING PROFILE</div>
+                <div className="section-heading">RENDERING PROFILE</div>
                 <select
                   aria-label="Graphics profile"
                   className="cyber-select"
@@ -776,26 +780,26 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
 
               {/* 1. Post-Processing & Optics Toggles */}
               <div>
-                <div className="menu-section-label">POST-PROCESSING & OPTICS TOGGLES</div>
-                {renderToggleGrid(POST_OPTICS_TOGGLES)}
+                <div className="section-heading">POST-PROCESSING & OPTICS TOGGLES</div>
+                <GraphicsToggleGrid items={POST_OPTICS_TOGGLES} qualitySettings={qualitySettings} />
               </div>
 
               {/* 2. Lighting & Atmosphere Toggles */}
               <div>
-                <div className="menu-section-label">LIGHTING & ATMOSPHERE TOGGLES</div>
-                {renderToggleGrid(LIGHTING_ATMOS_TOGGLES)}
+                <div className="section-heading">LIGHTING & ATMOSPHERE TOGGLES</div>
+                <GraphicsToggleGrid items={LIGHTING_ATMOS_TOGGLES} qualitySettings={qualitySettings} />
               </div>
 
               {/* 3. Surfaces & Weather FX Toggles */}
               <div>
-                <div className="menu-section-label">SURFACES & WEATHER FX TOGGLES</div>
-                {renderToggleGrid(SURFACE_WEATHER_TOGGLES)}
+                <div className="section-heading">SURFACES & WEATHER FX TOGGLES</div>
+                <GraphicsToggleGrid items={SURFACE_WEATHER_TOGGLES} qualitySettings={qualitySettings} />
               </div>
 
               {/* 4. World Detail & Entities Toggles */}
               <div>
-                <div className="menu-section-label">WORLD DETAIL & ENTITY TOGGLES</div>
-                {renderToggleGrid(WORLD_ENTITY_TOGGLES)}
+                <div className="section-heading">WORLD DETAIL & ENTITY TOGGLES</div>
+                <GraphicsToggleGrid items={WORLD_ENTITY_TOGGLES} qualitySettings={qualitySettings} />
               </div>
 
               {/* 5. Multi-Tier & Budget Sliders */}
@@ -810,7 +814,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
                   borderRadius: 4,
                 }}
               >
-                <div className="menu-section-label">CUSTOM GRAPHICS PARAMETERS</div>
+                <div className="section-heading">CUSTOM GRAPHICS PARAMETERS</div>
 
                 {/* Reflection Quality Selector */}
                 <div>
@@ -1059,7 +1063,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
 
           {section === 'VEHICLE' && (
             <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="menu-section-label">HOVER-COUPE CALIBRATION</div>
+              <div className="section-heading">HOVER-COUPE CALIBRATION</div>
               <div className="menu-note">
                 {vehicleState.mode === 'RIDING'
                   ? 'HOVER-COUPE TELEMETRY LINKED.'
@@ -1088,7 +1092,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
 
           {section === 'CODEX' && (
             <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div className="menu-section-label">ARCHITECTURAL CODEX</div>
+              <div className="section-heading">ARCHITECTURAL CODEX</div>
               {Object.values(landmarks).length === 0 ? (
                 <div className="menu-note">Explore the city to log architectural landmarks into your codex.</div>
               ) : (
@@ -1106,7 +1110,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
 
           {section === 'HISTORY' && (
             <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div className="menu-section-label">TELEMETRY LOG</div>
+              <div className="section-heading">TELEMETRY LOG</div>
               {history.length === 0 ? (
                 <div className="menu-note">No civic events recorded in this session yet.</div>
               ) : (
@@ -1124,7 +1128,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
 
           {section === 'CONTROLS' && (
             <section style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.8 }}>
-              <div className="menu-section-label">OPERATIVE CONTROLS</div>
+              <div className="section-heading">OPERATIVE CONTROLS</div>
               <p>
                 <strong>WASD / Arrows</strong> Traverse · <strong>SHIFT</strong> Sprint
               </p>

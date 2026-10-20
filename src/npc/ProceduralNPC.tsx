@@ -10,7 +10,7 @@ interface ProceduralNPCProps {
   isNearby: boolean;
 }
 
-export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) => {
+export const ProceduralNPC: React.FC<ProceduralNPCProps> = React.memo(({ npc, isNearby }) => {
   const rootRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
   const leftLegRef = useRef<THREE.Group>(null);
@@ -288,4 +288,4 @@ export const ProceduralNPC: React.FC<ProceduralNPCProps> = ({ npc, isNearby }) =
       </group>
     </group>
   );
-};
+});

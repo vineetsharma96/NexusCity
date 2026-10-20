@@ -62,7 +62,7 @@ export class NavigationSystem {
       category: 'TOWER',
       position: new THREE.Vector3(38, 0.2, -38),
       description: 'Northeast twin architectural towers linked by high-altitude skybridges.',
-      color: '#a855f7',
+      color: '#4a8ad6',
     },
     {
       id: 'north_crossway',

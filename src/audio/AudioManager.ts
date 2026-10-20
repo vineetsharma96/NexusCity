@@ -44,11 +44,11 @@ export class AudioManager {
   private bindUserGestureUnlock(): void {
     if (this.unlockListenersBound || typeof window === 'undefined' || !window.addEventListener) return;
     this.unlockListenersBound = true;
-    const unlock = () => {
+    const activateAudio = () => {
       this.ensureContext();
     };
-    window.addEventListener('pointerdown', unlock, { passive: true });
-    window.addEventListener('keydown', unlock, { passive: true });
+    window.addEventListener('pointerdown', activateAudio, { passive: true });
+    window.addEventListener('keydown', activateAudio, { passive: true });
   }
 
   public ensureContext(): void {
