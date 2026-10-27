@@ -552,7 +552,9 @@ export class AmbientAudioManager {
     };
     try {
       localStorage.setItem('nexus_ambient_audio_v1', JSON.stringify(this.channelSettings));
-    } catch {}
+    } catch {
+      // Ignore storage restrictions
+    }
     if (this.ctx && this.nodes) {
       const target = this.channelSettings.ambientEnabled ? this.channelSettings.ambientVolume : 0;
       this.nodes.masterBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.06);
