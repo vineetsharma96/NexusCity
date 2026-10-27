@@ -81,6 +81,7 @@ export class NPCManager {
   private static instance: NPCManager;
   public readonly npcs: NPCDef[] = [];
   private renderedIds = new Set<string>();
+  private activeAmbientNpcs: NPCDef[] = [];
   private readonly respawnCheckInterval = 1.5;
   private respawnTimer = 0;
 
@@ -538,9 +539,13 @@ export class NPCManager {
       interactions.unregister(id);
     }
     this.renderedIds.clear();
+    this.activeAmbientNpcs = [];
 
     for (const npc of rendered) {
       this.renderedIds.add(npc.id);
+      if (!npc.isStoryNpc) {
+        this.activeAmbientNpcs.push(npc);
+      }
       interactions.register({
         id: npc.id,
         name: npc.name,
@@ -608,12 +613,12 @@ export class NPCManager {
     const baseSectorX = Math.round(playerPos.x / gridSnap) * gridSnap;
     const baseSectorZ = Math.round(playerPos.z / gridSnap) * gridSnap;
 
-    for (let i = 0; i < this.npcs.length; i++) {
-      const npc = this.npcs[i];
-      if (npc.isStoryNpc || !this.renderedIds.has(npc.id)) continue;
+    for (let i = 0; i < this.activeAmbientNpcs.length; i++) {
+      const npc = this.activeAmbientNpcs[i];
 
-      const distToPlayer = Math.hypot(npc.position.x - playerPos.x, npc.position.z - playerPos.z);
-      if (distToPlayer > 175) {
+      const dx = npc.position.x - playerPos.x;
+      const dz = npc.position.z - playerPos.z;
+      if (dx * dx + dz * dz > 30625) { // 175 squared
         // Relocate this citizen onto a sidewalk loop around the player's current sector
         const sideOffset = (i % 2 === 0 ? 1 : -1) * 9.8;
         const blockHalf = 24;
