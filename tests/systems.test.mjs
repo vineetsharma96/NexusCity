@@ -26,6 +26,7 @@ async function systems() {
       export { WeatherSystem } from './src/world/WeatherSystem';
       export { WindSystem } from './src/world/WindSystem';
       export { TrafficLightSystem } from './src/city/TrafficLightSystem';
+      export { TransitScheduleSystem } from './src/vehicle/TransitScheduleSystem';
     ` },
     bundle: true, platform: 'node', format: 'esm', write: false,
   });
@@ -322,5 +323,33 @@ test('pedestrian AI spawns moving sidewalk citizens, obeys crosswalk walk signal
   assert.equal(sampleCitizen.isWalking, false);
 });
 
+test('transit schedule system calculates correct next stop and arrival times', async () => {
+  const { TransitScheduleSystem } = await systems();
+  const schedule = TransitScheduleSystem.getInstance();
+  const stops = schedule.getStops();
 
+  // Test elapsedSeconds = 0 (start of cycle)
+  const stop0 = schedule.getNextStop(0);
+  assert.equal(stop0.stop.id, stops[0].id);
+  assert.equal(stop0.arrivalInSeconds, 6); // Math.ceil(5.5) = 6
 
+  // Test elapsedSeconds = 5 (almost end of first leg)
+  const stop5 = schedule.getNextStop(5);
+  assert.equal(stop5.stop.id, stops[0].id);
+  assert.equal(stop5.arrivalInSeconds, 1);
+
+  // Test elapsedSeconds = 6 (start of second leg)
+  const stop6 = schedule.getNextStop(6);
+  assert.equal(stop6.stop.id, stops[1].id);
+  assert.equal(stop6.arrivalInSeconds, 5); // Math.ceil(11 - 6) = 5
+
+  // Test elapsedSeconds = 44 (wrap around to start)
+  const stop44 = schedule.getNextStop(44);
+  assert.equal(stop44.stop.id, stops[0].id);
+  assert.equal(stop44.arrivalInSeconds, 6);
+
+  // Test elapsedSeconds = -1 (wrap around backwards)
+  const stopNeg1 = schedule.getNextStop(-1);
+  assert.equal(stopNeg1.stop.id, stops[7].id);
+  assert.equal(stopNeg1.arrivalInSeconds, 1); // slot = 43, leg = 5.5, idx = 7. ceil(44 - 43) = 1
+});
