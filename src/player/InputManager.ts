@@ -251,7 +251,7 @@ class InputManagerImpl {
     try {
       const p = this.domElement.requestPointerLock() as unknown as Promise<void>;
       if (p && typeof p.catch === 'function') p.catch(() => {});
-    } catch {}
+    } catch { /* Ignore pointer lock errors, as they are non-critical and often caused by missing user interaction. */ }
   };
 
   public setUIBlocking(blocked: boolean): void {
