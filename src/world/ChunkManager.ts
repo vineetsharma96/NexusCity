@@ -153,18 +153,38 @@ export class ChunkManager {
       const highLimit = 185 * lodScale;
       const medLimit = 380 * lodScale;
       const lowLimit = Math.min(quality.drawDistance * 1.15, (isUltra ? 960 : 780) * lodScale);
+
+      const highLimitSq = highLimit * highLimit;
+      const medLimitSq = medLimit * medLimit;
+      const lowLimitSq = lowLimit * lowLimit;
+
       const candidates: ChunkInfo[] = [];
+      const bboxRange = Math.ceil(lowLimit / this.CHUNK_SIZE) + 1;
+      const minCx = cx - bboxRange;
+      const maxCx = cx + bboxRange;
+      const minCz = cz - bboxRange;
+      const maxCz = cz + bboxRange;
 
       for (const chunk of this.chunks.values()) {
-        const dist = Math.hypot(chunk.center.x - playerPos.x, chunk.center.z - playerPos.z);
-        chunk.distanceToPlayer = dist;
-        if (dist <= highLimit) {
+        if (chunk.cx < minCx || chunk.cx > maxCx || chunk.cz < minCz || chunk.cz > maxCz) {
+          chunk.lod = 'UNLOADED';
+          continue;
+        }
+
+        const dx = chunk.center.x - playerPos.x;
+        const dz = chunk.center.z - playerPos.z;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq <= highLimitSq) {
+          chunk.distanceToPlayer = Math.sqrt(distSq);
           chunk.lod = 'HIGH';
           candidates.push(chunk);
-        } else if (dist <= medLimit) {
+        } else if (distSq <= medLimitSq) {
+          chunk.distanceToPlayer = Math.sqrt(distSq);
           chunk.lod = 'MEDIUM';
           candidates.push(chunk);
-        } else if (dist <= lowLimit) {
+        } else if (distSq <= lowLimitSq) {
+          chunk.distanceToPlayer = Math.sqrt(distSq);
           chunk.lod = 'LOW';
           candidates.push(chunk);
         } else {
