@@ -84,6 +84,9 @@ export class NPCManager {
   private readonly respawnCheckInterval = 1.5;
   private respawnTimer = 0;
 
+  private gridHeads = new Int32Array(4096);
+  private gridNext = new Int32Array(4096);
+
   private constructor() {
     this.initNPCs();
   }
@@ -651,6 +654,22 @@ export class NPCManager {
 
     const renderedList = this.npcs.filter((n) => this.renderedIds.has(n.id));
 
+    if (this.gridNext.length < renderedList.length) {
+      this.gridNext = new Int32Array(renderedList.length * 2);
+    }
+    this.gridHeads.fill(-1);
+
+    const INV_CELL = 1.0 / 1.4;
+    for (let i = 0; i < renderedList.length; i++) {
+      const npc = renderedList[i];
+      const col = Math.floor(npc.position.x * INV_CELL);
+      const row = Math.floor(npc.position.z * INV_CELL);
+      const hash = ((col * 73856093) ^ (row * 19349663)) & (4096 - 1);
+
+      this.gridNext[i] = this.gridHeads[hash];
+      this.gridHeads[hash] = i;
+    }
+
     for (let i = 0; i < renderedList.length; i++) {
       const npc = renderedList[i];
       const distToPlayer = npc.position.distanceTo(playerPos);
@@ -737,18 +756,30 @@ export class NPCManager {
       // Apply personal-space separation from other nearby pedestrians
       let sepX = 0;
       let sepZ = 0;
-      for (let j = 0; j < renderedList.length; j++) {
-        if (i === j) continue;
-        const other = renderedList[j];
-        const ox = npc.position.x - other.position.x;
-        const oz = npc.position.z - other.position.z;
-        const dSq = ox * ox + oz * oz;
-        if (dSq > 0.0001 && dSq < 1.96) {
-          // Within 1.4m personal space radius
-          const d = Math.sqrt(dSq);
-          const strength = (1.4 - d) / 1.4;
-          sepX += (ox / d) * strength * 0.55;
-          sepZ += (oz / d) * strength * 0.55;
+
+      const col = Math.floor(npc.position.x * INV_CELL);
+      const row = Math.floor(npc.position.z * INV_CELL);
+
+      for (let dRow = -1; dRow <= 1; dRow++) {
+        for (let dCol = -1; dCol <= 1; dCol++) {
+          const hash = (((col + dCol) * 73856093) ^ ((row + dRow) * 19349663)) & (4096 - 1);
+          let otherIdx = this.gridHeads[hash];
+          while (otherIdx !== -1) {
+            if (i !== otherIdx) {
+              const other = renderedList[otherIdx];
+              const ox = npc.position.x - other.position.x;
+              const oz = npc.position.z - other.position.z;
+              const dSq = ox * ox + oz * oz;
+              if (dSq > 0.0001 && dSq < 1.96) {
+                // Within 1.4m personal space radius
+                const d = Math.sqrt(dSq);
+                const strength = (1.4 - d) / 1.4;
+                sepX += (ox / d) * strength * 0.55;
+                sepZ += (oz / d) * strength * 0.55;
+              }
+            }
+            otherIdx = this.gridNext[otherIdx];
+          }
         }
       }
 
