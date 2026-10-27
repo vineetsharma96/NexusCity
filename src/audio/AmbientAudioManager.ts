@@ -130,8 +130,19 @@ export class AmbientAudioManager {
       let b0 = 0;
       let b1 = 0;
       let b2 = 0;
+
+      const randomValues = new Uint32Array(length);
+      const MAX_ELEMENTS = 16384; // 65536 bytes / 4 bytes per element
+      for (let offset = 0; offset < length; offset += MAX_ELEMENTS) {
+        const end = Math.min(offset + MAX_ELEMENTS, length);
+        const chunk = randomValues.subarray(offset, end);
+        crypto.getRandomValues(chunk);
+      }
+
       for (let i = 0; i < length; i++) {
-        const white = Math.random() * 2 - 1;
+        // Normalize Uint32 (0 to 4294967295) to [0, 1), then scale to [-1, 1]
+        const randomVal = randomValues[i] / (0xffffffff + 1);
+        const white = randomVal * 2 - 1;
         b0 = 0.99765 * b0 + white * 0.099046;
         b1 = 0.963 * b1 + white * 0.2965164;
         b2 = 0.57 * b2 + white * 1.0526913;
