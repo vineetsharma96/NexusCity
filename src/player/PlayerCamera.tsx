@@ -95,12 +95,38 @@ export const PlayerCamera: React.FC<PlayerCameraProps> = ({ targetPos, onYawChan
     const boxes = KinematicCollisionSolver.getAllBoxes();
     ray.set(currentFocus.current, rayDir);
 
+    let minX = Math.min(currentFocus.current.x, currentFocus.current.x + rayDir.x * actualDist);
+    let maxX = Math.max(currentFocus.current.x, currentFocus.current.x + rayDir.x * actualDist);
+    let minY = Math.min(currentFocus.current.y, currentFocus.current.y + rayDir.y * actualDist);
+    let maxY = Math.max(currentFocus.current.y, currentFocus.current.y + rayDir.y * actualDist);
+    let minZ = Math.min(currentFocus.current.z, currentFocus.current.z + rayDir.z * actualDist);
+    let maxZ = Math.max(currentFocus.current.z, currentFocus.current.z + rayDir.z * actualDist);
+
     for (const b of boxes) {
+      if (
+        maxX < b.min.x ||
+        minX > b.max.x ||
+        maxY < b.min.y ||
+        minY > b.max.y ||
+        maxZ < b.min.z ||
+        minZ > b.max.z
+      ) {
+        continue;
+      }
+
       boxTarget.min.copy(b.min);
       boxTarget.max.copy(b.max);
       if (ray.intersectBox(boxTarget, hitPoint)) {
         const d = currentFocus.current.distanceTo(hitPoint);
-        if (d < actualDist) actualDist = Math.max(0.2, d - 0.25);
+        if (d < actualDist) {
+          actualDist = Math.max(0.2, d - 0.25);
+          minX = Math.min(currentFocus.current.x, currentFocus.current.x + rayDir.x * actualDist);
+          maxX = Math.max(currentFocus.current.x, currentFocus.current.x + rayDir.x * actualDist);
+          minY = Math.min(currentFocus.current.y, currentFocus.current.y + rayDir.y * actualDist);
+          maxY = Math.max(currentFocus.current.y, currentFocus.current.y + rayDir.y * actualDist);
+          minZ = Math.min(currentFocus.current.z, currentFocus.current.z + rayDir.z * actualDist);
+          maxZ = Math.max(currentFocus.current.z, currentFocus.current.z + rayDir.z * actualDist);
+        }
       }
     }
 
