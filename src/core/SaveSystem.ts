@@ -214,7 +214,7 @@ export class SaveSystem {
               ? parsed.interactedNodes.filter((item: unknown): item is string => typeof item === 'string')
               : [],
             cityHistory: Array.isArray(parsed.cityHistory)
-              ? parsed.cityHistory.filter((item: any) => item && typeof item.id === 'string' && typeof item.title === 'string')
+              ? parsed.cityHistory.filter((item: Partial<CityHistoryEntry>) => item && typeof item.id === 'string' && typeof item.title === 'string')
               : [],
             terminalObjectives: sanitizeTerminalObjectives(parsed.terminalObjectives),
             districtReputation: sanitizeNumberMap(parsed.districtReputation),
