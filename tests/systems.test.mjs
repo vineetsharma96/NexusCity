@@ -26,6 +26,7 @@ async function systems() {
       export { WeatherSystem } from './src/world/WeatherSystem';
       export { WindSystem } from './src/world/WindSystem';
       export { TrafficLightSystem } from './src/city/TrafficLightSystem';
+      export { EmergencyAlertSystem } from './src/world/EmergencyAlertSystem';
     ` },
     bundle: true, platform: 'node', format: 'esm', write: false,
   });
@@ -45,6 +46,65 @@ test('save load rejects malformed coordinates and collection fields, caps upgrad
   assert.deepEqual(save.getData().missionStates, {});
   assert.doesNotThrow(() => save.updateDistrict('NEURAL_DISTRICT'));
   assert.doesNotThrow(() => save.recordHistory('test', 'TEST', 'Valid history after recovery'));
+});
+
+test('emergency alert system transitions through expected states based on weather and time', async () => {
+  const { EmergencyAlertSystem, WeatherSystem, TimeSystem, data } = await systems();
+  const alert = EmergencyAlertSystem.getInstance();
+  const weather = WeatherSystem.getInstance();
+  const time = TimeSystem.getInstance();
+
+  // Reset state
+  alert.update(weather.getState(), time.getState());
+
+  // 1. Default (NOMINAL)
+  weather.setWeather('CLEAR');
+  time.setTime(12.0); // Noon
+  alert.update(weather.getState(), time.getState());
+  assert.equal(alert.getState().active, false);
+  assert.equal(alert.getState().level, 'NOMINAL');
+  assert.equal(alert.getState().kind, 'NONE');
+
+  // 2. Storm Advisory (CRITICAL, STORM)
+  weather.setWeather('HEAVY_RAIN');
+  alert.update(weather.getState(), time.getState());
+  assert.equal(alert.getState().active, true);
+  assert.equal(alert.getState().level, 'CRITICAL');
+  assert.equal(alert.getState().kind, 'STORM');
+
+  // Also check lightning trigger
+  weather.setWeather('CLEAR');
+  alert.update({ ...weather.getState(), lightningFlash: 0.3 }, time.getState());
+  assert.equal(alert.getState().active, true);
+  assert.equal(alert.getState().level, 'CRITICAL');
+  assert.equal(alert.getState().kind, 'STORM');
+
+  // 3. Visibility Advisory (ADVISORY, VISIBILITY)
+  weather.setWeather('FOG');
+  alert.update({ ...weather.getState(), lightningFlash: 0.0 }, time.getState());
+  assert.equal(alert.getState().active, true);
+  assert.equal(alert.getState().level, 'ADVISORY');
+  assert.equal(alert.getState().kind, 'VISIBILITY');
+
+  // 4. Curfew Advisory (ADVISORY, CURFEW)
+  weather.setWeather('CLEAR');
+  time.setTime(23.5); // Night time (>= 23 or < 4)
+  // Ensure night state triggers properly by using dummy WeatherState
+  alert.update(weather.getState(), { ...time.getState(), isNight: true, hours: 23 });
+  assert.equal(alert.getState().active, true);
+  assert.equal(alert.getState().level, 'ADVISORY');
+  assert.equal(alert.getState().kind, 'CURFEW');
+
+  alert.update(weather.getState(), { ...time.getState(), isNight: true, hours: 2 });
+  assert.equal(alert.getState().active, true);
+  assert.equal(alert.getState().level, 'ADVISORY');
+  assert.equal(alert.getState().kind, 'CURFEW');
+
+  // 5. Back to NOMINAL
+  alert.update(weather.getState(), { ...time.getState(), isNight: false, hours: 12 });
+  assert.equal(alert.getState().active, false);
+  assert.equal(alert.getState().level, 'NOMINAL');
+  assert.equal(alert.getState().kind, 'NONE');
 });
 
 test('distance statistics use loaded location and resume after long teleports', async () => {
