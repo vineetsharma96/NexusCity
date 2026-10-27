@@ -166,7 +166,9 @@ export class AudioManager {
     }
     try {
       localStorage.setItem('nexus_audio_muted', String(muted));
-    } catch {}
+    } catch {
+      // Ignore storage quota errors
+    }
     this.notify();
   }
 
@@ -182,7 +184,9 @@ export class AudioManager {
     }
     try {
       localStorage.setItem('nexus_audio_volume', String(clamped));
-    } catch {}
+    } catch {
+      // Ignore storage quota errors
+    }
     this.notify();
   }
 
