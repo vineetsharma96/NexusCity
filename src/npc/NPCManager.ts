@@ -535,29 +535,41 @@ export class NPCManager {
 
   public setRenderedNpcs(rendered: NPCDef[]): void {
     const interactions = InteractionSystem.getInstance();
+    const newRenderedIds = new Set(rendered.map((npc) => npc.id));
+
+    // Unregister NPCs that are no longer rendered
     for (const id of this.renderedIds) {
-      interactions.unregister(id);
+      if (!newRenderedIds.has(id)) {
+        interactions.unregister(id);
+      }
     }
-    this.renderedIds.clear();
+
     this.activeAmbientNpcs = [];
 
     for (const npc of rendered) {
-      this.renderedIds.add(npc.id);
+      const isNew = !this.renderedIds.has(npc.id);
+
       if (!npc.isStoryNpc) {
         this.activeAmbientNpcs.push(npc);
       }
-      interactions.register({
-        id: npc.id,
-        name: npc.name,
-        actionText: `SPEAK WITH ${npc.name.toUpperCase()}`,
-        position: npc.position,
-        radius: 3.0,
-        onInteract: () => {
-          MissionSystem.getInstance().recordInteraction();
-          DialogueSystem.getInstance().startDialogue(npc.id);
-        },
-      });
+
+      // Only register new NPCs that weren't already rendered
+      if (isNew) {
+        interactions.register({
+          id: npc.id,
+          name: npc.name,
+          actionText: `SPEAK WITH ${npc.name.toUpperCase()}`,
+          position: npc.position,
+          radius: 3.0,
+          onInteract: () => {
+            MissionSystem.getInstance().recordInteraction();
+            DialogueSystem.getInstance().startDialogue(npc.id);
+          },
+        });
+      }
     }
+
+    this.renderedIds = newRenderedIds;
   }
 
   public getRenderedNpcs(): NPCDef[] {
