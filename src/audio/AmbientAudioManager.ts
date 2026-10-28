@@ -292,7 +292,10 @@ export class AmbientAudioManager {
         : phase === 'DAY'
         ? 0.8
         : 0.28;
-    const weatherTrafficDamp = weatherState.currentWeather === 'HEAVY_RAIN' ? 0.78 : 1.0;
+    const weatherTrafficDamp =
+      weatherState.currentWeather === 'HEAVY_RAIN' || weatherState.currentWeather === 'BLIZZARD'
+        ? 0.78
+        : 1.0;
     const trafficLevel = this.channelSettings.trafficEnabled
       ? clamp01(phaseTrafficBase * weatherTrafficDamp * Math.max(0.2, Math.min(1.3, trafficSpeedMultiplier)))
       : 0;
@@ -302,11 +305,11 @@ export class AmbientAudioManager {
       ? clamp01(trafficLevel * (0.18 + wetness * 0.82))
       : 0;
 
-    // Wind level scales with gust factor, rain storm intensity, and nocturnal canyon drafts
+    // Wind level scales with gust factor, rain/blizzard storm intensity, and nocturnal canyon drafts
     const baseWind =
-      weatherState.currentWeather === 'HEAVY_RAIN'
+      weatherState.currentWeather === 'HEAVY_RAIN' || weatherState.currentWeather === 'BLIZZARD'
         ? 0.88
-        : weatherState.currentWeather === 'RAIN'
+        : weatherState.currentWeather === 'RAIN' || weatherState.currentWeather === 'SNOW'
         ? 0.58
         : weatherState.currentWeather === 'FOG'
         ? 0.42
@@ -315,7 +318,8 @@ export class AmbientAudioManager {
       ? clamp01(baseWind * (0.7 + (gust - 0.8) * 0.35))
       : 0;
 
-    const rainLevel = this.channelSettings.rainEnabled ? clamp01(rain) : 0;
+    const snow = clamp01(weatherState.snowIntensity ?? 0);
+    const rainLevel = this.channelSettings.rainEnabled ? clamp01(Math.max(rain, snow * 0.45)) : 0;
 
     // Nocturnal cyberpunk grid drone swells at night and in dense fog
     const nocturneDroneLevel = this.channelSettings.droneEnabled
@@ -324,7 +328,7 @@ export class AmbientAudioManager {
 
     // Daylight civic air harmonic layer rises during clear/calm sunrise & daytime
     const daylightAirLevel = this.channelSettings.droneEnabled
-      ? clamp01((1 - nightFactor) * (1 - rain * 0.75) * 0.65)
+      ? clamp01((1 - nightFactor) * (1 - Math.max(rain, snow) * 0.75) * 0.65)
       : 0;
 
     const windCutoffHz = Math.round(220 + windLevel * 540 + (gust - 0.8) * 140);
@@ -333,8 +337,12 @@ export class AmbientAudioManager {
     let profileName = 'METROPOLITAN AMBIENCE';
     if (weatherState.currentWeather === 'HEAVY_RAIN') {
       profileName = nightFactor > 0.5 ? 'NOCTURNE MONSOON TEMPEST' : 'DAYLIGHT STORM FRONT';
+    } else if (weatherState.currentWeather === 'BLIZZARD') {
+      profileName = nightFactor > 0.5 ? 'NOCTURNE ARCTIC BLIZZARD' : 'CRYOGENIC SQUALL FRONT';
     } else if (weatherState.currentWeather === 'RAIN') {
       profileName = nightFactor > 0.5 ? 'NEON RAINFALL & WET ASPHALT' : 'URBAN RAINSHOWER';
+    } else if (weatherState.currentWeather === 'SNOW') {
+      profileName = nightFactor > 0.5 ? 'NOCTURNE CRYSTAL SNOWFALL' : 'WINTER METROPOLITAN DRIFT';
     } else if (weatherState.currentWeather === 'FOG') {
       profileName = nightFactor > 0.5 ? 'ABYSSAL FOG RESONANCE' : 'MIST CANYON DRIFT';
     } else if (phase === 'SUNRISE') {

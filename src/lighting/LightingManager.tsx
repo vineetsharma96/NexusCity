@@ -64,9 +64,48 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const [cityEvent, setCityEvent] = useState<LivingCityEventState>(() => LivingCityEventSystem.getInstance().getState());
 
   useEffect(() => {
-    const uTime = TimeSystem.getInstance().subscribe(setTimeState);
-    const uWea = WeatherSystem.getInstance().subscribe(setWeatherState);
-    const uChunk = ChunkManager.getInstance().subscribe((s) => setDistrict(s.currentDistrict));
+    let lastSubPhase = TimeSystem.getInstance().getState().subPhaseLabel;
+    let lastLightsOn = TimeSystem.getInstance().getState().streetLightsOn;
+    let lastStarBucket = Math.round(TimeSystem.getInstance().getState().starOpacity * 20);
+    const uTime = TimeSystem.getInstance().subscribe((s) => {
+      const starBucket = Math.round(s.starOpacity * 20);
+      if (
+        s.subPhaseLabel !== lastSubPhase ||
+        s.streetLightsOn !== lastLightsOn ||
+        starBucket !== lastStarBucket
+      ) {
+        lastSubPhase = s.subPhaseLabel;
+        lastLightsOn = s.streetLightsOn;
+        lastStarBucket = starBucket;
+        setTimeState(s);
+      }
+    });
+
+    let lastWeatherType = WeatherSystem.getInstance().getState().currentWeather;
+    let lastPrecipBucket = Math.round(WeatherSystem.getInstance().getState().precipitationIntensity * 10);
+    let lastFlashBucket = Math.round(WeatherSystem.getInstance().getState().lightningFlash * 5);
+    const uWea = WeatherSystem.getInstance().subscribe((w) => {
+      const precipBucket = Math.round(w.precipitationIntensity * 10);
+      const flashBucket = Math.round(w.lightningFlash * 5);
+      if (
+        w.currentWeather !== lastWeatherType ||
+        precipBucket !== lastPrecipBucket ||
+        flashBucket !== lastFlashBucket
+      ) {
+        lastWeatherType = w.currentWeather;
+        lastPrecipBucket = precipBucket;
+        lastFlashBucket = flashBucket;
+        setWeatherState({ ...w });
+      }
+    });
+
+    let lastDistrictType = ChunkManager.getInstance().getState().currentDistrict.type;
+    const uChunk = ChunkManager.getInstance().subscribe((s) => {
+      if (s.currentDistrict.type !== lastDistrictType) {
+        lastDistrictType = s.currentDistrict.type;
+        setDistrict(s.currentDistrict);
+      }
+    });
     const uEvt = LivingCityEventSystem.getInstance().subscribe(setCityEvent);
     return () => {
       uTime();
@@ -80,6 +119,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   useEffect(() => {
     TimeSystem.getInstance().syncEnvironment({
       rainIntensity: weatherState.rainIntensity,
+      snowIntensity: weatherState.snowIntensity,
       wetnessFactor: weatherState.wetnessFactor,
       fogDensityMultiplier: weatherState.fogDensityMultiplier,
       lightningFlash: weatherState.lightningFlash,
@@ -89,6 +129,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     });
   }, [
     weatherState.rainIntensity,
+    weatherState.snowIntensity,
     weatherState.wetnessFactor,
     weatherState.fogDensityMultiplier,
     weatherState.lightningFlash,
@@ -242,6 +283,9 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   useFrame(({ gl: renderer, clock }, delta) => {
     const dt = Math.min(delta, 0.05);
     const dampAlpha = 1 - Math.exp(-7.5 * dt);
+    const liveTime = TimeSystem.getInstance().getState();
+    const liveWeather = WeatherSystem.getInstance().getState();
+    const liveFogStrength = THREE.MathUtils.clamp((liveWeather.fogDensityMultiplier - 1.0) / 4.2, 0, 1);
 
     // 1. Refresh reflection cubemap when solar sub-phase or weather bucket shifts
     const envData = (
@@ -258,18 +302,18 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         };
       }
     ).__envUpdate;
-    const phaseKey = `${timeState.subPhaseLabel}:${weatherState.currentWeather}`;
+    const phaseKey = `${liveTime.subPhaseLabel}:${liveWeather.currentWeather}`;
     if (envData && (!envData.rendered || lastEnvPhaseKey.current !== phaseKey)) {
-      envData.envSkyUniforms.uTop.value.set(timeState.skyTopColor);
-      envData.envSkyUniforms.uMid.value.set(timeState.skyMidColor);
-      envData.envSkyUniforms.uBot.value.set(timeState.skyHorizonColor);
+      envData.envSkyUniforms.uTop.value.set(liveTime.skyTopColor);
+      envData.envSkyUniforms.uMid.value.set(liveTime.skyMidColor);
+      envData.envSkyUniforms.uBot.value.set(liveTime.skyHorizonColor);
       envData.cubeCam.update(renderer, envData.envScene);
       envData.rendered = true;
       lastEnvPhaseKey.current = phaseKey;
     }
 
     // 2. Smoothly interpolate Sun / Moon Orbital Direction & Key Light Position
-    const activeDir = timeState.isNight ? timeState.moonDirection : timeState.sunDirection;
+    const activeDir = liveTime.isNight ? liveTime.moonDirection : liveTime.sunDirection;
     smoothLightDir.current.lerp(activeDir, dampAlpha).normalize();
     const pPos = playerPosRef?.current || fallbackPos.current;
 
@@ -288,13 +332,13 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         dirLightRef.current.target.updateMatrixWorld();
       }
 
-      const keyColorTarget = weatherState.lightningFlash > 0.2 ? '#e0f2fe' : timeState.sunColor;
+      const keyColorTarget = liveWeather.lightningFlash > 0.2 ? '#e0f2fe' : liveTime.sunColor;
       smoothKeyColor.current.lerp(scratchColor.current.set(keyColorTarget), dampAlpha);
       dirLightRef.current.color.copy(smoothKeyColor.current);
 
       const targetKeyIntensity =
-        (timeState.isNight ? timeState.moonIntensity : timeState.sunIntensity) +
-        weatherState.lightningFlash * 4.5;
+        (liveTime.isNight ? liveTime.moonIntensity : liveTime.sunIntensity) +
+        liveWeather.lightningFlash * 4.5;
       dirLightRef.current.intensity = THREE.MathUtils.lerp(
         dirLightRef.current.intensity,
         targetKeyIntensity,
@@ -309,49 +353,49 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         48,
         pPos.z - smoothLightDir.current.z * 85
       );
-      smoothBounceColor.current.lerp(scratchColor.current.set(timeState.giBounceColor), dampAlpha);
+      smoothBounceColor.current.lerp(scratchColor.current.set(liveTime.giBounceColor), dampAlpha);
       bounceLightRef.current.color.copy(smoothBounceColor.current);
       bounceLightRef.current.intensity = THREE.MathUtils.lerp(
         bounceLightRef.current.intensity,
-        timeState.giBounceIntensity,
+        liveTime.giBounceIntensity,
         dampAlpha
       );
     }
 
     // 4. Smoothly interpolate Hemisphere GI & Ambient Illumination
     if (hemiLightRef.current) {
-      smoothHemiSky.current.lerp(scratchColor.current.set(timeState.hemiSkyColor), dampAlpha);
-      smoothHemiGround.current.lerp(scratchColor.current.set(timeState.hemiGroundColor), dampAlpha);
+      smoothHemiSky.current.lerp(scratchColor.current.set(liveTime.hemiSkyColor), dampAlpha);
+      smoothHemiGround.current.lerp(scratchColor.current.set(liveTime.hemiGroundColor), dampAlpha);
       hemiLightRef.current.color.copy(smoothHemiSky.current);
       hemiLightRef.current.groundColor.copy(smoothHemiGround.current);
       hemiLightRef.current.intensity = THREE.MathUtils.lerp(
         hemiLightRef.current.intensity,
-        timeState.hemiIntensity,
+        liveTime.hemiIntensity,
         dampAlpha
       );
     }
 
     if (ambientLightRef.current) {
-      smoothAmbientColor.current.lerp(scratchColor.current.set(timeState.ambientColor), dampAlpha);
+      smoothAmbientColor.current.lerp(scratchColor.current.set(liveTime.ambientColor), dampAlpha);
       ambientLightRef.current.color.copy(smoothAmbientColor.current);
       ambientLightRef.current.intensity = THREE.MathUtils.lerp(
         ambientLightRef.current.intensity,
-        timeState.ambientIntensity,
+        liveTime.ambientIntensity,
         dampAlpha
       );
     }
 
     // 5. Smoothly interpolate 3-Stop Sky Dome Palette & Solar Mie Scatter Glow
-    skyUniforms.topColor.value.lerp(scratchColor.current.set(timeState.skyTopColor), dampAlpha);
-    skyUniforms.midColor.value.lerp(scratchColor.current.set(timeState.skyMidColor), dampAlpha);
-    skyUniforms.bottomColor.value.lerp(scratchColor.current.set(timeState.skyHorizonColor), dampAlpha);
-    skyUniforms.solarGlowColor.value.lerp(scratchColor.current.set(timeState.solarGlowColor), dampAlpha);
+    skyUniforms.topColor.value.lerp(scratchColor.current.set(liveTime.skyTopColor), dampAlpha);
+    skyUniforms.midColor.value.lerp(scratchColor.current.set(liveTime.skyMidColor), dampAlpha);
+    skyUniforms.bottomColor.value.lerp(scratchColor.current.set(liveTime.skyHorizonColor), dampAlpha);
+    skyUniforms.solarGlowColor.value.lerp(scratchColor.current.set(liveTime.solarGlowColor), dampAlpha);
     skyUniforms.sunDir.value.copy(smoothLightDir.current);
 
     const targetGlowStrength =
-      (timeState.isNight ? 0.25 : 0.42 + timeState.goldenHourFactor * 0.48) *
-      (1.0 - weatherState.rainIntensity * 0.7) *
-      (1.0 - fogStrength * 0.85);
+      (liveTime.isNight ? 0.25 : 0.42 + liveTime.goldenHourFactor * 0.48) *
+      (1.0 - liveWeather.rainIntensity * 0.7) *
+      (1.0 - liveFogStrength * 0.85);
     skyUniforms.solarGlowStrength.value = THREE.MathUtils.lerp(
       skyUniforms.solarGlowStrength.value,
       targetGlowStrength,
@@ -359,19 +403,21 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     );
 
     // 6. Smoothly interpolate Fog & Background Color/Distances
-    smoothFogColor.current.lerp(scratchColor.current.set(fogColorTarget), dampAlpha);
+    const liveFogHex =
+      liveWeather.lightningFlash > 0.1 ? '#e0f2fe' : liveTime.fogColor;
+    smoothFogColor.current.lerp(scratchColor.current.set(liveFogHex), dampAlpha);
     if (bgColorRef.current) {
       bgColorRef.current.copy(smoothFogColor.current);
     }
     if (fogRef.current) {
       fogRef.current.color.copy(smoothFogColor.current);
       const clearFar =
-        Math.min(timeState.fogFar * (isUltra ? 1.35 : 1.0), quality.drawDistance) * district.fogDensity;
+        Math.min(liveTime.fogFar * (isUltra ? 1.35 : 1.0), quality.drawDistance) * district.fogDensity;
       const targetFar = quality.fogEnabled
-        ? THREE.MathUtils.lerp(Math.max(180, clearFar), 52, fogStrength)
+        ? THREE.MathUtils.lerp(Math.max(180, clearFar), 52, liveFogStrength)
         : 12000;
       const targetNear = quality.fogEnabled
-        ? THREE.MathUtils.lerp(timeState.fogNear, 3.0, fogStrength)
+        ? THREE.MathUtils.lerp(liveTime.fogNear, 3.0, liveFogStrength)
         : 9000;
       fogRef.current.near = THREE.MathUtils.lerp(fogRef.current.near, targetNear, dampAlpha);
       fogRef.current.far = THREE.MathUtils.lerp(fogRef.current.far, targetFar, dampAlpha);
@@ -379,13 +425,13 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
 
     // 7. Update wind-driven volumetric street fog banks around the player
     if (fogBankMeshRef.current && fogBankMatRef.current) {
-      const showBanks = quality.fogEnabled && fogStrength > 0.08;
+      const showBanks = quality.fogEnabled && liveFogStrength > 0.08;
       fogBankMeshRef.current.visible = showBanks;
       if (showBanks) {
         const t = clock.getElapsedTime();
         const wind = windSystem.getVector();
         fogBankMatRef.current.color.copy(smoothFogColor.current);
-        fogBankMatRef.current.opacity = fogStrength * 0.16;
+        fogBankMatRef.current.opacity = liveFogStrength * 0.16;
 
         for (let i = 0; i < FOG_PUFF_COUNT; i++) {
           const p = fogPuffs[i];
@@ -561,10 +607,10 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         shadow-bias={-0.0004}
       />
 
-      {quality.nightLightsEnabled && quality.maxLights >= 4 && (
+      {quality.nightLightsEnabled && quality.maxLights >= 4 && timeState.streetLightsOn && (
         <pointLight
           position={[0, 16, 0]}
-          intensity={(0.65 + timeState.nightFactor * 2.6) * cityEvent.lightScale}
+          intensity={(0.5 + timeState.nightFactor * 2.5) * cityEvent.lightScale}
           distance={105}
           color={district.primaryLightColor}
           decay={2}

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
 import { WeatherSystem } from '../world/WeatherSystem';
+import { TimeSystem } from '../world/TimeSystem';
 import { WindSystem } from '../world/WindSystem';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 
@@ -62,9 +63,23 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
   const lilyGroupRef = useRef<THREE.Group>(null);
   const windSystem = WindSystem.getInstance();
   const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
+  const [streetLightsOn, setStreetLightsOn] = useState<boolean>(
+    () => TimeSystem.getInstance().getState().streetLightsOn
+  );
 
   useEffect(() => {
-    return QualityManager.subscribe(setQuality);
+    let lastLightsOn = TimeSystem.getInstance().getState().streetLightsOn;
+    const uQual = QualityManager.subscribe(setQuality);
+    const uTime = TimeSystem.getInstance().subscribe((s) => {
+      if (s.streetLightsOn !== lastLightsOn) {
+        lastLightsOn = s.streetLightsOn;
+        setStreetLightsOn(s.streetLightsOn);
+      }
+    });
+    return () => {
+      uQual();
+      uTime();
+    };
   }, []);
 
   // Perimeter walls with 8m-wide entry portals on all 4 cardinal directions
@@ -466,18 +481,25 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
               [-24, 4],
               [24, 4],
             ] as const
-          ).map(([lx, lz], idx) => (
-            <group key={`lantern-${idx}`} position={[lx, 0.24, lz]}>
-              <mesh position={[0, 0.65, 0]}>
-                <cylinderGeometry args={[0.12, 0.16, 1.3, 8]} />
-                <meshStandardMaterial color="#0f172a" metalness={0.88} roughness={0.2} />
-              </mesh>
-              <mesh position={[0, 1.38, 0]}>
-                <sphereGeometry args={[0.2, 8, 8]} />
-                <meshBasicMaterial color={idx % 3 === 0 ? '#10b981' : idx % 3 === 1 ? '#f59e0b' : '#38bdf8'} />
-              </mesh>
-            </group>
-          ))}
+          ).map(([lx, lz], idx) => {
+            const lanternActive = streetLightsOn && quality.nightLightsEnabled;
+            return (
+              <group key={`lantern-${idx}`} position={[lx, 0.24, lz]}>
+                <mesh position={[0, 0.65, 0]}>
+                  <cylinderGeometry args={[0.12, 0.16, 1.3, 8]} />
+                  <meshStandardMaterial color="#0f172a" metalness={0.88} roughness={0.2} />
+                </mesh>
+                <mesh position={[0, 1.38, 0]}>
+                  <sphereGeometry args={[0.2, 8, 8]} />
+                  {lanternActive ? (
+                    <meshBasicMaterial color={idx % 3 === 0 ? '#10b981' : idx % 3 === 1 ? '#f59e0b' : '#38bdf8'} />
+                  ) : (
+                    <meshStandardMaterial color="#1e293b" metalness={0.65} roughness={0.4} />
+                  )}
+                </mesh>
+              </group>
+            );
+          })}
 
           {(
             [
@@ -486,22 +508,29 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
               [-18, 10, (3 * Math.PI) / 4],
               [18, 10, -(3 * Math.PI) / 4],
             ] as const
-          ).map(([bx, bz, rot], idx) => (
-            <group key={`park-bench-${idx}`} position={[bx, 0.25, bz]} rotation={[0, rot, 0]}>
-              <mesh position={[0, 0.32, 0]} castShadow={quality.shadows}>
-                <boxGeometry args={[2.6, 0.14, 0.7]} />
-                <meshStandardMaterial color="#1e293b" metalness={0.75} roughness={0.32} />
-              </mesh>
-              <mesh position={[0, 0.62, -0.28]}>
-                <boxGeometry args={[2.6, 0.45, 0.1]} />
-                <meshStandardMaterial color="#0f172a" metalness={0.85} roughness={0.25} />
-              </mesh>
-              <mesh position={[0, 0.12, 0]}>
-                <boxGeometry args={[2.2, 0.04, 0.45]} />
-                <meshBasicMaterial color={idx % 2 === 0 ? '#10b981' : '#f59e0b'} />
-              </mesh>
-            </group>
-          ))}
+          ).map(([bx, bz, rot], idx) => {
+            const benchLightActive = streetLightsOn && quality.nightLightsEnabled;
+            return (
+              <group key={`park-bench-${idx}`} position={[bx, 0.25, bz]} rotation={[0, rot, 0]}>
+                <mesh position={[0, 0.32, 0]} castShadow={quality.shadows}>
+                  <boxGeometry args={[2.6, 0.14, 0.7]} />
+                  <meshStandardMaterial color="#1e293b" metalness={0.75} roughness={0.32} />
+                </mesh>
+                <mesh position={[0, 0.62, -0.28]}>
+                  <boxGeometry args={[2.6, 0.45, 0.1]} />
+                  <meshStandardMaterial color="#0f172a" metalness={0.85} roughness={0.25} />
+                </mesh>
+                <mesh position={[0, 0.12, 0]}>
+                  <boxGeometry args={[2.2, 0.04, 0.45]} />
+                  {benchLightActive ? (
+                    <meshBasicMaterial color={idx % 2 === 0 ? '#10b981' : '#f59e0b'} />
+                  ) : (
+                    <meshStandardMaterial color="#1e293b" metalness={0.65} roughness={0.4} />
+                  )}
+                </mesh>
+              </group>
+            );
+          })}
         </>
       )}
 

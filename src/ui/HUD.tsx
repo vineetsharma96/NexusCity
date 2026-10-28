@@ -15,6 +15,9 @@ import { CinematicManager, CinematicPhase } from '../cinematics/CinematicManager
 import { VehicleInteractionSystem, VehicleState } from '../vehicle/VehicleInteractionSystem';
 import { DialogueSystem } from '../npc/DialogueSystem';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
+import { WeatherState, WeatherSystem, WeatherType } from '../world/WeatherSystem';
+
+const WEATHER_CYCLE_ORDER: WeatherType[] = ['CLEAR', 'RAIN', 'HEAVY_RAIN', 'SNOW', 'BLIZZARD', 'FOG'];
 
 export interface HUDProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -33,6 +36,9 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     textures: 0,
   });
   const [timeState, setTimeState] = useState<TimeLightingState>(() => TimeSystem.getInstance().getState());
+  const [weatherState, setWeatherState] = useState<WeatherState>(() => ({
+    ...WeatherSystem.getInstance().getState(),
+  }));
   const [inputState, setInputState] = useState<InputState>(InputManager.getState());
   const [activeInteractable, setActiveInteractable] = useState<InteractiveEntity | null>(null);
   const [chunkState, setChunkState] = useState<ChunkManagerState>(() => ChunkManager.getInstance().getState());
@@ -76,6 +82,14 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
         setTimeState(t);
       }
     });
+    let lastWeatherKey = '';
+    const unsubWeather = WeatherSystem.getInstance().subscribe((w) => {
+      const key = `${w.currentWeather}:${Math.round(w.precipitationIntensity * 25)}:${Math.round(w.temperatureC)}`;
+      if (key !== lastWeatherKey) {
+        lastWeatherKey = key;
+        setWeatherState({ ...w });
+      }
+    });
 
     let prevMapKey = InputManager.getState().map;
     let prevInteract = false;
@@ -102,7 +116,14 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     window.addEventListener('touchstart', handleUserGesture, { once: true });
 
     const unsubInteract = InteractionSystem.getInstance().subscribe(setActiveInteractable);
-    const unsubChunks = ChunkManager.getInstance().subscribe(setChunkState);
+    let lastChunkHudKey = '';
+    const unsubChunks = ChunkManager.getInstance().subscribe((cs) => {
+      const key = `${cs.currentDistrict.type}:${cs.activeChunkCount}:${cs.recentDiscovery?.type ?? ''}`;
+      if (key !== lastChunkHudKey) {
+        lastChunkHudKey = key;
+        setChunkState(cs);
+      }
+    });
     const unsubCinematic = CinematicManager.getInstance().subscribe((s) => setCinematicPhase(s.phase));
     const unsubVehicle = VehicleInteractionSystem.getInstance().subscribe(setVehicleState);
     const unsubNavigation = NavigationSystem.getInstance().subscribe((s) => setIsMapOpen(s.isMapOpen));
@@ -115,6 +136,7 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       window.removeEventListener('touchstart', handleUserGesture);
       unsubPerf();
       unsubTime();
+      unsubWeather();
       unsubInput();
       unsubInteract();
       unsubChunks();
@@ -181,7 +203,7 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
 
   return (
     <>
-      {/* Top-Left Architectural Sector Readout */}
+      {/* Top-Left Architectural Sector & Weather Telemetry Readout */}
       {!overlayOpen && (
         <div
           className="glass-panel"
@@ -194,8 +216,9 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
             borderLeft: `3px solid ${chunkState.currentDistrict.accentColor}`,
             display: 'flex',
             flexDirection: 'column',
-            gap: 2,
-            pointerEvents: 'none',
+            gap: 3,
+            pointerEvents: 'auto',
+            minWidth: 230,
           }}
         >
           <div
@@ -205,9 +228,10 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
               letterSpacing: '0.16em',
               color: 'var(--neon-amber)',
               fontWeight: 600,
+              fontVariantNumeric: 'tabular-nums',
             }}
           >
-            {timeState.timeString} // {timeState.phase}
+            {timeState.timeString} · {timeState.phase} · {Math.round(weatherState.temperatureC)}°C
           </div>
           <div
             style={{
@@ -220,6 +244,83 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
           >
             {chunkState.currentDistrict.name}
           </div>
+
+          {/* Live Weather & Precipitation Telemetry Row */}
+          <div
+            style={{
+              marginTop: 2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.64rem',
+              color: 'var(--text-secondary)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            <span>
+              ATMO:{' '}
+              <strong
+                style={{
+                  color:
+                    weatherState.snowIntensity > 0.02
+                      ? '#e0f2fe'
+                      : weatherState.rainIntensity > 0.02
+                      ? 'var(--neon-cyan)'
+                      : 'var(--text-primary)',
+                }}
+              >
+                {weatherState.currentWeather.replace('_', ' ')}
+              </strong>
+              {weatherState.precipitationIntensity > 0.01 &&
+                ` · ${Math.round(weatherState.precipitationIntensity * 100)}% (${weatherState.precipitationRateMmHr} MM/H)`}
+            </span>
+            <button
+              type="button"
+              className="cyber-btn"
+              title="Cycle atmospheric weather state"
+              onClick={() => {
+                const idx = WEATHER_CYCLE_ORDER.indexOf(weatherState.currentWeather);
+                const next = WEATHER_CYCLE_ORDER[(idx + 1) % WEATHER_CYCLE_ORDER.length];
+                WeatherSystem.getInstance().setWeather(next);
+              }}
+              style={{
+                padding: '2px 6px',
+                fontSize: '0.58rem',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              CYCLE ATMO
+            </button>
+          </div>
+
+          {/* Live Precipitation Intensity Bar */}
+          <div
+            aria-hidden="true"
+            style={{
+              marginTop: 2,
+              width: '100%',
+              height: 3,
+              background: 'rgba(255, 255, 255, 0.08)',
+              borderRadius: 2,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(weatherState.precipitationIntensity * 100)}%`,
+                height: '100%',
+                background:
+                  weatherState.snowIntensity > weatherState.rainIntensity
+                    ? '#e0f2fe'
+                    : 'var(--neon-cyan)',
+                transition: 'width 150ms cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            />
+          </div>
+
           {vehicleState.mode !== 'ON_FOOT' && (
             <div
               style={{

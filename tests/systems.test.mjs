@@ -176,6 +176,28 @@ test('weather auto-cycle advances from the manually selected weather', async () 
   assert.equal(weather.getState().currentWeather, 'FOG');
 });
 
+test('weather system tracks snow and rain intensity and syncs telemetry metrics', async () => {
+  const { WeatherSystem } = await systems();
+  const weather = WeatherSystem.getInstance();
+  weather.setWeather('SNOW');
+  const snowState = weather.getState();
+  assert.equal(snowState.currentWeather, 'SNOW');
+  assert.ok(snowState.snowIntensity > 0.5);
+  assert.equal(snowState.rainIntensity, 0);
+  assert.ok(snowState.precipitationIntensity > 0.5);
+  assert.ok(snowState.temperatureC < 0);
+
+  weather.setPrecipitationIntensity(0.9, 'SNOW');
+  assert.equal(weather.getState().currentWeather, 'BLIZZARD');
+  assert.equal(weather.getState().snowIntensity, 0.9);
+  assert.ok(weather.getState().precipitationRateMmHr > 15);
+
+  weather.setPrecipitationIntensity(0.45, 'RAIN');
+  assert.equal(weather.getState().currentWeather, 'RAIN');
+  assert.equal(weather.getState().rainIntensity, 0.45);
+  assert.equal(weather.getState().snowIntensity, 0);
+  weather.setWeather('CLEAR');
+});
 
 test('navigation and discovery share targets and initialize route distance immediately', async () => {
   const { NavigationSystem, DiscoverySystem } = await systems();
@@ -219,7 +241,11 @@ test('ambient audio manager adapts traffic, wind, rain, and drone levels to time
   const time = TimeSystem.getInstance();
   const weather = WeatherSystem.getInstance();
 
-  // Clear daytime (13:00): high traffic hum, zero rain, low nocturnal drone
+  // Clear daytime (13:00): high traffic hum, zero rain, low nocturnal drone, street lights OFF
+  time.setTime(13.0);
+  assert.equal(time.getState().streetLightsOn, false);
+  time.setTime(21.5);
+  assert.equal(time.getState().streetLightsOn, true);
   time.setTime(13.0);
   weather.setWeather('CLEAR');
   const dayClear = audio.updateAmbientSoundscape(0.1, time.getState(), weather.getState());

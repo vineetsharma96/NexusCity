@@ -43,7 +43,7 @@ export const WorldManager: React.FC<WorldManagerProps> = ({ playerPosRef }) => {
     weatherSystem.current.update(delta);
     const wState = weatherSystem.current.getState();
     const tState = timeSystem.current.getState();
-    windSystem.current.update(delta, wState.rainIntensity);
+    windSystem.current.update(delta, wState.precipitationIntensity);
     const windState = windSystem.current.getState();
     emergencySystem.current.update(wState, tState);
     eventSystem.current.update(delta);

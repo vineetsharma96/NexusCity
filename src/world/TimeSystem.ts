@@ -4,6 +4,7 @@ export type DayPhase = 'NIGHT' | 'SUNRISE' | 'DAY' | 'SUNSET';
 
 export interface EnvironmentSyncInput {
   rainIntensity?: number;
+  snowIntensity?: number;
   wetnessFactor?: number;
   fogDensityMultiplier?: number;
   lightningFlash?: number;
@@ -19,6 +20,7 @@ export interface TimeLightingState {
   phase: DayPhase;
   subPhaseLabel: string;
   isNight: boolean;
+  streetLightsOn: boolean;
   nightFactor: number; // 0.0 (day) to 1.0 (deep night)
   goldenHourFactor: number; // 0.0 to 1.0 (peaks at sunrise/sunset)
   sunDirection: THREE.Vector3;
@@ -521,6 +523,8 @@ export class TimeSystem {
 
     // 5. Synchronize Sky Palette & Global Illumination with Current Environment Settings
     const rain = THREE.MathUtils.clamp(this.envSync.rainIntensity ?? 0, 0, 1);
+    const snow = THREE.MathUtils.clamp(this.envSync.snowIntensity ?? 0, 0, 1);
+    const precip = Math.max(rain, snow);
     const fogMult = Math.max(1, this.envSync.fogDensityMultiplier ?? 1);
     const fogStrength = THREE.MathUtils.clamp((fogMult - 1.0) / 4.2, 0, 1);
     const lightScale = THREE.MathUtils.clamp(this.envSync.cityEventLightScale ?? 1, 0.15, 2.0);
@@ -544,6 +548,20 @@ export class TimeSystem {
       sunIntensity *= 1.0 - rain * 0.38;
       // Wet surfaces scatter more ambient/hemisphere fill
       hemiIntensity *= 1.0 + rain * 0.12;
+    }
+
+    // Cryogenic snowfall & blizzard synchronization
+    if (snow > 0.02) {
+      const snowSkyTone = nightFactor > 0.5 ? '#111c33' : '#64748b';
+      const snowHorizonTone = nightFactor > 0.5 ? '#1e293b' : '#cbd5e1';
+      skyTopColor = this.lerpHex(skyTopColor, snowSkyTone, snow * 0.58);
+      skyMidColor = this.lerpHex(skyMidColor, snowSkyTone, snow * 0.64);
+      skyHorizonColor = this.lerpHex(skyHorizonColor, snowHorizonTone, snow * 0.62);
+      fogColor = this.lerpHex(fogColor, snowHorizonTone, snow * 0.52);
+      cloudColor = this.lerpHex(cloudColor, '#e2e8f0', snow * 0.65);
+      hemiGroundColor = this.lerpHex(hemiGroundColor, '#334155', snow * 0.48);
+      sunIntensity *= 1.0 - snow * 0.32;
+      hemiIntensity *= 1.0 + snow * 0.22;
     }
 
     // Dense fog synchronization
@@ -571,6 +589,7 @@ export class TimeSystem {
       phase,
       subPhaseLabel,
       isNight: nightFactor > 0.55,
+      streetLightsOn: nightFactor >= 0.25,
       nightFactor,
       goldenHourFactor,
       sunDirection,
@@ -595,7 +614,7 @@ export class TimeSystem {
       fogColor,
       fogNear,
       fogFar,
-      starOpacity: starOpacity * (1.0 - rain * 0.85) * (1.0 - fogStrength * 0.9),
+      starOpacity: starOpacity * (1.0 - precip * 0.85) * (1.0 - fogStrength * 0.9),
       colorTemperatureK,
       exposureTarget,
       timeScaleMultiplier: this.timeScaleMultiplier,

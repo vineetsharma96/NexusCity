@@ -5,10 +5,18 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    host: true,
+    strictPort: true,
+    host: '0.0.0.0',
+    allowedHosts: true,
+    hmr: false,
+  },
+  preview: {
+    port: 3000,
+    host: '0.0.0.0',
+    allowedHosts: true,
   },
   build: {
     target: 'esnext',
     chunkSizeWarningLimit: 1500,
-  }
+  },
 });

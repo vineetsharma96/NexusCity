@@ -47,6 +47,13 @@ export class EmergencyAlertSystem {
         kind: 'STORM',
         message: 'ELECTRICAL STORM ADVISORY // ELEVATED WIND SHEAR',
       };
+    } else if (weather.currentWeather === 'BLIZZARD') {
+      next = {
+        active: true,
+        level: 'CRITICAL',
+        kind: 'STORM',
+        message: 'ARCTIC BLIZZARD ADVISORY // CRYOGENIC SQUALLS',
+      };
     } else if (weather.currentWeather === 'FOG') {
       next = {
         active: true,

@@ -15,7 +15,11 @@ import { NavigationSystem } from '../map/NavigationSystem';
 import { LivingCityEventState, LivingCityEventSystem } from '../world/LivingCityEventSystem';
 
 const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
-const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
+const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 10);
+const SHARED_DRONE_SPHERE = new THREE.SphereGeometry(0.14, 8, 8);
+const SHARED_DRONE_CONE = new THREE.ConeGeometry(2.2, 8.2, 10, 1, true);
+const SHARED_STEAM_PLANE = new THREE.PlaneGeometry(1.8, 1.1);
+const SHARED_STEAM_CONE = new THREE.ConeGeometry(0.85, 2.4, 8, 1, true);
 const PLAZA_NORMAL_SCALE = new THREE.Vector2(0.4, 0.4);
 const AVE_NORMAL_SCALE = new THREE.Vector2(0.65, 0.65);
 const AVE_ULTRA_NORMAL_SCALE = new THREE.Vector2(0.85, 0.85);
@@ -58,23 +62,30 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const astrolabeRef = useRef<THREE.Group>(null);
   const droneGroupRef = useRef<THREE.Group>(null);
 
-  const [timeState, setTimeState] = useState<TimeLightingState>(() => TimeSystem.getInstance().getState());
-  const [weatherState, setWeatherState] = useState<WeatherState>(() => WeatherSystem.getInstance().getState());
+  const [streetLightsOn, setStreetLightsOn] = useState<boolean>(
+    () => TimeSystem.getInstance().getState().streetLightsOn
+  );
+  const [wetnessBucket, setWetnessBucket] = useState<number>(
+    () => Math.round(WeatherSystem.getInstance().getState().wetnessFactor * 10) / 10
+  );
   const [cityEvent, setCityEvent] = useState<LivingCityEventState>(() => LivingCityEventSystem.getInstance().getState());
   const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
   useEffect(() => {
-    let lastNight = -1;
-    let lastWet = -1;
+    let lastLightsOn = TimeSystem.getInstance().getState().streetLightsOn;
+    let lastWetBucket = Math.round(WeatherSystem.getInstance().getState().wetnessFactor * 10) / 10;
     const uTime = TimeSystem.getInstance().subscribe((s) => {
-      if (Math.abs(s.nightFactor - lastNight) < 0.03) return;
-      lastNight = s.nightFactor;
-      setTimeState(s);
+      if (s.streetLightsOn !== lastLightsOn) {
+        lastLightsOn = s.streetLightsOn;
+        setStreetLightsOn(s.streetLightsOn);
+      }
     });
     const uWea = WeatherSystem.getInstance().subscribe((s) => {
-      if (Math.abs(s.wetnessFactor - lastWet) < 0.02) return;
-      lastWet = s.wetnessFactor;
-      setWeatherState(s);
+      const bucket = Math.round(s.wetnessFactor * 10) / 10;
+      if (bucket !== lastWetBucket) {
+        lastWetBucket = bucket;
+        setWetnessBucket(bucket);
+      }
     });
     const uEvt = LivingCityEventSystem.getInstance().subscribe(setCityEvent);
     const uQual = QualityManager.subscribe(setQuality);
@@ -127,12 +138,13 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
   const isUltra = quality.name === 'ULTRA';
   const showFineMolding = quality.LODQuality !== 'LOW';
-  const effectiveWetness = quality.wetReflectionsEnabled ? weatherState.wetnessFactor : 0;
+  const effectiveWetness = quality.wetReflectionsEnabled ? wetnessBucket : 0;
   const roadRoughness = THREE.MathUtils.lerp(isUltra ? 0.28 : 0.38, 0.06, effectiveWetness);
   const roadMetalness = THREE.MathUtils.lerp(0.68, 0.92, effectiveWetness);
   const sidewalkRoughness = THREE.MathUtils.lerp(0.52, 0.16, effectiveWetness);
   const sidewalkMetalness = THREE.MathUtils.lerp(0.36, 0.68, effectiveWetness);
   const gridIsOut = cityEvent.type === 'POWER_OUTAGE' && cityEvent.phase === 'ACTIVE';
+  const streetLightsActive = !gridIsOut && streetLightsOn && quality.nightLightsEnabled;
 
   const asphaltTex = useMemo(() => RoadGenerator.getAsphaltTexture(), []);
   const sidewalkTex = useMemo(() => RoadGenerator.getSidewalkTexture(), []);
@@ -154,7 +166,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
     []
   );
 
-  const lightStep = quality.maxLights >= 30 ? 3 : quality.maxLights >= 18 ? 5 : 8;
+  const lightStep = quality.maxLights >= 30 ? 4 : quality.maxLights >= 18 ? 6 : 10;
   const podiumBaseMat = getDistrictStdMat('#0b1120', 0.88, 0.26);
   const canopyMat = getDistrictStdMat('#0f172a', 0.92, 0.2);
   const pierMat = getDistrictStdMat('#111827', 0.9, 0.22);
@@ -162,6 +174,10 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const finMat = getDistrictStdMat('#111c33', 0.9, 0.22);
   const beltMat = getDistrictStdMat('#0f172a', 0.92, 0.22);
   const parapetMat = getDistrictStdMat('#1e293b', 0.9, 0.18);
+  const streetPoleMat = getDistrictStdMat('#1e293b', 0.88, 0.24);
+  const streetArmMat = getDistrictStdMat('#0f172a', 0.9, 0.2);
+  const bulbOffMat = getDistrictStdMat('#1e293b', 0.65, 0.42);
+  const bulbOnMat = getDistrictBasicMat('#fef3c7');
 
   return (
     <group name="CityDistrictCentral">
@@ -236,14 +252,23 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
           ] as const
         ).map(([px, pz], idx) => (
           <group key={`pylon-${idx}`} position={[px, 0, pz]}>
-            <mesh position={[0, 2.4, 0]} castShadow={quality.shadows}>
-              <boxGeometry args={[0.42, 4.8, 0.42]} />
-              <meshStandardMaterial color="#0b0f19" metalness={0.9} roughness={0.2} />
-            </mesh>
-            <mesh position={[0, 2.5, 0]}>
-              <boxGeometry args={[0.46, 3.8, 0.12]} />
-              <meshBasicMaterial color={idx % 2 === 0 ? '#f59e0b' : '#38bdf8'} />
-            </mesh>
+            <mesh
+              position={[0, 2.4, 0]}
+              geometry={SHARED_UNIT_BOX}
+              material={megacolMat}
+              scale={[0.42, 4.8, 0.42]}
+              castShadow={quality.shadows}
+            />
+            <mesh
+              position={[0, 2.5, 0]}
+              geometry={SHARED_UNIT_BOX}
+              material={
+                streetLightsActive
+                  ? getDistrictBasicMat(idx % 2 === 0 ? '#f59e0b' : '#38bdf8')
+                  : bulbOffMat
+              }
+              scale={[0.46, 3.8, 0.12]}
+            />
           </group>
         ))}
 
@@ -748,68 +773,95 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
             )}
             {prop.type === 'BENCH' && (
               <group>
-                <mesh position={[0, 0.42, 0]} geometry={SHARED_UNIT_BOX} scale={[2.2, 0.12, 0.65]} castShadow={quality.shadows}>
-                  <meshStandardMaterial color="#1e293b" metalness={0.75} roughness={0.35} />
-                </mesh>
-                <mesh position={[0, 0.72, -0.26]} geometry={SHARED_UNIT_BOX} scale={[2.2, 0.48, 0.1]}>
-                  <meshStandardMaterial color="#0f172a" metalness={0.85} roughness={0.25} />
-                </mesh>
-                <mesh position={[0, 0.12, 0]} geometry={SHARED_UNIT_BOX} scale={[1.8, 0.04, 0.4]}>
-                  <meshBasicMaterial color={prop.accentColor} />
-                </mesh>
+                <mesh
+                  position={[0, 0.42, 0]}
+                  geometry={SHARED_UNIT_BOX}
+                  material={parapetMat}
+                  scale={[2.2, 0.12, 0.65]}
+                />
+                <mesh
+                  position={[0, 0.72, -0.26]}
+                  geometry={SHARED_UNIT_BOX}
+                  material={streetArmMat}
+                  scale={[2.2, 0.48, 0.1]}
+                />
+                <mesh
+                  position={[0, 0.12, 0]}
+                  geometry={SHARED_UNIT_BOX}
+                  material={streetLightsActive ? getDistrictBasicMat(prop.accentColor) : bulbOffMat}
+                  scale={[1.8, 0.04, 0.4]}
+                />
               </group>
             )}
             {prop.type === 'BOLLARD_CLUSTER' && (
               <group>
                 {([-1.2, 0, 1.2] as const).map((bx, bIdx) => (
                   <group key={bIdx} position={[bx, 0, 0]}>
-                    <mesh position={[0, 0.5, 0]}>
-                      <cylinderGeometry args={[0.11, 0.13, 1.0, 8]} />
-                      <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
-                    </mesh>
-                    <mesh position={[0, 0.88, 0]}>
-                      <cylinderGeometry args={[0.12, 0.12, 0.08, 8]} />
-                      <meshBasicMaterial color={prop.accentColor} />
-                    </mesh>
+                    <mesh
+                      position={[0, 0.5, 0]}
+                      geometry={SHARED_UNIT_CYLINDER}
+                      material={streetArmMat}
+                      scale={[0.24, 1.0, 0.24]}
+                    />
+                    <mesh
+                      position={[0, 0.88, 0]}
+                      geometry={SHARED_UNIT_CYLINDER}
+                      material={streetLightsActive ? getDistrictBasicMat(prop.accentColor) : bulbOffMat}
+                      scale={[0.25, 0.08, 0.25]}
+                    />
                   </group>
                 ))}
               </group>
             )}
             {prop.type === 'STEAM_GRATE' && (
               <group>
-                <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                  <planeGeometry args={[1.8, 1.1]} />
-                  <meshStandardMaterial color="#1e293b" metalness={0.92} roughness={0.25} />
-                </mesh>
-                <mesh position={[0, 1.2, 0]}>
-                  <coneGeometry args={[0.85, 2.4, 8, 1, true]} />
-                  <meshBasicMaterial color={prop.accentColor} transparent opacity={0.09} depthWrite={false} side={THREE.DoubleSide} />
+                <mesh
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  geometry={SHARED_STEAM_PLANE}
+                  material={streetPoleMat}
+                />
+                <mesh position={[0, 1.2, 0]} geometry={SHARED_STEAM_CONE}>
+                  <meshBasicMaterial
+                    color={prop.accentColor}
+                    transparent
+                    opacity={0.09}
+                    depthWrite={false}
+                    side={THREE.DoubleSide}
+                  />
                 </mesh>
               </group>
             )}
           </group>
         ))}
 
-      {/* Street Luminaires */}
+      {/* Street Luminaires — Turn ON at Night & OFF during Day */}
       {cityData.streetlights.map((sl, idx) => (
         <group key={idx} position={sl.position} rotation={[0, sl.rotationY, 0]}>
-          <mesh position={[0, 3.2, 0]}>
-            <cylinderGeometry args={[0.07, 0.1, 6.2, 8]} />
-            <meshStandardMaterial color="#1e293b" metalness={0.88} />
-          </mesh>
-          <mesh position={[0.9, 6.2, 0]} geometry={SHARED_UNIT_BOX} scale={[1.8, 0.12, 0.24]}>
-            <meshStandardMaterial color="#0f172a" metalness={0.9} />
-          </mesh>
-          <mesh position={[1.4, 6.12, 0]} geometry={SHARED_UNIT_BOX} scale={[0.7, 0.04, 0.2]}>
-            <meshBasicMaterial color={gridIsOut ? '#1e293b' : timeState.nightFactor > 0.3 ? '#fef3c7' : '#38bdf8'} />
-          </mesh>
-          {quality.maxLights >= 8 && quality.nightLightsEnabled && idx % lightStep === 0 && (
+          <mesh
+            position={[0, 3.1, 0]}
+            geometry={SHARED_UNIT_CYLINDER}
+            material={streetPoleMat}
+            scale={[0.16, 6.2, 0.16]}
+          />
+          <mesh
+            position={[0.9, 6.2, 0]}
+            geometry={SHARED_UNIT_BOX}
+            material={streetArmMat}
+            scale={[1.8, 0.12, 0.24]}
+          />
+          <mesh
+            position={[1.4, 6.12, 0]}
+            geometry={SHARED_UNIT_BOX}
+            material={streetLightsActive ? bulbOnMat : bulbOffMat}
+            scale={[0.7, 0.05, 0.2]}
+          />
+          {streetLightsActive && quality.maxLights >= 8 && idx % lightStep === 0 && (
             <pointLight
               position={[1.4, 5.8, 0]}
               color="#fef3c7"
               distance={isUltra ? 30 : 24}
               decay={2}
-              intensity={gridIsOut ? 0.04 : 0.25 + timeState.nightFactor * (isUltra ? 3.0 : 2.5)}
+              intensity={isUltra ? 2.8 : 2.2}
             />
           )}
         </group>
@@ -890,9 +942,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
             return (
               <group key={`drone-${dIdx}`} position={[25 + dIdx * 18, 22, 25]}>
                 {/* Central Sensor Pod */}
-                <mesh geometry={SHARED_UNIT_BOX} scale={[0.95, 0.34, 1.35]}>
-                  <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.18} />
-                </mesh>
+                <mesh geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.95, 0.34, 1.35]} />
                 {/* Quad Rotor Outrigger Arms & Glowing Shrouds */}
                 {(
                   [
@@ -906,19 +956,18 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                     key={rIdx}
                     position={[rx, 0.02, rz]}
                     geometry={SHARED_UNIT_CYLINDER}
+                    material={getDistrictBasicMat(droneAccent)}
                     scale={[0.48, 0.1, 0.48]}
-                  >
-                    <meshBasicMaterial color={droneAccent} />
-                  </mesh>
+                  />
                 ))}
                 {/* Forward Optical Eye */}
-                <mesh position={[0, -0.04, 0.7]}>
-                  <sphereGeometry args={[0.14, 8, 8]} />
-                  <meshBasicMaterial color="#f43f5e" />
-                </mesh>
+                <mesh
+                  position={[0, -0.04, 0.7]}
+                  geometry={SHARED_DRONE_SPHERE}
+                  material={getDistrictBasicMat('#f43f5e')}
+                />
                 {/* Downward Volumetric Scan Cone */}
-                <mesh position={[0, -4.2, 0.4]} rotation={[0.15, 0, 0]}>
-                  <coneGeometry args={[2.2, 8.2, 10, 1, true]} />
+                <mesh position={[0, -4.2, 0.4]} rotation={[0.15, 0, 0]} geometry={SHARED_DRONE_CONE}>
                   <meshBasicMaterial
                     color={droneAccent}
                     transparent

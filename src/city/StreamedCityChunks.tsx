@@ -15,6 +15,7 @@ import { RoadGenerator } from './RoadGenerator';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
 import { FacadeStyleVariant, ProceduralTextures } from '../core/ProceduralTextures';
 import { WeatherSystem } from '../world/WeatherSystem';
+import { TimeSystem } from '../world/TimeSystem';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 
 const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
@@ -323,84 +324,113 @@ const StreamedBush: React.FC<{ bush: PlanterBushDef }> = React.memo(({ bush }) =
   </group>
 ));
 
-const StreamedFurniture: React.FC<{ furniture: StreetFurnitureDef }> = React.memo(({ furniture }) => {
-  const { type, position, rotationY, emissiveColor = '#f59e0b', accentColor = '#38bdf8' } = furniture;
-  const emissiveMat = getChunkBasicMat(emissiveColor);
-  const accentMat = getChunkBasicMat(accentColor);
-  const slateMat = getChunkStdMat('#1e293b', 0.85, 0.25);
-  const darkNavyMat = getChunkStdMat('#0f172a', 0.9, 0.2);
+const StreamedFurniture: React.FC<{ furniture: StreetFurnitureDef; streetLightsOn: boolean }> = React.memo(
+  ({ furniture, streetLightsOn }) => {
+    const { type, position, rotationY, emissiveColor = '#f59e0b', accentColor = '#38bdf8' } = furniture;
+    const emissiveMat = getChunkBasicMat(emissiveColor);
+    const accentMat = getChunkBasicMat(accentColor);
+    const slateMat = getChunkStdMat('#1e293b', 0.85, 0.25);
+    const darkNavyMat = getChunkStdMat('#0f172a', 0.9, 0.2);
+    const bulbOffMat = getChunkStdMat('#1e293b', 0.65, 0.42);
+    const streetLightBulbMat = streetLightsOn ? getChunkBasicMat('#fef3c7') : bulbOffMat;
 
-  if (type === 'STREETLIGHT') {
+    if (type === 'STREETLIGHT') {
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh position={[0, 3.1, 0]} geometry={SHARED_UNIT_CYLINDER} material={slateMat} scale={[0.14, 6.0, 0.14]} />
+          <mesh position={[0.6, 6.05, 0]} geometry={SHARED_UNIT_BOX} material={darkNavyMat} scale={[1.3, 0.1, 0.2]} />
+          <mesh
+            position={[1.05, 5.98, 0]}
+            geometry={SHARED_UNIT_BOX}
+            material={streetLightBulbMat}
+            scale={[0.65, 0.06, 0.2]}
+          />
+        </group>
+      );
+    }
+    if (type === 'BUS_STOP') {
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh position={[0, 1.3, -0.7]} geometry={SHARED_UNIT_BOX} material={darkNavyMat} scale={[3.4, 2.5, 0.14]} />
+          <mesh position={[0, 2.6, 0]} geometry={SHARED_UNIT_BOX} material={slateMat} scale={[3.8, 0.16, 1.7]} />
+          <mesh
+            position={[0, 2.52, 0.75]}
+            geometry={SHARED_UNIT_BOX}
+            material={streetLightsOn ? accentMat : bulbOffMat}
+            scale={[3.6, 0.05, 0.1]}
+          />
+          <mesh
+            position={[0, 0.45, -0.32]}
+            geometry={SHARED_UNIT_BOX}
+            material={getChunkStdMat('#334155', 0.8, 0.3)}
+            scale={[2.2, 0.12, 0.5]}
+          />
+        </group>
+      );
+    }
+    if (type === 'CYBER_KIOSK') {
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh
+            position={[0, 1.2, 0]}
+            geometry={SHARED_UNIT_BOX}
+            material={getChunkStdMat('#0b0f19', 0.92, 0.18)}
+            scale={[0.82, 2.4, 0.34]}
+          />
+          <mesh position={[0, 1.35, 0.18]} geometry={SHARED_UNIT_BOX} material={accentMat} scale={[0.64, 1.25, 0.02]} />
+          <mesh position={[0, 2.48, 0]} geometry={SHARED_UNIT_BOX} material={emissiveMat} scale={[0.9, 0.08, 0.42]} />
+        </group>
+      );
+    }
+    if (type === 'BOLLARD') {
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          {([-1.0, 0, 1.0] as const).map((bx, idx) => (
+            <group key={idx} position={[bx, 0, 0]}>
+              <mesh
+                position={[0, 0.48, 0]}
+                geometry={SHARED_UNIT_CYLINDER}
+                material={darkNavyMat}
+                scale={[0.22, 0.96, 0.22]}
+              />
+              <mesh
+                position={[0, 0.85, 0]}
+                geometry={SHARED_UNIT_CYLINDER}
+                material={streetLightsOn ? accentMat : bulbOffMat}
+                scale={[0.24, 0.08, 0.24]}
+              />
+            </group>
+          ))}
+        </group>
+      );
+    }
+    if (type === 'TRASH_RECEPTACLE') {
+      return (
+        <group position={position} rotation={[0, rotationY, 0]}>
+          <mesh
+            position={[0, 0.55, 0]}
+            geometry={SHARED_UNIT_BOX}
+            material={getChunkStdMat('#111827', 0.88, 0.24)}
+            scale={[0.52, 1.1, 0.48]}
+          />
+          <mesh position={[0, 1.02, 0]} geometry={SHARED_UNIT_BOX} material={emissiveMat} scale={[0.56, 0.06, 0.52]} />
+        </group>
+      );
+    }
     return (
       <group position={position} rotation={[0, rotationY, 0]}>
-        <mesh position={[0, 3.1, 0]} geometry={SHARED_UNIT_CYLINDER} material={slateMat} scale={[0.14, 6.0, 0.14]} />
-        <mesh position={[0.6, 6.05, 0]} geometry={SHARED_UNIT_BOX} material={darkNavyMat} scale={[1.3, 0.1, 0.2]} />
-        <mesh position={[1.05, 5.98, 0]} geometry={SHARED_UNIT_BOX} material={emissiveMat} scale={[0.65, 0.06, 0.2]} />
-      </group>
-    );
-  }
-  if (type === 'BUS_STOP') {
-    return (
-      <group position={position} rotation={[0, rotationY, 0]}>
-        <mesh position={[0, 1.3, -0.7]} geometry={SHARED_UNIT_BOX} material={darkNavyMat} scale={[3.4, 2.5, 0.14]} />
-        <mesh position={[0, 2.6, 0]} geometry={SHARED_UNIT_BOX} material={slateMat} scale={[3.8, 0.16, 1.7]} />
-        <mesh position={[0, 2.52, 0.75]} geometry={SHARED_UNIT_BOX} material={accentMat} scale={[3.6, 0.05, 0.1]} />
+        <mesh position={[0, 0.42, 0]} geometry={SHARED_UNIT_BOX} material={slateMat} scale={[1.9, 0.14, 0.6]} />
+        <mesh position={[0, 0.7, -0.25]} geometry={SHARED_UNIT_BOX} material={darkNavyMat} scale={[1.9, 0.42, 0.1]} />
         <mesh
-          position={[0, 0.45, -0.32]}
+          position={[0, 0.15, 0]}
           geometry={SHARED_UNIT_BOX}
-          material={getChunkStdMat('#334155', 0.8, 0.3)}
-          scale={[2.2, 0.12, 0.5]}
+          material={streetLightsOn ? emissiveMat : bulbOffMat}
+          scale={[1.6, 0.04, 0.4]}
         />
       </group>
     );
   }
-  if (type === 'CYBER_KIOSK') {
-    return (
-      <group position={position} rotation={[0, rotationY, 0]}>
-        <mesh
-          position={[0, 1.2, 0]}
-          geometry={SHARED_UNIT_BOX}
-          material={getChunkStdMat('#0b0f19', 0.92, 0.18)}
-          scale={[0.82, 2.4, 0.34]}
-        />
-        <mesh position={[0, 1.35, 0.18]} geometry={SHARED_UNIT_BOX} material={accentMat} scale={[0.64, 1.25, 0.02]} />
-        <mesh position={[0, 2.48, 0]} geometry={SHARED_UNIT_BOX} material={emissiveMat} scale={[0.9, 0.08, 0.42]} />
-      </group>
-    );
-  }
-  if (type === 'BOLLARD') {
-    return (
-      <group position={position} rotation={[0, rotationY, 0]}>
-        {([-1.0, 0, 1.0] as const).map((bx, idx) => (
-          <group key={idx} position={[bx, 0, 0]}>
-            <mesh position={[0, 0.48, 0]} geometry={SHARED_UNIT_CYLINDER} material={darkNavyMat} scale={[0.22, 0.96, 0.22]} />
-            <mesh position={[0, 0.85, 0]} geometry={SHARED_UNIT_CYLINDER} material={accentMat} scale={[0.24, 0.08, 0.24]} />
-          </group>
-        ))}
-      </group>
-    );
-  }
-  if (type === 'TRASH_RECEPTACLE') {
-    return (
-      <group position={position} rotation={[0, rotationY, 0]}>
-        <mesh
-          position={[0, 0.55, 0]}
-          geometry={SHARED_UNIT_BOX}
-          material={getChunkStdMat('#111827', 0.88, 0.24)}
-          scale={[0.52, 1.1, 0.48]}
-        />
-        <mesh position={[0, 1.02, 0]} geometry={SHARED_UNIT_BOX} material={emissiveMat} scale={[0.56, 0.06, 0.52]} />
-      </group>
-    );
-  }
-  return (
-    <group position={position} rotation={[0, rotationY, 0]}>
-      <mesh position={[0, 0.42, 0]} geometry={SHARED_UNIT_BOX} material={slateMat} scale={[1.9, 0.14, 0.6]} />
-      <mesh position={[0, 0.7, -0.25]} geometry={SHARED_UNIT_BOX} material={darkNavyMat} scale={[1.9, 0.42, 0.1]} />
-      <mesh position={[0, 0.15, 0]} geometry={SHARED_UNIT_BOX} material={emissiveMat} scale={[1.6, 0.04, 0.4]} />
-    </group>
-  );
-});
+);
 
 const StreamedBiomeProp: React.FC<{ prop: BiomePropDef }> = React.memo(({ prop }) => {
   const isCylindrical =
@@ -446,13 +476,14 @@ const StreamedBiomeProp: React.FC<{ prop: BiomePropDef }> = React.memo(({ prop }
 const StreamedChunkView: React.FC<{
   chunkInfo: ChunkInfo;
   wetnessFactor: number;
+  streetLightsOn: boolean;
   quality: QualitySettings;
   asphaltTex: THREE.CanvasTexture;
   facadeTextures: Record<FacadeStyleVariant, THREE.CanvasTexture>;
   asphaltNormal: THREE.CanvasTexture;
   claddingNormal: THREE.CanvasTexture;
 }> = React.memo(
-  ({ chunkInfo, wetnessFactor, quality, asphaltTex, facadeTextures, asphaltNormal, claddingNormal }) => {
+  ({ chunkInfo, wetnessFactor, streetLightsOn, quality, asphaltTex, facadeTextures, asphaltNormal, claddingNormal }) => {
     const data: StreamedChunkData = useMemo(
       () => ProceduralChunkGenerator.getChunkData(chunkInfo.cx, chunkInfo.cz),
       [chunkInfo.cx, chunkInfo.cz]
@@ -535,7 +566,9 @@ const StreamedChunkView: React.FC<{
           data.bushes.map((bush) => <StreamedBush key={bush.id} bush={bush} />)}
         {showDetails &&
           quality.streetFurnitureEnabled &&
-          data.furniture.map((f) => <StreamedFurniture key={f.id} furniture={f} />)}
+          data.furniture.map((f) => (
+            <StreamedFurniture key={f.id} furniture={f} streetLightsOn={streetLightsOn && quality.nightLightsEnabled} />
+          ))}
         {quality.streetFurnitureEnabled &&
           data.biomeProps.map((bp) => <StreamedBiomeProp key={bp.id} prop={bp} />)}
       </group>
@@ -549,7 +582,12 @@ export const StreamedCityChunks: React.FC = () => {
       .getActiveChunks()
       .filter((c) => !((c.cx === -1 || c.cx === 0) && (c.cz === -1 || c.cz === 0)))
   );
-  const [weatherState, setWeatherState] = useState(() => WeatherSystem.getInstance().getState());
+  const [wetnessBucket, setWetnessBucket] = useState<number>(
+    () => Math.round(WeatherSystem.getInstance().getState().wetnessFactor * 10) / 10
+  );
+  const [streetLightsOn, setStreetLightsOn] = useState<boolean>(
+    () => TimeSystem.getInstance().getState().streetLightsOn
+  );
   const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
   const asphaltTex = useMemo(() => RoadGenerator.getAsphaltTexture(), []);
@@ -567,7 +605,21 @@ export const StreamedCityChunks: React.FC = () => {
   const prevSigRef = useRef('');
 
   useEffect(() => {
-    const uWea = WeatherSystem.getInstance().subscribe(setWeatherState);
+    let lastWetBucket = Math.round(WeatherSystem.getInstance().getState().wetnessFactor * 10) / 10;
+    let lastLightsOn = TimeSystem.getInstance().getState().streetLightsOn;
+    const uWea = WeatherSystem.getInstance().subscribe((s) => {
+      const bucket = Math.round(s.wetnessFactor * 10) / 10;
+      if (bucket !== lastWetBucket) {
+        lastWetBucket = bucket;
+        setWetnessBucket(bucket);
+      }
+    });
+    const uTime = TimeSystem.getInstance().subscribe((s) => {
+      if (s.streetLightsOn !== lastLightsOn) {
+        lastLightsOn = s.streetLightsOn;
+        setStreetLightsOn(s.streetLightsOn);
+      }
+    });
     const uQual = QualityManager.subscribe(setQuality);
     const uChunks = ChunkManager.getInstance().subscribe((s) => {
       const filtered = s.chunks.filter(
@@ -581,6 +633,7 @@ export const StreamedCityChunks: React.FC = () => {
     });
     return () => {
       uWea();
+      uTime();
       uQual();
       uChunks();
       ChunkManager.getInstance()
@@ -599,7 +652,8 @@ export const StreamedCityChunks: React.FC = () => {
         <StreamedChunkView
           key={chunk.key}
           chunkInfo={chunk}
-          wetnessFactor={weatherState.wetnessFactor}
+          wetnessFactor={wetnessBucket}
+          streetLightsOn={streetLightsOn}
           quality={quality}
           asphaltTex={asphaltTex}
           facadeTextures={facadeTextures}

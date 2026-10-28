@@ -180,8 +180,9 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = React.mem
     ctx.fillRect(14, 48, w - 28, 24);
     ctx.font = '700 12px monospace';
     ctx.fillStyle = emergency.active ? '#fecaca' : '#bae6fd';
+    const precipPct = Math.round((weather.precipitationIntensity ?? 0) * 100);
     ctx.fillText(
-      `${district.name} // ATMO: ${weather.currentWeather} // ${emergency.message}`.slice(0, 66),
+      `${district.name} // ATMO: ${weather.currentWeather} (${precipPct}%) // ${emergency.message}`.slice(0, 66),
       22,
       64
     );
@@ -200,7 +201,7 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = React.mem
     ctx.fillRect(0, h - 36, w, 2);
 
     poolEntry.ticker = (poolEntry.ticker - 2.5) % 900;
-    const msg = `METROPOLIS TELEMETRY // ${discoveryCountRef.current} LANDMARKS LOGGED // TRANSIT CORRIDORS ACTIVE // `;
+    const msg = `METROPOLIS TELEMETRY // ATMO: ${weather.currentWeather} ${precipPct}% (${Math.round(weather.temperatureC ?? 16)}C) // ${discoveryCountRef.current} LANDMARKS LOGGED // TRANSIT CORRIDORS ACTIVE // `;
     ctx.font = '700 14px monospace';
     ctx.fillStyle = '#f8fafc';
     ctx.fillText(msg + msg, poolEntry.ticker, h - 13);

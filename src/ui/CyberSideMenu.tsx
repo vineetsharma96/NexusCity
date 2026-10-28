@@ -47,7 +47,7 @@ const LIGHTING_ATMOS_TOGGLES: GraphicsToggleItem[] = [
 ];
 
 const SURFACE_WEATHER_TOGGLES: GraphicsToggleItem[] = [
-  { key: 'rainParticlesEnabled', label: 'RAIN STREAKS', accent: 'var(--neon-cyan)' },
+  { key: 'rainParticlesEnabled', label: 'PRECIPITATION (RAIN/SNOW)', accent: 'var(--neon-cyan)' },
   { key: 'windParticlesEnabled', label: 'WIND EMBERS & MOTES', accent: 'var(--neon-amber)' },
   { key: 'wetReflectionsEnabled', label: 'WET ROAD SPECULAR', accent: 'var(--neon-cyan)' },
   { key: 'normalMapsEnabled', label: 'RELIEF NORMAL MAPS', accent: 'var(--neon-emerald)' },
@@ -129,16 +129,17 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
   const [landmarks, setLandmarks] = useState(() => SaveSystem.getInstance().getData().discoveredLandmarks);
   const [vehicleState, setVehicleState] = useState(() => VehicleInteractionSystem.getInstance().getState());
   const [missionState, setMissionState] = useState<MissionSystemState>(() => MissionSystem.getInstance().getState());
-  const [currentWeather, setCurrentWeather] = useState(WeatherSystem.getInstance().getState().currentWeather);
+  const [weatherState, setWeatherState] = useState(() => ({ ...WeatherSystem.getInstance().getState() }));
   const [timeState, setTimeState] = useState(() => TimeSystem.getInstance().getState());
   const menuRef = useModalFocus(isOpen, onClose);
+  const currentWeather = weatherState.currentWeather;
 
   useEffect(() => {
     const uQual = QualityManager.subscribe((s) => {
       setQuality(QualityManager.preset);
       setQualitySettings(s);
     });
-    const uWea = WeatherSystem.getInstance().subscribe((s) => setCurrentWeather(s.currentWeather));
+    const uWea = WeatherSystem.getInstance().subscribe((s) => setWeatherState({ ...s }));
     const uTime = TimeSystem.getInstance().subscribe(setTimeState);
     const uAud = AudioManager.getInstance().subscribe((s) => setMuted(s.muted));
     const uAmb = AmbientAudioManager.getInstance().subscribe((s) => {
@@ -434,17 +435,122 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
                 </div>
               </div>
               <div>
-                <div className="section-heading">ATMOSPHERIC PRECIPITATION</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="section-heading" style={{ margin: 0 }}>
+                    ATMOSPHERIC PRECIPITATION & TELEMETRY
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.6rem',
+                      color:
+                        weatherState.snowIntensity > 0.02
+                          ? '#e0f2fe'
+                          : weatherState.rainIntensity > 0.02
+                          ? 'var(--neon-cyan)'
+                          : 'var(--neon-amber)',
+                      fontWeight: 700,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {currentWeather} · {Math.round(weatherState.precipitationIntensity * 100)}%
+                  </span>
+                </div>
+
+                {/* Live Precipitation Telemetry Readout & Intensity Scrubber */}
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: '9px 11px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'rgba(7, 9, 14, 0.6)',
+                    borderRadius: 4,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '4px 10px',
+                      fontSize: '0.6rem',
+                      color: 'var(--text-secondary)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    <div>
+                      RAIN INTENSITY:{' '}
+                      <strong style={{ color: 'var(--neon-cyan)' }}>
+                        {Math.round(weatherState.rainIntensity * 100)}%
+                      </strong>
+                    </div>
+                    <div>
+                      SNOW INTENSITY:{' '}
+                      <strong style={{ color: '#e0f2fe' }}>
+                        {Math.round(weatherState.snowIntensity * 100)}%
+                      </strong>
+                    </div>
+                    <div>
+                      PRECIP RATE:{' '}
+                      <strong style={{ color: 'var(--text-primary)' }}>
+                        {weatherState.precipitationRateMmHr} MM/H
+                      </strong>
+                    </div>
+                    <div>
+                      AMBIENT TEMP:{' '}
+                      <strong style={{ color: weatherState.temperatureC <= 0 ? '#e0f2fe' : 'var(--neon-amber)' }}>
+                        {Math.round(weatherState.temperatureC)}°C
+                      </strong>
+                    </div>
+                  </div>
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      fontSize: '0.6rem',
+                      color: 'var(--text-secondary)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>PRECIPITATION INTENSITY</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>
+                        {Math.round(weatherState.precipitationIntensity * 100)}%
+                      </strong>
+                    </div>
+                    <input
+                      aria-label="Precipitation intensity slider"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={weatherState.precipitationIntensity}
+                      onChange={(e) =>
+                        WeatherSystem.getInstance().setPrecipitationIntensity(Number(e.target.value))
+                      }
+                    />
+                  </label>
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
-                  {(['CLEAR', 'RAIN', 'HEAVY_RAIN', 'FOG'] as WeatherType[]).map((w) => (
+                  {(['CLEAR', 'RAIN', 'HEAVY_RAIN', 'SNOW', 'BLIZZARD', 'FOG'] as WeatherType[]).map((w) => (
                     <button
                       key={w}
                       className="cyber-btn"
                       aria-pressed={w === currentWeather}
                       onClick={() => WeatherSystem.getInstance().setWeather(w)}
-                      style={{ padding: 10, fontSize: '0.7rem' }}
+                      style={{ padding: 10, fontSize: '0.68rem' }}
                     >
-                      {w === 'HEAVY_RAIN' ? 'MONSOON STORM' : w}
+                      {w === 'HEAVY_RAIN'
+                        ? 'MONSOON STORM'
+                        : w === 'SNOW'
+                        ? 'CRYSTAL SNOW'
+                        : w === 'BLIZZARD'
+                        ? 'ARCTIC BLIZZARD'
+                        : w}
                     </button>
                   ))}
                 </div>
