@@ -35,6 +35,15 @@ export class KinematicController {
   private stepTimer = 0;
   private jumpHeldLastFrame = false;
 
+  // Reusable vectors to avoid allocations in update loop
+  private readonly _forward = new THREE.Vector3();
+  private readonly _right = new THREE.Vector3();
+  private readonly _moveDir = new THREE.Vector3();
+  private readonly _currentHorizVel = new THREE.Vector3();
+  private readonly _targetHorizVel = new THREE.Vector3();
+  private readonly _previousPos = new THREE.Vector3();
+  private readonly _nextPos = new THREE.Vector3();
+
   public resetMotion(): void {
     this.velocity.set(0, 0, 0);
     this.bankAngle = 0;
@@ -46,45 +55,45 @@ export class KinematicController {
     const input = InputManager.getState();
     const audio = AudioManager.getInstance();
 
-    const forward = new THREE.Vector3(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
-    const right = new THREE.Vector3(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
+    this._forward.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
+    this._right.set(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
 
-    const moveDir = new THREE.Vector3()
-      .addScaledVector(right, input.moveX)
-      .addScaledVector(forward, input.moveZ);
+    this._moveDir.set(0, 0, 0)
+      .addScaledVector(this._right, input.moveX)
+      .addScaledVector(this._forward, input.moveZ);
 
-    const inputLen = moveDir.length();
-    if (inputLen > 0.01) moveDir.normalize();
+    const inputLen = this._moveDir.length();
+    if (inputLen > 0.01) this._moveDir.normalize();
 
     const targetMaxSpeed = input.sprint ? this.runSpeed : this.walkSpeed;
     const targetSpeed = inputLen > 0.01 ? targetMaxSpeed * Math.min(1, inputLen) : 0;
 
-    const currentHorizVel = new THREE.Vector3(this.velocity.x, 0, this.velocity.z);
-    const targetHorizVel = moveDir.clone().multiplyScalar(targetSpeed);
+    this._currentHorizVel.set(this.velocity.x, 0, this.velocity.z);
+    this._targetHorizVel.copy(this._moveDir).multiplyScalar(targetSpeed);
 
     const controlMult = this.isGrounded ? 1.0 : this.airControl;
     const rate = (inputLen > 0.01 ? this.accel : this.decel) * controlMult;
 
-    currentHorizVel.lerp(targetHorizVel, 1 - Math.exp(-rate * dt));
-    this.velocity.x = currentHorizVel.x;
-    this.velocity.z = currentHorizVel.z;
+    this._currentHorizVel.lerp(this._targetHorizVel, 1 - Math.exp(-rate * dt));
+    this.velocity.x = this._currentHorizVel.x;
+    this.velocity.z = this._currentHorizVel.z;
 
-    const previousPos = this.position.clone();
-    const nextPos = this.position.clone();
-    nextPos.x += this.velocity.x * dt;
-    nextPos.z += this.velocity.z * dt;
+    this._previousPos.copy(this.position);
+    this._nextPos.copy(this.position);
+    this._nextPos.x += this.velocity.x * dt;
+    this._nextPos.z += this.velocity.z * dt;
 
     const resolvedPos = KinematicCollisionSolver.resolveHorizontal(
-      nextPos,
+      this._nextPos,
       this.playerRadius,
       this.playerHeight,
-      previousPos
+      this._previousPos
     );
     this.position.x = resolvedPos.x;
     this.position.z = resolvedPos.z;
     if (dt > 0) {
-      this.velocity.x = (resolvedPos.x - previousPos.x) / dt;
-      this.velocity.z = (resolvedPos.z - previousPos.z) / dt;
+      this.velocity.x = (resolvedPos.x - this._previousPos.x) / dt;
+      this.velocity.z = (resolvedPos.z - this._previousPos.z) / dt;
     }
 
     const groundInfo = KinematicCollisionSolver.getGroundHeightAt(this.position.x, this.position.z, this.position.y);
@@ -113,7 +122,7 @@ export class KinematicController {
         const ceilingY = KinematicCollisionSolver.getCeilingHeightAt(
           this.position.x,
           this.position.z,
-          previousPos.y,
+          this._previousPos.y,
           this.playerRadius,
           this.playerHeight
         );
