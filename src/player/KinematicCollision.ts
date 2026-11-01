@@ -61,8 +61,14 @@ export class KinematicCollisionSolver {
     return all;
   }
 
-  private static resolveStep(pos: THREE.Vector3, radius: number, height: number, allBoxes: CollisionBox[]): THREE.Vector3 {
-    const resolved = pos.clone();
+  private static resolveStep(
+    pos: THREE.Vector3,
+    radius: number,
+    height: number,
+    allBoxes: CollisionBox[],
+    out?: THREE.Vector3
+  ): THREE.Vector3 {
+    const resolved = out ? out.copy(pos) : pos.clone();
     const playerMinY = resolved.y + 0.25;
     const playerMaxY = resolved.y + height;
     const rSq = radius * radius;
@@ -117,11 +123,12 @@ export class KinematicCollisionSolver {
     pos: THREE.Vector3,
     radius: number,
     height: number = 1.8,
-    previousPos?: THREE.Vector3
+    previousPos?: THREE.Vector3,
+    out?: THREE.Vector3
   ): THREE.Vector3 {
     const allBoxes = this.getAllBoxes();
     if (!previousPos) {
-      return this.resolveStep(pos, radius, height, allBoxes);
+      return this.resolveStep(pos, radius, height, allBoxes, out);
     }
 
     const deltaX = pos.x - previousPos.x;
@@ -129,16 +136,16 @@ export class KinematicCollisionSolver {
     const distance = Math.hypot(deltaX, deltaZ);
     const maxStep = Math.max(0.05, radius * 0.45);
     const steps = Math.max(1, Math.ceil(distance / maxStep));
-    const current = previousPos.clone();
+    const current = out ? out.copy(previousPos) : previousPos.clone();
     current.y = pos.y;
 
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
       const candidate = this.scratchCandidate.set(previousPos.x + deltaX * t, pos.y, previousPos.z + deltaZ * t);
-      const next = this.resolveStep(candidate, radius, height, allBoxes);
-      current.copy(next);
+      const next = this.resolveStep(candidate, radius, height, allBoxes, current);
+      // next is `current` which has already been updated in-place
       if (Math.hypot(next.x - candidate.x, next.z - candidate.z) > 1e-4) {
-        return this.resolveStep(current, radius, height, allBoxes);
+        return this.resolveStep(current, radius, height, allBoxes, current);
       }
     }
     return current;
