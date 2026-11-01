@@ -44,6 +44,11 @@ export class KinematicController {
   private readonly _previousPos = new THREE.Vector3();
   private readonly _nextPos = new THREE.Vector3();
 
+  // ⚡ Bolt Performance Optimization:
+  // Reusable vector avoids garbage collection pressure inside the core useFrame update loop.
+  // Expect fewer micro-stutters and more consistent frame times as GC sweeps are reduced.
+  private readonly _resolvedPos = new THREE.Vector3();
+
   public resetMotion(): void {
     this.velocity.set(0, 0, 0);
     this.bankAngle = 0;
@@ -87,7 +92,8 @@ export class KinematicController {
       this._nextPos,
       this.playerRadius,
       this.playerHeight,
-      this._previousPos
+      this._previousPos,
+      this._resolvedPos
     );
     this.position.x = resolvedPos.x;
     this.position.z = resolvedPos.z;
