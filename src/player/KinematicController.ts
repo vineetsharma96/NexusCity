@@ -87,7 +87,8 @@ export class KinematicController {
       this._nextPos,
       this.playerRadius,
       this.playerHeight,
-      this._previousPos
+      this._previousPos,
+      this._nextPos
     );
     this.position.x = resolvedPos.x;
     this.position.z = resolvedPos.z;

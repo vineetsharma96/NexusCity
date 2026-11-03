@@ -10,7 +10,10 @@ export class KinematicCollisionSolver {
   public static boxes: CollisionBox[] = [];
   private static chunkBoxes = new Map<string, CollisionBox[]>();
   private static allBoxesCache: CollisionBox[] | null = null;
+  // Reusable vectors to avoid allocations in the physics update loop, reducing GC pressure
   private static readonly scratchCandidate = new THREE.Vector3();
+  private static readonly scratchResolveStep = new THREE.Vector3();
+  private static readonly scratchCurrent = new THREE.Vector3();
 
   public static clear(): void {
     this.boxes = [];
@@ -61,8 +64,9 @@ export class KinematicCollisionSolver {
     return all;
   }
 
-  private static resolveStep(pos: THREE.Vector3, radius: number, height: number, allBoxes: CollisionBox[]): THREE.Vector3 {
-    const resolved = pos.clone();
+  // Uses a target vector parameter to avoid object instantiation on every collision resolution step
+  private static resolveStep(pos: THREE.Vector3, radius: number, height: number, allBoxes: CollisionBox[], target: THREE.Vector3): THREE.Vector3 {
+    const resolved = target.copy(pos);
     const playerMinY = resolved.y + 0.25;
     const playerMaxY = resolved.y + height;
     const rSq = radius * radius;
@@ -113,15 +117,18 @@ export class KinematicCollisionSolver {
     return resolved;
   }
 
+  // Resolves horizontal collisions, using scratch vectors to update in-place without new allocations
   public static resolveHorizontal(
     pos: THREE.Vector3,
     radius: number,
     height: number = 1.8,
-    previousPos?: THREE.Vector3
+    previousPos?: THREE.Vector3,
+    target?: THREE.Vector3
   ): THREE.Vector3 {
+    const out = target || new THREE.Vector3();
     const allBoxes = this.getAllBoxes();
     if (!previousPos) {
-      return this.resolveStep(pos, radius, height, allBoxes);
+      return this.resolveStep(pos, radius, height, allBoxes, out);
     }
 
     const deltaX = pos.x - previousPos.x;
@@ -129,19 +136,19 @@ export class KinematicCollisionSolver {
     const distance = Math.hypot(deltaX, deltaZ);
     const maxStep = Math.max(0.05, radius * 0.45);
     const steps = Math.max(1, Math.ceil(distance / maxStep));
-    const current = previousPos.clone();
+    const current = this.scratchCurrent.copy(previousPos);
     current.y = pos.y;
 
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
       const candidate = this.scratchCandidate.set(previousPos.x + deltaX * t, pos.y, previousPos.z + deltaZ * t);
-      const next = this.resolveStep(candidate, radius, height, allBoxes);
+      const next = this.resolveStep(candidate, radius, height, allBoxes, this.scratchResolveStep);
       current.copy(next);
       if (Math.hypot(next.x - candidate.x, next.z - candidate.z) > 1e-4) {
-        return this.resolveStep(current, radius, height, allBoxes);
+        return this.resolveStep(current, radius, height, allBoxes, out);
       }
     }
-    return current;
+    return out.copy(current);
   }
 
   public static isPositionClear(pos: THREE.Vector3, radius: number = 0.45, height: number = 1.8): boolean {
