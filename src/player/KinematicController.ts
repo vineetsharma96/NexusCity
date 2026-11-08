@@ -43,6 +43,7 @@ export class KinematicController {
   private readonly _targetHorizVel = new THREE.Vector3();
   private readonly _previousPos = new THREE.Vector3();
   private readonly _nextPos = new THREE.Vector3();
+  private readonly _resolvedPos = new THREE.Vector3();
 
   public resetMotion(): void {
     this.velocity.set(0, 0, 0);
@@ -83,17 +84,18 @@ export class KinematicController {
     this._nextPos.x += this.velocity.x * dt;
     this._nextPos.z += this.velocity.z * dt;
 
-    const resolvedPos = KinematicCollisionSolver.resolveHorizontal(
+    KinematicCollisionSolver.resolveHorizontal(
       this._nextPos,
       this.playerRadius,
       this.playerHeight,
-      this._previousPos
+      this._previousPos,
+      this._resolvedPos
     );
-    this.position.x = resolvedPos.x;
-    this.position.z = resolvedPos.z;
+    this.position.x = this._resolvedPos.x;
+    this.position.z = this._resolvedPos.z;
     if (dt > 0) {
-      this.velocity.x = (resolvedPos.x - this._previousPos.x) / dt;
-      this.velocity.z = (resolvedPos.z - this._previousPos.z) / dt;
+      this.velocity.x = (this._resolvedPos.x - this._previousPos.x) / dt;
+      this.velocity.z = (this._resolvedPos.z - this._previousPos.z) / dt;
     }
 
     const groundInfo = KinematicCollisionSolver.getGroundHeightAt(this.position.x, this.position.z, this.position.y);
