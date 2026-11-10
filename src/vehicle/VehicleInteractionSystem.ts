@@ -21,6 +21,17 @@ type VehicleListener = (state: VehicleState) => void;
 
 export class VehicleInteractionSystem {
   private static instance: VehicleInteractionSystem;
+
+  // Scratch vectors to avoid GC pressure in update loops
+  private static readonly _forward = new THREE.Vector3();
+  private static readonly _right = new THREE.Vector3();
+  private static readonly _moveDir = new THREE.Vector3();
+  private static readonly _targetPos = new THREE.Vector3();
+  private static readonly _upAxis = new THREE.Vector3(0, 1, 0);
+  private static readonly _offset = new THREE.Vector3();
+  private static readonly _safePosBase = new THREE.Vector3();
+  private static readonly _origin = new THREE.Vector3();
+
   private readonly save = SaveSystem.getInstance();
   private listeners = new Set<VehicleListener>();
   private state: VehicleState;
@@ -55,15 +66,19 @@ export class VehicleInteractionSystem {
     return this.state;
   }
 
-  public getVehiclePosition(): THREE.Vector3 {
-    return this.vehiclePosition.clone();
+  public getVehiclePosition(targetOut?: THREE.Vector3): THREE.Vector3 {
+    return targetOut ? targetOut.copy(this.vehiclePosition) : this.vehiclePosition.clone();
   }
 
-  public getRideablePosition(id: string): THREE.Vector3 {
+  public getRideablePosition(id: string, targetOut?: THREE.Vector3): THREE.Vector3 {
     if (this.state.mode === 'RIDING' && this.state.activeId === id) {
-      return this.vehiclePosition.clone();
+      return targetOut ? targetOut.copy(this.vehiclePosition) : this.vehiclePosition.clone();
     }
-    return this.rideables.get(id)?.position.clone() ?? this.vehiclePosition.clone();
+    const pos = this.rideables.get(id)?.position;
+    if (pos) {
+      return targetOut ? targetOut.copy(pos) : pos.clone();
+    }
+    return targetOut ? targetOut.copy(this.vehiclePosition) : this.vehiclePosition.clone();
   }
 
   public getRideableRotationY(id: string): number {
@@ -73,15 +88,17 @@ export class VehicleInteractionSystem {
     return this.rideables.get(id)?.rotationY ?? 0;
   }
 
-  public getMountedPosition(): THREE.Vector3 {
-    return this.state.mode === 'TRANSIT_LINKED' ? this.transitPosition.clone() : this.vehiclePosition.clone();
+  public getMountedPosition(targetOut?: THREE.Vector3): THREE.Vector3 {
+    const pos = this.state.mode === 'TRANSIT_LINKED' ? this.transitPosition : this.vehiclePosition;
+    return targetOut ? targetOut.copy(pos) : pos.clone();
   }
 
   public getDismountPosition(): THREE.Vector3 {
-    const origin = this.getMountedPosition();
-    const offset = new THREE.Vector3(1.9, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.state.vehicleRotationY);
+    const origin = this.getMountedPosition(VehicleInteractionSystem._origin);
+    const offset = VehicleInteractionSystem._offset.set(1.9, 0, 0).applyAxisAngle(VehicleInteractionSystem._upAxis, this.state.vehicleRotationY);
+    const safePosBase = VehicleInteractionSystem._safePosBase.set(origin.x + offset.x, 0, origin.z + offset.z);
     return KinematicCollisionSolver.findSafePosition(
-      new THREE.Vector3(origin.x + offset.x, 0, origin.z + offset.z),
+      safePosBase,
       0.45,
       1.8
     );
@@ -222,15 +239,16 @@ export class VehicleInteractionSystem {
     const len = Math.hypot(input.moveX, input.moveZ);
 
     if (len > 0.02) {
-      const forward = new THREE.Vector3(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
-      const right = new THREE.Vector3(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
-      const moveDir = new THREE.Vector3()
+      const forward = VehicleInteractionSystem._forward.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
+      const right = VehicleInteractionSystem._right.set(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
+      const moveDir = VehicleInteractionSystem._moveDir
+        .set(0, 0, 0)
         .addScaledVector(right, input.moveX / len)
         .addScaledVector(forward, input.moveZ / len)
         .normalize();
 
       const speed = (input.sprint ? 24 : 16) * this.getMovementMultiplier();
-      const targetPos = this.vehiclePosition.clone().addScaledVector(moveDir, speed * dt);
+      const targetPos = VehicleInteractionSystem._targetPos.copy(this.vehiclePosition).addScaledVector(moveDir, speed * dt);
       const resolved = KinematicCollisionSolver.resolveHorizontal(targetPos, 0.9, 1.4, this.vehiclePosition);
 
       this.vehiclePosition.set(resolved.x, 0.45, resolved.z);
