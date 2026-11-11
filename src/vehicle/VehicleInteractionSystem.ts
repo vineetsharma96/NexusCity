@@ -31,6 +31,11 @@ export class VehicleInteractionSystem {
     { id: string; label: string; kind: 'vehicle' | 'transit'; position: THREE.Vector3; rotationY: number }
   >();
 
+  private readonly _forward = new THREE.Vector3();
+  private readonly _right = new THREE.Vector3();
+  private readonly _moveDir = new THREE.Vector3();
+  private readonly _targetPos = new THREE.Vector3();
+
   private constructor() {
     const upgrades = this.save.getData().vehicleUpgrades;
     this.state = {
@@ -55,15 +60,16 @@ export class VehicleInteractionSystem {
     return this.state;
   }
 
-  public getVehiclePosition(): THREE.Vector3 {
-    return this.vehiclePosition.clone();
+  public getVehiclePosition(targetOut?: THREE.Vector3): THREE.Vector3 {
+    return targetOut ? targetOut.copy(this.vehiclePosition) : this.vehiclePosition.clone();
   }
 
-  public getRideablePosition(id: string): THREE.Vector3 {
+  public getRideablePosition(id: string, targetOut?: THREE.Vector3): THREE.Vector3 {
     if (this.state.mode === 'RIDING' && this.state.activeId === id) {
-      return this.vehiclePosition.clone();
+      return targetOut ? targetOut.copy(this.vehiclePosition) : this.vehiclePosition.clone();
     }
-    return this.rideables.get(id)?.position.clone() ?? this.vehiclePosition.clone();
+    const pos = this.rideables.get(id)?.position ?? this.vehiclePosition;
+    return targetOut ? targetOut.copy(pos) : pos.clone();
   }
 
   public getRideableRotationY(id: string): number {
@@ -73,8 +79,9 @@ export class VehicleInteractionSystem {
     return this.rideables.get(id)?.rotationY ?? 0;
   }
 
-  public getMountedPosition(): THREE.Vector3 {
-    return this.state.mode === 'TRANSIT_LINKED' ? this.transitPosition.clone() : this.vehiclePosition.clone();
+  public getMountedPosition(targetOut?: THREE.Vector3): THREE.Vector3 {
+    const pos = this.state.mode === 'TRANSIT_LINKED' ? this.transitPosition : this.vehiclePosition;
+    return targetOut ? targetOut.copy(pos) : pos.clone();
   }
 
   public getDismountPosition(): THREE.Vector3 {
@@ -222,19 +229,19 @@ export class VehicleInteractionSystem {
     const len = Math.hypot(input.moveX, input.moveZ);
 
     if (len > 0.02) {
-      const forward = new THREE.Vector3(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
-      const right = new THREE.Vector3(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
-      const moveDir = new THREE.Vector3()
-        .addScaledVector(right, input.moveX / len)
-        .addScaledVector(forward, input.moveZ / len)
+      this._forward.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
+      this._right.set(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
+      this._moveDir.set(0, 0, 0)
+        .addScaledVector(this._right, input.moveX / len)
+        .addScaledVector(this._forward, input.moveZ / len)
         .normalize();
 
       const speed = (input.sprint ? 24 : 16) * this.getMovementMultiplier();
-      const targetPos = this.vehiclePosition.clone().addScaledVector(moveDir, speed * dt);
-      const resolved = KinematicCollisionSolver.resolveHorizontal(targetPos, 0.9, 1.4, this.vehiclePosition);
+      this._targetPos.copy(this.vehiclePosition).addScaledVector(this._moveDir, speed * dt);
+      const resolved = KinematicCollisionSolver.resolveHorizontal(this._targetPos, 0.9, 1.4, this.vehiclePosition);
 
       this.vehiclePosition.set(resolved.x, 0.45, resolved.z);
-      this.state.vehicleRotationY = Math.atan2(moveDir.x, moveDir.z);
+      this.state.vehicleRotationY = Math.atan2(this._moveDir.x, this._moveDir.z);
       this.state.vehiclePosition = [this.vehiclePosition.x, this.vehiclePosition.y, this.vehiclePosition.z];
       if (this.state.activeId) {
         const entry = this.rideables.get(this.state.activeId);

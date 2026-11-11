@@ -5,3 +5,6 @@
 ## 2025-03-02 - Reusing THREE.Vector3 objects in main useFrame update loop
 **Learning:** Frequent instantiations of `THREE.Vector3` objects (like `new THREE.Vector3()` and `.clone()`) inside core physics or animation update loops (e.g. `useFrame`) create continuous garbage collection pressure. In a physics controller firing every frame, 7 unneeded allocations per frame scales significantly.
 **Action:** Store reusable `THREE.Vector3` instances as private class properties, and update them in place via methods like `.set()`, `.copy()`, or `.addScaledVector()` to eliminate object allocations in performance-critical loops.
+## 2026-11-11 - Avoiding THREE.Vector3 cloning in vehicle physics update loop
+**Learning:** Instantiating new `THREE.Vector3` or calling `.clone()` inside high-frequency update loops (e.g. `updateMounted` in `VehicleInteractionSystem`) generates garbage collection pressure, leading to micro-stutters.
+**Action:** Use pre-allocated class-level scratch vectors and modify them in-place with `.set()`, `.addScaledVector()`, or pass a `targetOut` parameter to getters to eliminate continuous memory allocation.

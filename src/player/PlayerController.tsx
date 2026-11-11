@@ -136,8 +136,7 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
       if (vehicleState.mode === 'RIDING' && !isCin && !InputManager.isUIBlocked()) {
         vehicle.updateMounted(delta, cameraYaw.current);
       }
-      const mountedPos = vehicle.getMountedPosition();
-      controller.position.copy(mountedPos);
+      vehicle.getMountedPosition(controller.position);
       controller.velocity.set(0, 0, 0);
       controller.rotationY = vehicle.getState().vehicleRotationY;
       updated = {
