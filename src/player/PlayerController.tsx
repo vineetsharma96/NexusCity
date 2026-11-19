@@ -56,13 +56,20 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
 
   useEffect(() => {
     let prevMode = VehicleInteractionSystem.getInstance().getState().mode;
+    let prevActiveId = VehicleInteractionSystem.getInstance().getState().activeId;
+    let prevVariant = VehicleInteractionSystem.getInstance().getState().variant;
     return VehicleInteractionSystem.getInstance().subscribe((next) => {
       const dismounted = prevMode !== 'ON_FOOT' && next.mode === 'ON_FOOT';
+      const changed = prevMode !== next.mode || prevActiveId !== next.activeId || prevVariant !== next.variant;
       prevMode = next.mode;
+      prevActiveId = next.activeId;
+      prevVariant = next.variant;
       if (dismounted) {
         teleport(VehicleInteractionSystem.getInstance().getDismountPosition());
       }
-      setVehicleState(next);
+      if (changed) {
+        setVehicleState({ ...next });
+      }
     });
   }, [teleport]);
 
@@ -144,7 +151,7 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
         position: controller.position,
         velocity: controller.velocity,
         rotationY: controller.rotationY,
-        speed: vehicle.getMovementMultiplier() * 16,
+        speed: vehicle.getTelemetry().speedMs,
         isGrounded: true,
         gait: 'IDLE',
         bankAngle: 0,
@@ -178,14 +185,18 @@ export const PlayerController: React.FC<PlayerControllerProps> = ({ playerPosRef
       DiscoverySystem.getInstance().update(updated.position);
       NavigationSystem.getInstance().updatePlayerPosition(updated.position);
     }
-  });
+  }, -2);
 
   const posRef = playerPosRef || ({ current: kinematicState.position } as React.MutableRefObject<THREE.Vector3>);
 
   return (
     <>
-      <ContactShadowDecal playerPosRef={posRef} isGrounded={kinematicState.isGrounded} />
-      {vehicleState.mode === 'ON_FOOT' && <ProceduralProtagonist state={kinematicState} />}
+      {vehicleState.mode === 'ON_FOOT' && (
+        <>
+          <ContactShadowDecal playerPosRef={posRef} isGrounded={kinematicState.isGrounded} />
+          <ProceduralProtagonist state={kinematicState} />
+        </>
+      )}
       <PlayerCamera
         targetPos={kinematicState.position}
         onYawChange={(yaw) => {

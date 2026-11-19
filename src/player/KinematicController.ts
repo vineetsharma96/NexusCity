@@ -2,8 +2,16 @@ import * as THREE from 'three';
 import { InputManager } from './InputManager';
 import { KinematicCollisionSolver } from './KinematicCollision';
 import { AudioManager } from '../audio/AudioManager';
+import { PhysicsBodyProfile, WorldPhysicsEngine } from '../world/WorldPhysicsEngine';
 
 export type GaitState = 'IDLE' | 'WALK' | 'RUN' | 'JUMP_UP' | 'FALL';
+
+const PLAYER_PHYSICS_PROFILE: PhysicsBodyProfile = {
+  massKg: 75,
+  dragCoefficient: 1.05,
+  frontalAreaM2: 0.68,
+  surfaceFrictionScale: 1.0,
+};
 
 export interface KinematicState {
   position: THREE.Vector3;
@@ -34,6 +42,7 @@ export class KinematicController {
 
   private stepTimer = 0;
   private jumpHeldLastFrame = false;
+  private turnDirection = 1;
 
   // Reusable vectors to avoid allocations in update loop
   private readonly _forward = new THREE.Vector3();
@@ -59,6 +68,8 @@ export class KinematicController {
     const dt = Math.min(Math.max(delta, 0), 0.05);
     const input = InputManager.getState();
     const audio = AudioManager.getInstance();
+    const worldPhysics = WorldPhysicsEngine.getInstance();
+    const surface = worldPhysics.getSurfaceAt(this.position.x, this.position.z);
 
     this._forward.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
     this._right.set(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
@@ -70,18 +81,65 @@ export class KinematicController {
     const inputLen = this._moveDir.length();
     if (inputLen > 0.01) this._moveDir.normalize();
 
+    // Compute smooth rotational facing before velocity step so forward->backward pivots rotate cleanly
+    const prevHorizSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+    let activeTurnDiff = 0;
+    if (inputLen > 0.05 || prevHorizSpeed > 0.45) {
+      const targetAngle =
+        inputLen > 0.05
+          ? Math.atan2(this._moveDir.x, this._moveDir.z)
+          : Math.atan2(this.velocity.x, this.velocity.z);
+
+      let diff = Math.atan2(Math.sin(targetAngle - this.rotationY), Math.cos(targetAngle - this.rotationY));
+
+      // Deterministic 180-degree tie-breaker so forward -> backward turns smoothly in one consistent arc
+      if (Math.abs(diff) > Math.PI - 0.14) {
+        diff = this.turnDirection * Math.abs(diff);
+      } else if (Math.abs(diff) > 0.04) {
+        this.turnDirection = diff >= 0 ? 1 : -1;
+      }
+
+      activeTurnDiff = diff;
+      const maxTurnStep = 8.2 * dt; // ~0.38s for a clean, clearly visible 180-degree pivot turn
+      const dampedStep = diff * (1 - Math.exp(-10.5 * dt));
+      const clampedStep = THREE.MathUtils.clamp(dampedStep, -maxTurnStep, maxTurnStep);
+      this.rotationY = Math.atan2(
+        Math.sin(this.rotationY + clampedStep),
+        Math.cos(this.rotationY + clampedStep)
+      );
+    }
+
     const targetMaxSpeed = input.sprint ? this.runSpeed : this.walkSpeed;
-    const targetSpeed = inputLen > 0.01 ? targetMaxSpeed * Math.min(1, inputLen) : 0;
+    // Gently moderate translational speed mid-180-pivot so the character visibly turns into the new heading
+    const pivotScale =
+      inputLen > 0.05 && Math.abs(activeTurnDiff) > 1.25
+        ? THREE.MathUtils.lerp(0.42, 1.0, 1 - THREE.MathUtils.clamp((Math.abs(activeTurnDiff) - 1.25) / (Math.PI - 1.25), 0, 1))
+        : 1.0;
+    const targetSpeed = inputLen > 0.01 ? targetMaxSpeed * Math.min(1, inputLen) * pivotScale : 0;
 
     this._currentHorizVel.set(this.velocity.x, 0, this.velocity.z);
     this._targetHorizVel.copy(this._moveDir).multiplyScalar(targetSpeed);
 
-    const controlMult = this.isGrounded ? 1.0 : this.airControl;
-    const rate = (inputLen > 0.01 ? this.accel : this.decel) * controlMult;
+    // Ground traction scales acceleration/stopping grip smoothly with surface friction (dry vs rain vs snow)
+    const gripFactor = this.isGrounded ? Math.max(0.55, Math.min(1.1, surface.frictionMu / 0.85)) : this.airControl;
+    const rate = (inputLen > 0.01 ? this.accel : this.decel) * gripFactor;
 
     this._currentHorizVel.lerp(this._targetHorizVel, 1 - Math.exp(-rate * dt));
     this.velocity.x = this._currentHorizVel.x;
     this.velocity.z = this._currentHorizVel.z;
+
+    // Apply unified WorldPhysicsEngine aerodynamic drag & wind resistance (zero wind push when standing still on ground)
+    const windCoupling = !this.isGrounded ? 0.22 : inputLen > 0.05 ? 0.04 : 0;
+    worldPhysics.applyWorldForcesToVelocity(
+      this.velocity,
+      this.position.x,
+      this.position.z,
+      PLAYER_PHYSICS_PROFILE,
+      dt,
+      this.isGrounded,
+      windCoupling,
+      inputLen <= 0.01
+    );
 
     this._previousPos.copy(this.position);
     this._nextPos.copy(this.position);
@@ -149,16 +207,10 @@ export class KinematicController {
 
     const horizSpeed = Math.hypot(this.velocity.x, this.velocity.z);
     if (horizSpeed > 0.25) {
-      const targetAngle = Math.atan2(this.velocity.x, this.velocity.z);
-      let diff = targetAngle - this.rotationY;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-
-      this.rotationY += diff * (1 - Math.exp(-16 * dt));
-      const targetBank = THREE.MathUtils.clamp(-diff * (horizSpeed / this.runSpeed) * 0.35, -0.25, 0.25);
-      this.bankAngle = THREE.MathUtils.lerp(this.bankAngle, targetBank, 1 - Math.exp(-12 * dt));
+      const targetBank = THREE.MathUtils.clamp(-activeTurnDiff * (horizSpeed / this.runSpeed) * 0.22, -0.18, 0.18);
+      this.bankAngle = THREE.MathUtils.lerp(this.bankAngle, targetBank, 1 - Math.exp(-10 * dt));
     } else {
-      this.bankAngle = THREE.MathUtils.lerp(this.bankAngle, 0, 1 - Math.exp(-12 * dt));
+      this.bankAngle = THREE.MathUtils.lerp(this.bankAngle, 0, 1 - Math.exp(-10 * dt));
     }
 
     let gait: GaitState = 'IDLE';

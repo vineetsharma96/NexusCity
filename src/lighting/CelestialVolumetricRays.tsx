@@ -1,8 +1,8 @@
 import React, { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { TimeLightingState } from '../world/TimeSystem';
-import { WeatherState } from '../world/WeatherSystem';
+import { TimeLightingState, TimeSystem } from '../world/TimeSystem';
+import { WeatherState, WeatherSystem } from '../world/WeatherSystem';
 
 interface CelestialVolumetricRaysProps {
   timeState: TimeLightingState;
@@ -12,7 +12,6 @@ interface CelestialVolumetricRaysProps {
 
 export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = ({
   timeState,
-  weatherState,
   playerPosRef,
 }) => {
   const groupRef = useRef<THREE.Group>(null);
@@ -46,9 +45,11 @@ export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = (
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
     const lerpAlpha = 1 - Math.exp(-6.5 * dt);
+    const liveTime = TimeSystem.getInstance().getState();
+    const liveWeather = WeatherSystem.getInstance().getState();
 
-    const isNight = timeState.isNight;
-    const targetDir = isNight ? timeState.moonDirection : timeState.sunDirection;
+    const isNight = liveTime.isNight;
+    const targetDir = isNight ? liveTime.moonDirection : liveTime.sunDirection;
     smoothDirRef.current.lerp(targetDir, lerpAlpha).normalize();
 
     const pPos = playerPosRef?.current;
@@ -64,8 +65,8 @@ export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = (
       groupRef.current.visible = groupRef.current.position.y > -25;
     }
 
-    const discTargetHex = isNight ? '#e0f2fe' : timeState.goldenHourFactor > 0.4 ? '#fde68a' : '#fffbeb';
-    const shaftTargetHex = isNight ? '#38bdf8' : timeState.solarGlowColor;
+    const discTargetHex = isNight ? '#e0f2fe' : liveTime.goldenHourFactor > 0.4 ? '#fde68a' : '#fffbeb';
+    const shaftTargetHex = isNight ? '#38bdf8' : liveTime.solarGlowColor;
     smoothColorRef.current.lerp(scratchColorRef.current.set(discTargetHex), lerpAlpha);
     smoothShaftColorRef.current.lerp(scratchColorRef.current.set(shaftTargetHex), lerpAlpha);
 
@@ -73,17 +74,17 @@ export const CelestialVolumetricRays: React.FC<CelestialVolumetricRaysProps> = (
       discMatRef.current.color.copy(smoothColorRef.current);
     }
 
-    const rainDim = 1.0 - weatherState.rainIntensity * 0.68;
-    const goldenBoost = 1.0 + timeState.goldenHourFactor * 0.45;
+    const precipDim = 1.0 - Math.max(liveWeather.rainIntensity, liveWeather.snowIntensity) * 0.68;
+    const goldenBoost = 1.0 + liveTime.goldenHourFactor * 0.45;
 
     if (haloMatRef.current) {
       haloMatRef.current.uniforms.uColor.value.copy(smoothShaftColorRef.current);
-      haloMatRef.current.uniforms.uOpacity.value = (isNight ? 0.46 : 0.72 * goldenBoost) * rainDim;
+      haloMatRef.current.uniforms.uOpacity.value = (isNight ? 0.46 : 0.72 * goldenBoost) * precipDim;
     }
 
     if (rayGroupRef.current) {
       rayGroupRef.current.lookAt(px, 14, pz);
-      const baseShaftOpacity = (isNight ? 0.048 : (0.075 + timeState.goldenHourFactor * 0.045)) * rainDim;
+      const baseShaftOpacity = (isNight ? 0.048 : 0.075 + liveTime.goldenHourFactor * 0.045) * precipDim;
       rayGroupRef.current.children.forEach((child, idx) => {
         if (child.name === 'ray-shaft') {
           child.rotation.z += dt * rayShafts[idx % rayShafts.length].speed * 0.14;

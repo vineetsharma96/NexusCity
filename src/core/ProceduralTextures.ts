@@ -73,6 +73,8 @@ export class ProceduralTextures {
     ctx.strokeRect(0, size / 2 - 1, size, 2);
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(10, 10);
@@ -91,11 +93,11 @@ export class ProceduralTextures {
     const w = 512;
     const h = 1024;
     const [canvas, ctx] = this.createCanvas(w, h);
-    ctx.fillStyle = '#060a12';
+    ctx.fillStyle = '#070b14';
     ctx.fillRect(0, 0, w, h);
 
     // Base anodized titanium cladding frame
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = '#131d31';
     for (let x = 0; x < w; x += 32) {
       ctx.fillRect(x, 0, 4, h);
     }
@@ -119,7 +121,6 @@ export class ProceduralTextures {
       if (r % 9 === 4) {
         ctx.fillStyle = '#090e1a';
         ctx.fillRect(0, y - 2, w, winH + 4);
-        // Horizontal louver slats
         ctx.fillStyle = '#1e293b';
         for (let ly = y + 2; ly < y + winH - 2; ly += 4) {
           ctx.fillRect(0, ly, w, 1.5);
@@ -130,7 +131,7 @@ export class ProceduralTextures {
       }
 
       // Horizontal spandrel slab beam
-      ctx.fillStyle = '#111827';
+      ctx.fillStyle = '#141f34';
       ctx.fillRect(0, y - 3, w, 3);
 
       for (let c = 0; c < cols; c++) {
@@ -140,24 +141,22 @@ export class ProceduralTextures {
 
         if (rnd < litRatio) {
           const tone = ((hash >>> 16) & 0xff) / 255;
-          let topColor = '#bae6fd';
-          let botColor = '#0284c7';
+          let topColor = '#93c5fd';
+          let botColor = '#1e40af';
 
           if (variant === 'ARCOLOGY_TERRACE') {
-            topColor = tone > 0.52 ? '#a7f3d0' : tone > 0.22 ? '#fde68a' : '#bae6fd';
-            botColor = tone > 0.52 ? '#059669' : tone > 0.22 ? '#d97706' : '#0284c7';
+            topColor = tone > 0.52 ? '#6ee7b7' : tone > 0.22 ? '#fcd34d' : '#93c5fd';
+            botColor = tone > 0.52 ? '#065f46' : tone > 0.22 ? '#92400e' : '#1e3a8a';
           } else if (variant === 'DIAGRID_HEX') {
-            topColor = tone > 0.48 ? '#fde68a' : tone > 0.18 ? '#fed7aa' : '#7dd3fc';
-            botColor = tone > 0.48 ? '#d97706' : tone > 0.18 ? '#c2410c' : '#0369a1';
+            topColor = tone > 0.48 ? '#fcd34d' : tone > 0.18 ? '#fdba74' : '#7dd3fc';
+            botColor = tone > 0.48 ? '#92400e' : tone > 0.18 ? '#9a3412' : '#0c4a6e';
           } else {
-            topColor = tone > 0.56 ? '#fde68a' : tone > 0.24 ? '#bae6fd' : tone > 0.08 ? '#f59e0b' : '#6ee7b7';
-            botColor = tone > 0.56 ? '#d97706' : tone > 0.24 ? '#0284c7' : '#b45309';
+            topColor = tone > 0.56 ? '#fde68a' : tone > 0.24 ? '#93c5fd' : tone > 0.08 ? '#f59e0b' : '#6ee7b7';
+            botColor = tone > 0.56 ? '#92400e' : tone > 0.24 ? '#075985' : '#78350f';
           }
 
-          // Room ceiling glow & depth gradient
           const grad = ctx.createLinearGradient(x, y, x, y + winH);
-          grad.addColorStop(0, '#ffffff');
-          grad.addColorStop(0.18, topColor);
+          grad.addColorStop(0, topColor);
           grad.addColorStop(1, botColor);
           ctx.fillStyle = grad;
           ctx.fillRect(x, y, winW, winH);
@@ -168,33 +167,28 @@ export class ProceduralTextures {
             ctx.fillStyle = 'rgba(7, 11, 19, 0.58)';
             ctx.fillRect(x, y + winH * 0.52, winW, 3);
           } else if (interiorDetail === 2) {
-            // Half-drawn architectural shade
             ctx.fillStyle = 'rgba(15, 23, 42, 0.48)';
             ctx.fillRect(x, y, winW, winH * 0.42);
           } else if (interiorDetail === 3) {
-            // Vertical office partition pillar inside room
             ctx.fillStyle = 'rgba(7, 11, 19, 0.65)';
             ctx.fillRect(x + winW * 0.45, y, 3, winH);
           }
 
-          // Subtle window sub-frame mullion
           ctx.strokeStyle = 'rgba(15, 23, 42, 0.65)';
           ctx.lineWidth = 1;
           ctx.strokeRect(x + 0.5, y + 0.5, winW - 1, winH - 1);
         } else {
-          // Unlit reflective dark architectural glass with sky-tint top edge
           const darkGrad = ctx.createLinearGradient(x, y, x, y + winH);
-          darkGrad.addColorStop(0, '#111c33');
-          darkGrad.addColorStop(1, '#090f1d');
+          darkGrad.addColorStop(0, '#182742');
+          darkGrad.addColorStop(1, '#0c1526');
           ctx.fillStyle = darkGrad;
           ctx.fillRect(x, y, winW, winH);
-          ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+          ctx.fillStyle = 'rgba(125, 211, 252, 0.16)';
           ctx.fillRect(x, y, winW, 2);
         }
       }
     }
 
-    // Structural Exoskeleton Overlay for DIAGRID_HEX or BRUTALIST_RIBBED
     if (variant === 'DIAGRID_HEX') {
       ctx.strokeStyle = '#1e293b';
       ctx.lineWidth = 7;
@@ -215,6 +209,111 @@ export class ProceduralTextures {
     }
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    this.cache.set(key, texture);
+    return texture;
+  }
+
+  /**
+   * Dedicated nocturnal window emissive map aligned pixel-for-pixel with getBuildingFacadeTexture.
+   * Allows sunlit metallic glass reflections during day and glowing warm/cool interior windows at night.
+   */
+  public static getBuildingEmissiveTexture(
+    litRatio: number = 0.6,
+    variant: FacadeStyleVariant = 'CURTAIN_GLASS'
+  ): THREE.CanvasTexture {
+    const key = `facade-emissive-${litRatio}-${variant}`;
+    const existing = this.cache.get(key);
+    if (existing) return existing;
+
+    const w = 512;
+    const h = 1024;
+    const [canvas, ctx] = this.createCanvas(w, h);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, w, h);
+
+    const cols = variant === 'BRUTALIST_RIBBED' ? 12 : 16;
+    const rows = 36;
+    const padX = variant === 'BRUTALIST_RIBBED' ? 8 : 5;
+    const padY = 6;
+    const winW = (w - (cols + 1) * padX) / cols;
+    const winH = (h - (rows + 1) * padY) / rows;
+
+    let hash = Math.floor(litRatio * 1000) + variant.charCodeAt(0) * 31 + 17;
+    for (let r = 0; r < rows; r++) {
+      const y = padY + r * (winH + padY);
+      if (r % 9 === 4) {
+        ctx.fillStyle = variant === 'ARCOLOGY_TERRACE' ? '#10b981' : variant === 'DIAGRID_HEX' ? '#f59e0b' : '#38bdf8';
+        ctx.fillRect(0, y + winH * 0.5, w, 2);
+        continue;
+      }
+
+      for (let c = 0; c < cols; c++) {
+        hash = (hash * 1664525 + 1013904223) >>> 0;
+        const rnd = (hash & 0xffff) / 0xffff;
+        const x = padX + c * (winW + padX);
+
+        if (rnd < litRatio) {
+          const tone = ((hash >>> 16) & 0xff) / 255;
+          let topColor = '#bae6fd';
+          let botColor = '#0284c7';
+          if (variant === 'ARCOLOGY_TERRACE') {
+            topColor = tone > 0.52 ? '#a7f3d0' : tone > 0.22 ? '#fde68a' : '#bae6fd';
+            botColor = tone > 0.52 ? '#059669' : tone > 0.22 ? '#d97706' : '#0284c7';
+          } else if (variant === 'DIAGRID_HEX') {
+            topColor = tone > 0.48 ? '#fde68a' : tone > 0.18 ? '#fed7aa' : '#7dd3fc';
+            botColor = tone > 0.48 ? '#d97706' : tone > 0.18 ? '#c2410c' : '#0369a1';
+          } else {
+            topColor = tone > 0.56 ? '#fde68a' : tone > 0.24 ? '#bae6fd' : tone > 0.08 ? '#f59e0b' : '#6ee7b7';
+            botColor = tone > 0.56 ? '#d97706' : tone > 0.24 ? '#0284c7' : '#b45309';
+          }
+          const grad = ctx.createLinearGradient(x, y, x, y + winH);
+          grad.addColorStop(0, '#fffdf5');
+          grad.addColorStop(0.22, topColor);
+          grad.addColorStop(1, botColor);
+          ctx.fillStyle = grad;
+          ctx.fillRect(x, y, winW, winH);
+
+          const interiorDetail = (hash >>> 8) & 7;
+          if (interiorDetail === 0 || interiorDetail === 1) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.62)';
+            ctx.fillRect(x, y + winH * 0.52, winW, 3);
+          } else if (interiorDetail === 2) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(x, y, winW, winH * 0.42);
+          } else if (interiorDetail === 3) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.68)';
+            ctx.fillRect(x + winW * 0.45, y, 3, winH);
+          }
+        }
+      }
+    }
+
+    if (variant === 'DIAGRID_HEX') {
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 7;
+      const stepY = 128;
+      for (let y = -stepY; y < h + stepY; y += stepY) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y + stepY * 2);
+        ctx.moveTo(w, y);
+        ctx.lineTo(0, y + stepY * 2);
+        ctx.stroke();
+      }
+    } else if (variant === 'BRUTALIST_RIBBED') {
+      ctx.fillStyle = '#000000';
+      for (let x = 0; x < w; x += 64) {
+        ctx.fillRect(x, 0, 10, h);
+      }
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     this.cache.set(key, texture);
@@ -245,6 +344,7 @@ export class ProceduralTextures {
     ctx.putImageData(imgData, 0, 0);
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.anisotropy = 4;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(18, 18);
@@ -277,6 +377,7 @@ export class ProceduralTextures {
     }
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.anisotropy = 4;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(4, 12);
@@ -311,6 +412,7 @@ export class ProceduralTextures {
     }
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.anisotropy = 4;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(3, 6);

@@ -142,8 +142,8 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
         camera={{
           position: [0, 8, 16],
           fov: 60,
-          near: 0.1,
-          far: Math.min(3500, Math.max(1000, quality.drawDistance * 1.3)),
+          near: 0.5,
+          far: Math.min(2400, Math.max(1000, quality.drawDistance * 1.4)),
         }}
         gl={{
           antialias: quality.antiAliasing,
@@ -151,7 +151,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
           stencil: false,
           depth: true,
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.12,
+          toneMappingExposure: 1.08,
         }}
         onCreated={({ gl }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
@@ -161,7 +161,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
       >
         <InputLifecycle onContextChange={setIsContextLost} />
         <SceneFrameLoop />
-        <PostProcessingManager quality={quality} />
+        <PostProcessingManager quality={quality} bloomIntensityMultiplier={1.0} />
         <LightingManager quality={quality} playerPosRef={playerPosRef} />
 
         <CityDistrict seed={847291} />
@@ -172,6 +172,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
         <RideableTransitLayer playerPosRef={playerPosRef} />
         <TrafficLightGantry position={[0, 0, 0]} />
         <ParkSanctuary position={[75, 0, 75]} />
+        <ParkSanctuary position={[0, 0, 240]} />
         {quality.streetFurnitureEnabled && <SteamVentSystem playerPosRef={playerPosRef} />}
         {quality.vegetationEnabled && <FallingLeavesSystem playerPosRef={playerPosRef} seed={847291} />}
         {quality.particlesDensity > 0.02 &&

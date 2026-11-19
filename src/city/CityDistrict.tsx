@@ -16,10 +16,24 @@ import { LivingCityEventState, LivingCityEventSystem } from '../world/LivingCity
 
 const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 10);
+const SHARED_TAPER_POLE = new THREE.CylinderGeometry(0.08, 0.15, 1, 8);
+const SHARED_OCT_PLINTH = new THREE.CylinderGeometry(0.28, 0.38, 1, 8);
+const SHARED_BOLLARD_CAP = new THREE.CylinderGeometry(0.08, 0.14, 1, 10);
 const SHARED_DRONE_SPHERE = new THREE.SphereGeometry(0.14, 8, 8);
 const SHARED_DRONE_CONE = new THREE.ConeGeometry(2.2, 8.2, 10, 1, true);
 const SHARED_STEAM_PLANE = new THREE.PlaneGeometry(1.8, 1.1);
 const SHARED_STEAM_CONE = new THREE.ConeGeometry(0.85, 2.4, 8, 1, true);
+const GLASS_WINDSCREEN_MAT = new THREE.MeshStandardMaterial({
+  color: '#0f2238',
+  metalness: 0.92,
+  roughness: 0.08,
+  transparent: true,
+  opacity: 0.48,
+});
+const SOLAR_CELL_MAT = new THREE.MeshStandardMaterial({ color: '#0c2340', metalness: 0.92, roughness: 0.14 });
+const TIMBER_SLAT_MAT = new THREE.MeshStandardMaterial({ color: '#6b4226', metalness: 0.08, roughness: 0.72 });
+const CONCRETE_BASE_MAT = new THREE.MeshStandardMaterial({ color: '#1e293b', metalness: 0.22, roughness: 0.78 });
+const CHROME_TRIM_MAT = new THREE.MeshStandardMaterial({ color: '#94a3b8', metalness: 0.94, roughness: 0.18 });
 const PLAZA_NORMAL_SCALE = new THREE.Vector2(0.4, 0.4);
 const AVE_NORMAL_SCALE = new THREE.Vector2(0.65, 0.65);
 const AVE_ULTRA_NORMAL_SCALE = new THREE.Vector2(0.85, 0.85);
@@ -52,6 +66,18 @@ function getDistrictBasicMat(color: string): THREE.MeshBasicMaterial {
   return m;
 }
 
+const districtBloomMatCache = new Map<string, THREE.MeshBasicMaterial>();
+function getDistrictBloomMat(color: string, boost: number = 2.0): THREE.MeshBasicMaterial {
+  const key = `${color}|${boost.toFixed(2)}`;
+  let m = districtBloomMatCache.get(key);
+  if (!m) {
+    const hdrColor = new THREE.Color(color).multiplyScalar(boost);
+    m = new THREE.MeshBasicMaterial({ color: hdrColor, toneMapped: false });
+    districtBloomMatCache.set(key, m);
+  }
+  return m;
+}
+
 interface CityDistrictProps {
   seed?: number;
 }
@@ -65,6 +91,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const [streetLightsOn, setStreetLightsOn] = useState<boolean>(
     () => TimeSystem.getInstance().getState().streetLightsOn
   );
+  const [nightBucket, setNightBucket] = useState<number>(
+    () => Math.round(TimeSystem.getInstance().getState().nightFactor * 5) / 5
+  );
   const [wetnessBucket, setWetnessBucket] = useState<number>(
     () => Math.round(WeatherSystem.getInstance().getState().wetnessFactor * 10) / 10
   );
@@ -73,11 +102,17 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
   useEffect(() => {
     let lastLightsOn = TimeSystem.getInstance().getState().streetLightsOn;
+    let lastNightBucket = Math.round(TimeSystem.getInstance().getState().nightFactor * 5) / 5;
     let lastWetBucket = Math.round(WeatherSystem.getInstance().getState().wetnessFactor * 10) / 10;
     const uTime = TimeSystem.getInstance().subscribe((s) => {
+      const nb = Math.round(s.nightFactor * 5) / 5;
       if (s.streetLightsOn !== lastLightsOn) {
         lastLightsOn = s.streetLightsOn;
         setStreetLightsOn(s.streetLightsOn);
+      }
+      if (nb !== lastNightBucket) {
+        lastNightBucket = nb;
+        setNightBucket(nb);
       }
     });
     const uWea = WeatherSystem.getInstance().subscribe((s) => {
@@ -157,6 +192,15 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
     }),
     []
   );
+  const facadeEmissiveTextures = useMemo<Record<FacadeStyleVariant, THREE.CanvasTexture>>(
+    () => ({
+      CURTAIN_GLASS: ProceduralTextures.getBuildingEmissiveTexture(0.64, 'CURTAIN_GLASS'),
+      DIAGRID_HEX: ProceduralTextures.getBuildingEmissiveTexture(0.66, 'DIAGRID_HEX'),
+      BRUTALIST_RIBBED: ProceduralTextures.getBuildingEmissiveTexture(0.58, 'BRUTALIST_RIBBED'),
+      ARCOLOGY_TERRACE: ProceduralTextures.getBuildingEmissiveTexture(0.68, 'ARCOLOGY_TERRACE'),
+    }),
+    []
+  );
   const plazaTex = useMemo(() => ProceduralTextures.getPlazaGridTexture(), []);
   const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
   const puddleRoughness = useMemo(() => ProceduralTextures.getWetPuddleRoughnessMap(), []);
@@ -166,7 +210,25 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
     []
   );
 
-  const lightStep = quality.maxLights >= 30 ? 4 : quality.maxLights >= 18 ? 6 : 10;
+  // All central avenue intersections (excluding (0,0) plaza and (75,75) park) get clean junction pads sized to widened 22m/18m avenues
+  const centralJunctions = useMemo(() => {
+    const coords = [-165, -75, 0, 75, 165];
+    const pts: [number, number, number, number][] = [];
+    for (const jx of coords) {
+      for (const jz of coords) {
+        if (jx === 0 && jz === 0) continue;
+        if (jx === 75 && jz === 75) continue;
+        const w = jx === 0 ? 22.4 : 18.4;
+        const d = jz === 0 ? 22.4 : 18.4;
+        pts.push([jx, jz, w, d]);
+      }
+    }
+    return pts;
+  }, []);
+
+  const facadeEmissiveIntensity = gridIsOut ? 0.03 : 0.1 + nightBucket * 1.75;
+  const neonBloomBoost = gridIsOut ? 0.45 : Number((0.95 + nightBucket * 1.35).toFixed(2));
+  const beaconBloomBoost = gridIsOut ? 0.5 : Number((1.2 + nightBucket * 1.65).toFixed(2));
   const podiumBaseMat = getDistrictStdMat('#0b1120', 0.88, 0.26);
   const canopyMat = getDistrictStdMat('#0f172a', 0.92, 0.2);
   const pierMat = getDistrictStdMat('#111827', 0.9, 0.22);
@@ -177,19 +239,19 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const streetPoleMat = getDistrictStdMat('#1e293b', 0.88, 0.24);
   const streetArmMat = getDistrictStdMat('#0f172a', 0.9, 0.2);
   const bulbOffMat = getDistrictStdMat('#1e293b', 0.65, 0.42);
-  const bulbOnMat = getDistrictBasicMat('#fef3c7');
+  const bulbOnMat = getDistrictBloomMat('#fde68a', 2.65);
 
   return (
     <group name="CityDistrictCentral">
-      {/* Ground Substrate */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow={quality.shadows}>
+      {/* Ground Substrate (cleanly below NS y=0.02 and EW y=0.045 avenues) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]} receiveShadow={quality.shadows}>
         <planeGeometry args={[2800, 2800]} />
         <meshStandardMaterial color="#05080f" roughness={roadRoughness + 0.18} metalness={0.38} />
       </mesh>
 
-      {/* Central Intersection & Civic Plaza Pad (top at y=0.048, cleanly above avenue tops 0.040 and inside ±15.2m crosswalks) */}
-      <mesh position={[0, 0.038, 0]} receiveShadow={quality.shadows}>
-        <boxGeometry args={[26.4, 0.02, 26.4]} />
+      {/* Central Intersection & Civic Plaza Pad (25.6m × 25.6m covering widened 22m boulevards, cleanly below crosswalks 0.095) */}
+      <mesh position={[0, 0.072, 0]} receiveShadow={quality.shadows}>
+        <boxGeometry args={[25.6, 0.02, 25.6]} />
         <meshStandardMaterial
           map={plazaTex}
           normalMap={quality.normalMapsEnabled ? asphaltNormal : undefined}
@@ -203,28 +265,31 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         />
       </mesh>
 
-      {/* Secondary Avenue Junction Pads at z = ±75 and ±165 so N-S and E-W lane lines do not Z-fight */}
-      {([-165, -75, 75, 165] as const).map((jz) => (
-        <mesh key={`junc-${jz}`} position={[0, 0.036, jz]} receiveShadow={quality.shadows}>
-          <boxGeometry args={[14.2, 0.018, 14.2]} />
+      {/* Central District Avenue Junction Pads covering every NS/EW crossing so lane stripes never Z-fight */}
+      {centralJunctions.map(([jx, jz, jw, jd]) => (
+        <mesh key={`junc-${jx}-${jz}`} position={[jx, 0.072, jz]} receiveShadow={quality.shadows}>
+          <boxGeometry args={[jw, 0.02, jd]} />
           <meshStandardMaterial
             color="#090d16"
             normalMap={quality.normalMapsEnabled ? asphaltNormal : undefined}
             roughness={roadRoughness}
             metalness={roadMetalness}
             envMapIntensity={envScale * 0.7}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
           />
         </mesh>
       ))}
 
       {/* Central Plaza Sunken Reflective Meridian Ring & Overhead Astrolabe */}
       <group name="CentralPlazaPavilion">
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.052, 0]}>
-          <ringGeometry args={[5.4, 8.2, 48]} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.088, 0]}>
+          <ringGeometry args={[6.2, 9.4, 48]} />
           <meshStandardMaterial
             color="#042f2e"
             emissive="#38bdf8"
-            emissiveIntensity={gridIsOut ? 0.02 : 0.22}
+            emissiveIntensity={gridIsOut ? 0.02 : 0.22 + nightBucket * 0.3}
             roughness={0.05}
             metalness={0.95}
             envMapIntensity={envScale * 1.4}
@@ -233,58 +298,63 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
             polygonOffsetUnits={-2}
           />
         </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.055, 0]}>
-          <ringGeometry args={[5.2, 5.4, 48]} />
-          <meshBasicMaterial color="#f59e0b" />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.094, 0]}>
+          <ringGeometry args={[6.0, 6.2, 48]} />
+          <meshBasicMaterial color="#f59e0b" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
         </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.055, 0]}>
-          <ringGeometry args={[8.2, 8.4, 48]} />
-          <meshBasicMaterial color="#38bdf8" />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.094, 0]}>
+          <ringGeometry args={[9.4, 9.6, 48]} />
+          <meshBasicMaterial color="#38bdf8" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
         </mesh>
 
-        {/* 4 Corner Architectural Light Pylons at Plaza Perimeter (outside crosswalks & traffic lanes) */}
+        {/* 4 Detailed Corner Architectural Obelisk Light Pylons on Plaza Sidewalk Corners (outside 22m roadways) */}
         {(
           [
-            [-11.2, -11.2],
-            [11.2, -11.2],
-            [-11.2, 11.2],
-            [11.2, 11.2],
+            [-13.4, -13.4],
+            [13.4, -13.4],
+            [-13.4, 13.4],
+            [13.4, 13.4],
           ] as const
-        ).map(([px, pz], idx) => (
-          <group key={`pylon-${idx}`} position={[px, 0, pz]}>
-            <mesh
-              position={[0, 2.4, 0]}
-              geometry={SHARED_UNIT_BOX}
-              material={megacolMat}
-              scale={[0.42, 4.8, 0.42]}
-              castShadow={quality.shadows}
-            />
-            <mesh
-              position={[0, 2.5, 0]}
-              geometry={SHARED_UNIT_BOX}
-              material={
-                streetLightsActive
-                  ? getDistrictBasicMat(idx % 2 === 0 ? '#f59e0b' : '#38bdf8')
-                  : bulbOffMat
-              }
-              scale={[0.46, 3.8, 0.12]}
-            />
-          </group>
-        ))}
+        ).map(([px, pz], idx) => {
+          const pylonAccent = idx % 2 === 0 ? '#f59e0b' : '#38bdf8';
+          const pylonGlowMat = streetLightsActive ? getDistrictBloomMat(pylonAccent, neonBloomBoost) : bulbOffMat;
+          return (
+            <group key={`pylon-${idx}`} position={[px, 0, pz]}>
+              {/* Stepped Granite Base Plinth */}
+              <mesh position={[0, 0.24, 0]} geometry={SHARED_UNIT_BOX} material={CONCRETE_BASE_MAT} scale={[1.1, 0.48, 1.1]} receiveShadow={quality.shadows} />
+              <mesh position={[0, 0.56, 0]} geometry={SHARED_UNIT_BOX} material={CHROME_TRIM_MAT} scale={[0.84, 0.16, 0.84]} />
+              {/* Primary Fluted Dark Alloy Shaft */}
+              <mesh
+                position={[0, 2.85, 0]}
+                geometry={SHARED_UNIT_BOX}
+                material={megacolMat}
+                scale={[0.48, 4.45, 0.48]}
+                castShadow={quality.shadows}
+              />
+              {/* Twin Flanking Architectural Exoskeleton Fins */}
+              <mesh position={[-0.32, 2.65, 0]} geometry={SHARED_UNIT_BOX} material={finMat} scale={[0.1, 4.1, 0.56]} />
+              <mesh position={[0.32, 2.65, 0]} geometry={SHARED_UNIT_BOX} material={finMat} scale={[0.1, 4.1, 0.56]} />
+              {/* Recessed Glowing Crystal Light Core */}
+              <mesh position={[0, 2.85, 0]} geometry={SHARED_UNIT_BOX} material={pylonGlowMat} scale={[0.54, 3.85, 0.14]} />
+              <mesh position={[0, 2.85, 0]} geometry={SHARED_UNIT_BOX} material={pylonGlowMat} scale={[0.14, 3.85, 0.54]} />
+              {/* Cantilevered Crown Cap & Apex Beacon */}
+              <mesh position={[0, 5.2, 0]} geometry={SHARED_UNIT_BOX} material={parapetMat} scale={[0.78, 0.22, 0.78]} />
+              <mesh position={[0, 5.42, 0]} geometry={SHARED_UNIT_CYLINDER} material={pylonGlowMat} scale={[0.22, 0.24, 0.22]} />
+            </group>
+          );
+        })}
 
         {/* Suspended Kinetic Meridian Astrolabe (High Overhead at y=13.5m) */}
         <group ref={astrolabeRef} position={[0, 13.5, 0]}>
           <mesh>
             <octahedronGeometry args={[1.1, 0]} />
-            <meshBasicMaterial color="#f59e0b" wireframe />
+            <meshBasicMaterial color="#f59e0b" wireframe toneMapped={false} />
           </mesh>
-          <mesh>
+          <mesh material={getDistrictBloomMat('#38bdf8', neonBloomBoost)}>
             <torusGeometry args={[2.6, 0.05, 8, 48]} />
-            <meshBasicMaterial color="#38bdf8" />
           </mesh>
-          <mesh rotation={[Math.PI / 3, 0, 0]}>
+          <mesh rotation={[Math.PI / 3, 0, 0]} material={getDistrictBloomMat('#f59e0b', neonBloomBoost)}>
             <torusGeometry args={[3.4, 0.04, 8, 48]} />
-            <meshBasicMaterial color="#f59e0b" />
           </mesh>
         </group>
       </group>
@@ -335,11 +405,16 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
               envMapIntensity={envScale * 0.5}
             />
           </mesh>
+          {/* Recessed neon curb edge strip (top sits below sidewalk top so only outer curb glows, zero surface Z-fighting) */}
           <mesh
-            position={[0, sw.size.y / 2 + 0.01, 0]}
+            position={[0, sw.size.y / 2 - 0.055, 0]}
             geometry={SHARED_UNIT_BOX}
-            material={getDistrictBasicMat(idx % 2 === 0 ? '#38bdf8' : '#f59e0b')}
-            scale={[sw.size.x + 0.08, 0.03, sw.size.z + 0.08]}
+            material={
+              streetLightsActive
+                ? getDistrictBloomMat(idx % 2 === 0 ? '#38bdf8' : '#f59e0b', Math.min(1.9, neonBloomBoost * 0.85))
+                : getDistrictBasicMat(idx % 2 === 0 ? '#38bdf8' : '#f59e0b')
+            }
+            scale={[sw.size.x + 0.08, 0.045, sw.size.z + 0.08]}
           />
         </group>
       ))}
@@ -347,6 +422,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
       {/* Detailed Multi-Tier Architectural Monoliths */}
       {cityData.buildings.map((bldg) => {
         const bldgFacadeTex = facadeTextures[bldg.facadeVariant] || facadeTextures.CURTAIN_GLASS;
+        const bldgEmissiveTex = facadeEmissiveTextures[bldg.facadeVariant] || facadeEmissiveTextures.CURTAIN_GLASS;
         const topTier = bldg.tiers[bldg.tiers.length - 1];
         const topW = topTier.size.x;
         const topD = topTier.size.z;
@@ -368,7 +444,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                 receiveShadow={quality.shadows}
               />
 
-              {/* 4-Sided Illuminated Recessed Atrium Lobbies (North, South, East, West) */}
+              {/* 4-Sided Illuminated Recessed Atrium Lobbies (staggered height to avoid coplanar overlap) */}
               <mesh
                 position={[0, 2.5, 0]}
                 geometry={SHARED_UNIT_BOX}
@@ -377,53 +453,53 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                 <meshStandardMaterial
                   color="#091326"
                   emissive={bldg.storefrontColor}
-                  emissiveIntensity={gridIsOut ? 0.03 : 0.36}
+                  emissiveIntensity={gridIsOut ? 0.03 : 0.25 + nightBucket * 0.45}
                   metalness={0.92}
                   roughness={0.14}
                   envMapIntensity={envScale * 1.2}
                 />
               </mesh>
               <mesh
-                position={[0, 2.5, 0]}
+                position={[0, 2.48, 0]}
                 geometry={SHARED_UNIT_BOX}
-                scale={[bldg.totalSize.x + 1.05, 4.6, bldg.totalSize.z * 0.78]}
+                scale={[bldg.totalSize.x + 1.05, 4.52, bldg.totalSize.z * 0.78]}
               >
                 <meshStandardMaterial
                   color="#091326"
                   emissive={bldg.secondaryAccentColor}
-                  emissiveIntensity={gridIsOut ? 0.03 : 0.3}
+                  emissiveIntensity={gridIsOut ? 0.03 : 0.2 + nightBucket * 0.4}
                   metalness={0.92}
                   roughness={0.14}
                   envMapIntensity={envScale * 1.2}
                 />
               </mesh>
 
-              {/* 4-Sided Cantilevered Entrance Marquee Canopies & Under-Soffit Light Bars */}
+              {/* 4-Sided Cantilevered Entrance Marquee Canopies & Under-Soffit Light Bars (staggered Y/height) */}
               <mesh
-                position={[0, 5.35, 0]}
+                position={[0, 5.36, 0]}
                 geometry={SHARED_UNIT_BOX}
                 material={canopyMat}
-                scale={[bldg.totalSize.x + 2.4, 0.32, bldg.totalSize.z * 0.84]}
+                scale={[bldg.totalSize.x + 2.4, 0.3, bldg.totalSize.z * 0.84]}
                 castShadow={quality.shadows}
               />
               <mesh
-                position={[0, 5.35, 0]}
+                position={[0, 5.32, 0]}
                 geometry={SHARED_UNIT_BOX}
                 material={canopyMat}
-                scale={[bldg.totalSize.x * 0.84, 0.32, bldg.totalSize.z + 2.4]}
+                scale={[bldg.totalSize.x * 0.84, 0.24, bldg.totalSize.z + 2.4]}
                 castShadow={quality.shadows}
               />
               <mesh
-                position={[0, 5.15, 0]}
+                position={[0, 5.16, 0]}
                 geometry={SHARED_UNIT_BOX}
                 material={storefrontBasicMat}
-                scale={[bldg.totalSize.x + 2.5, 0.08, bldg.totalSize.z * 0.8]}
+                scale={[bldg.totalSize.x + 2.5, 0.07, bldg.totalSize.z * 0.8]}
               />
               <mesh
-                position={[0, 5.15, 0]}
+                position={[0, 5.1, 0]}
                 geometry={SHARED_UNIT_BOX}
                 material={secondaryBasicMat}
-                scale={[bldg.totalSize.x * 0.8, 0.08, bldg.totalSize.z + 2.5]}
+                scale={[bldg.totalSize.x * 0.8, 0.06, bldg.totalSize.z + 2.5]}
               />
 
               {/* Perimeter Colonnade Structural Piers */}
@@ -474,6 +550,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                   >
                     <meshStandardMaterial
                       map={bldgFacadeTex}
+                      emissive="#ffffff"
+                      emissiveMap={bldgEmissiveTex}
+                      emissiveIntensity={facadeEmissiveIntensity}
                       normalMap={quality.normalMapsEnabled ? claddingNormal : undefined}
                       normalScale={isUltra ? BLDG_ULTRA_NORMAL_SCALE : BLDG_NORMAL_SCALE}
                       roughness={isUltra ? 0.22 : 0.3}
@@ -501,7 +580,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                     />
                   ))}
 
-                  {/* Vertical Architectural Brise-Soleil Mullion Fins & Belt Courses on Medium/High/Ultra LOD */}
+                  {/* Vertical Architectural Brise-Soleil Mullion Fins & Belt Courses (staggered height to prevent Z-fighting) */}
                   {showFineMolding && (
                     <>
                       {([-0.26, 0, 0.26] as const).map((frac, fIdx) => (
@@ -516,7 +595,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                             position={[0, 0, td * frac]}
                             geometry={SHARED_UNIT_BOX}
                             material={finMat}
-                            scale={[tw + 0.42, th * 0.96, 0.32]}
+                            scale={[tw + 0.42, th * 0.94, 0.32]}
                           />
                         </React.Fragment>
                       ))}
@@ -551,7 +630,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                   <meshStandardMaterial
                     color="#0f172a"
                     emissive={slIdx % 2 === 0 ? bldg.storefrontColor : bldg.secondaryAccentColor}
-                    emissiveIntensity={gridIsOut ? 0.04 : 0.48}
+                    emissiveIntensity={gridIsOut ? 0.04 : 0.25 + nightBucket * 1.45}
                     metalness={0.85}
                     roughness={0.15}
                   />
@@ -567,7 +646,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                     <meshStandardMaterial
                       color="#0b1326"
                       emissive={bldg.storefrontColor}
-                      emissiveIntensity={gridIsOut ? 0.04 : 0.42}
+                      emissiveIntensity={gridIsOut ? 0.04 : 0.22 + nightBucket * 1.4}
                       metalness={0.92}
                       roughness={0.15}
                     />
@@ -576,7 +655,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                     <meshStandardMaterial
                       color="#0f172a"
                       emissive={bldg.secondaryAccentColor}
-                      emissiveIntensity={gridIsOut ? 0.04 : 0.55}
+                      emissiveIntensity={gridIsOut ? 0.04 : 0.28 + nightBucket * 1.65}
                       metalness={0.92}
                       roughness={0.12}
                     />
@@ -596,17 +675,22 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                       <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.18} />
                     </mesh>
                   ))}
-                  <mesh position={[0, 4.4, 0]} geometry={SHARED_UNIT_BOX} scale={[topW, 0.35, topD * 0.5]}>
-                    <meshBasicMaterial color={gridIsOut ? '#1e293b' : bldg.storefrontColor} />
-                  </mesh>
+                  <mesh
+                    position={[0, 4.4, 0]}
+                    geometry={SHARED_UNIT_BOX}
+                    material={gridIsOut ? bulbOffMat : getDistrictBloomMat(bldg.storefrontColor, neonBloomBoost)}
+                    scale={[topW, 0.35, topD * 0.5]}
+                  />
                 </group>
               )}
 
               {bldg.crownType === 'HALO_RING_CROWN' && (
                 <group position={[0, 2.8, 0]}>
-                  <mesh rotation={[Math.PI / 2, 0, 0]}>
+                  <mesh
+                    rotation={[Math.PI / 2, 0, 0]}
+                    material={gridIsOut ? bulbOffMat : getDistrictBloomMat(bldg.storefrontColor, neonBloomBoost)}
+                  >
                     <torusGeometry args={[Math.min(topW, topD) * 0.42, 0.28, 10, 32]} />
-                    <meshBasicMaterial color={gridIsOut ? '#1e293b' : bldg.storefrontColor} />
                   </mesh>
                   <mesh position={[0, -1.4, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[2.2, 2.8, 2.2]}>
                     <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
@@ -619,9 +703,12 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                   <mesh position={[0, 2.2, 0]} geometry={SHARED_UNIT_BOX} scale={[topW * 0.82, 4.2, topD * 0.82]}>
                     <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.2} />
                   </mesh>
-                  <mesh position={[0, 4.4, 0]} geometry={SHARED_UNIT_BOX} scale={[topW * 0.86, 0.32, topD * 0.86]}>
-                    <meshBasicMaterial color={gridIsOut ? '#1e293b' : bldg.secondaryAccentColor} />
-                  </mesh>
+                  <mesh
+                    position={[0, 4.4, 0]}
+                    geometry={SHARED_UNIT_BOX}
+                    material={gridIsOut ? bulbOffMat : getDistrictBloomMat(bldg.secondaryAccentColor, neonBloomBoost)}
+                    scale={[topW * 0.86, 0.32, topD * 0.86]}
+                  />
                 </group>
               )}
             </group>
@@ -632,10 +719,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                 key={sIdx}
                 position={strip.position}
                 geometry={SHARED_UNIT_BOX}
+                material={gridIsOut ? bulbOffMat : getDistrictBloomMat(strip.color, neonBloomBoost)}
                 scale={[strip.size.x, strip.size.y, strip.size.z]}
-              >
-                <meshBasicMaterial color={gridIsOut ? '#1e293b' : strip.color} />
-              </mesh>
+              />
             ))}
 
             {/* 6. Detailed Rooftop Mechanical & Communications Complex */}
@@ -657,53 +743,78 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
                       <meshStandardMaterial color="#334155" metalness={0.9} />
                     </mesh>
                     {/* Dual Aviation Warning Beacons */}
-                    <mesh position={[0, eq.size.y / 2, 0]}>
+                    <mesh position={[0, eq.size.y / 2, 0]} material={getDistrictBloomMat('#f59e0b', beaconBloomBoost)}>
                       <sphereGeometry args={[0.34, 8, 8]} />
-                      <meshBasicMaterial color="#f59e0b" />
                     </mesh>
-                    <mesh position={[0, eq.size.y * 0.18, 0]}>
+                    <mesh position={[0, eq.size.y * 0.18, 0]} material={getDistrictBloomMat('#f43f5e', beaconBloomBoost)}>
                       <sphereGeometry args={[0.22, 8, 8]} />
-                      <meshBasicMaterial color="#f43f5e" />
                     </mesh>
                   </group>
                 ) : eq.type === 'HELIPAD' ? (
                   <group>
-                    <mesh geometry={SHARED_UNIT_BOX} scale={[eq.size.x, eq.size.y, eq.size.z]}>
-                      <meshStandardMaterial color="#0f172a" metalness={0.85} roughness={0.28} />
-                    </mesh>
+                    {/* Raised Landing Deck with Perimeter Apron */}
+                    <mesh geometry={SHARED_UNIT_BOX} material={canopyMat} scale={[eq.size.x, eq.size.y, eq.size.z]} />
+                    <mesh position={[0, -eq.size.y * 0.45, 0]} geometry={SHARED_UNIT_BOX} material={parapetMat} scale={[eq.size.x + 0.5, 0.18, eq.size.z + 0.5]} />
                     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, eq.size.y / 2 + 0.02, 0]}>
                       <ringGeometry args={[eq.size.x * 0.34, eq.size.x * 0.4, 24]} />
                       <meshBasicMaterial color="#38bdf8" />
                     </mesh>
+                    {/* Crisp Center "H" Landing Emblem */}
+                    <mesh position={[-eq.size.x * 0.12, eq.size.y / 2 + 0.025, 0]} geometry={SHARED_UNIT_BOX} material={getDistrictBasicMat('#f59e0b')} scale={[0.24, 0.03, eq.size.z * 0.36]} />
+                    <mesh position={[eq.size.x * 0.12, eq.size.y / 2 + 0.025, 0]} geometry={SHARED_UNIT_BOX} material={getDistrictBasicMat('#f59e0b')} scale={[0.24, 0.03, eq.size.z * 0.36]} />
+                    <mesh position={[0, eq.size.y / 2 + 0.025, 0]} geometry={SHARED_UNIT_BOX} material={getDistrictBasicMat('#f59e0b')} scale={[eq.size.x * 0.26, 0.03, 0.24]} />
                   </group>
                 ) : eq.type === 'COOLING_TOWER' ? (
                   <group>
-                    <mesh geometry={SHARED_UNIT_CYLINDER} scale={[eq.size.x, eq.size.y, eq.size.z]}>
-                      <meshStandardMaterial color="#1e293b" metalness={0.88} roughness={0.26} />
-                    </mesh>
-                    <mesh position={[0, eq.size.y / 2 + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    {/* Steel Skid Base */}
+                    <mesh position={[0, -eq.size.y * 0.46, 0]} geometry={SHARED_UNIT_BOX} material={podiumBaseMat} scale={[eq.size.x * 1.12, 0.28, eq.size.z * 1.12]} />
+                    {/* Cylindrical Cooling Shroud */}
+                    <mesh geometry={SHARED_UNIT_CYLINDER} material={streetPoleMat} scale={[eq.size.x, eq.size.y, eq.size.z]} />
+                    {/* 4 Vertical Structural Stiffener Ribs */}
+                    <mesh geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[eq.size.x * 1.06, eq.size.y * 0.88, 0.18]} />
+                    <mesh geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.18, eq.size.y * 0.88, eq.size.z * 1.06]} />
+                    {/* Upper Exhaust Fan Cowl & Glowing Intake Ring */}
+                    <mesh position={[0, eq.size.y * 0.48, 0]} geometry={SHARED_UNIT_CYLINDER} material={CHROME_TRIM_MAT} scale={[eq.size.x * 0.82, 0.26, eq.size.z * 0.82]} />
+                    <mesh position={[0, eq.size.y / 2 + 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                       <ringGeometry args={[eq.size.x * 0.25, eq.size.x * 0.44, 16]} />
                       <meshBasicMaterial color="#38bdf8" />
                     </mesh>
                   </group>
                 ) : eq.type === 'DISH' ? (
                   <group>
-                    <mesh position={[0, -0.4, 0]} geometry={SHARED_UNIT_CYLINDER} scale={[0.35, 1.2, 0.35]}>
-                      <meshStandardMaterial color="#334155" metalness={0.9} />
-                    </mesh>
+                    <mesh position={[0, -0.58, 0]} geometry={SHARED_UNIT_BOX} material={podiumBaseMat} scale={[0.95, 0.22, 0.95]} />
+                    <mesh position={[0, -0.15, 0]} geometry={SHARED_UNIT_CYLINDER} material={streetPoleMat} scale={[0.32, 0.95, 0.32]} />
                     <mesh position={[0, 0.35, 0]} rotation={[0.55, 0.4, 0]}>
-                      <coneGeometry args={[0.95, 0.55, 14, 1, true]} />
+                      <coneGeometry args={[1.0, 0.55, 14, 1, true]} />
                       <meshStandardMaterial color="#e2e8f0" metalness={0.85} roughness={0.2} side={THREE.DoubleSide} />
                     </mesh>
+                    {/* Parabolic Feedhorn Stalk & Tip */}
+                    <mesh position={[0.18, 0.65, 0.26]} rotation={[0.55, 0.4, 0]} geometry={SHARED_UNIT_CYLINDER} material={CHROME_TRIM_MAT} scale={[0.08, 0.65, 0.08]} />
+                  </group>
+                ) : eq.type === 'SOLAR_ARRAY' ? (
+                  <group>
+                    {/* Steel Support Frame Struts */}
+                    <mesh position={[-eq.size.x * 0.32, -eq.size.y * 0.15, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.14, eq.size.y * 0.85, eq.size.z * 0.8]} />
+                    <mesh position={[eq.size.x * 0.32, -eq.size.y * 0.15, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.14, eq.size.y * 0.85, eq.size.z * 0.8]} />
+                    {/* Tilted Photovoltaic Glass Array Panel & Metallic Grid Frame */}
+                    <group position={[0, eq.size.y * 0.2, 0]} rotation={[0.36, 0, 0]}>
+                      <mesh geometry={SHARED_UNIT_BOX} material={CHROME_TRIM_MAT} scale={[eq.size.x, 0.1, eq.size.z]} />
+                      <mesh position={[0, 0.055, 0]} geometry={SHARED_UNIT_BOX} material={SOLAR_CELL_MAT} scale={[eq.size.x * 0.92, 0.04, eq.size.z * 0.92]} />
+                      <mesh position={[0, 0.08, 0]} geometry={SHARED_UNIT_BOX} material={getDistrictBasicMat('#38bdf8')} scale={[eq.size.x * 0.9, 0.018, 0.06]} />
+                    </group>
                   </group>
                 ) : (
                   <group>
-                    <mesh geometry={SHARED_UNIT_BOX} scale={[eq.size.x, eq.size.y, eq.size.z]}>
-                      <meshStandardMaterial color="#1e293b" metalness={0.88} roughness={0.28} />
-                    </mesh>
-                    <mesh position={[0, eq.size.y / 2 + 0.03, 0]} geometry={SHARED_UNIT_BOX} scale={[eq.size.x * 0.85, 0.05, eq.size.z * 0.85]}>
-                      <meshBasicMaterial color="#38bdf8" />
-                    </mesh>
+                    {/* Detailed HVAC Chiller Manifold Unit */}
+                    <mesh position={[0, -eq.size.y * 0.44, 0]} geometry={SHARED_UNIT_BOX} material={podiumBaseMat} scale={[eq.size.x * 1.08, 0.22, eq.size.z * 1.08]} />
+                    <mesh geometry={SHARED_UNIT_BOX} material={streetPoleMat} scale={[eq.size.x, eq.size.y, eq.size.z]} />
+                    {/* Louvered Side Grille Band */}
+                    <mesh position={[0, 0, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[eq.size.x + 0.08, eq.size.y * 0.42, eq.size.z * 0.82]} />
+                    {/* Twin Top Exhaust Fan Cowls */}
+                    <mesh position={[-eq.size.x * 0.24, eq.size.y / 2 + 0.14, 0]} geometry={SHARED_UNIT_CYLINDER} material={CHROME_TRIM_MAT} scale={[eq.size.x * 0.34, 0.24, eq.size.x * 0.34]} />
+                    <mesh position={[eq.size.x * 0.24, eq.size.y / 2 + 0.14, 0]} geometry={SHARED_UNIT_CYLINDER} material={CHROME_TRIM_MAT} scale={[eq.size.x * 0.34, 0.24, eq.size.x * 0.34]} />
+                    {/* Coolant Conduit Header */}
+                    <mesh position={[0, eq.size.y / 2 + 0.04, eq.size.z * 0.36]} geometry={SHARED_UNIT_BOX} material={getDistrictBasicMat('#38bdf8')} scale={[eq.size.x * 0.82, 0.05, 0.1]} />
                   </group>
                 )}
               </group>
@@ -712,158 +823,186 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         );
       })}
 
-      {/* Elevated Glazed Skybridges */}
+      {/* Detailed Elevated Glazed Skybridges with Structural Ribs & Under-Deck Box Girder */}
       {quality.streetFurnitureEnabled &&
-        cityData.skybridges.map((sb) => (
-          <group key={sb.id} position={sb.position} rotation={[0, sb.rotationY, 0]}>
-            <mesh geometry={SHARED_UNIT_BOX} scale={[sb.size.x, sb.size.y, sb.size.z]} castShadow={quality.shadows}>
-              <meshStandardMaterial
-                color="#0f172a"
-                metalness={0.9}
-                roughness={0.15}
-                transparent
-                opacity={0.86}
-                envMapIntensity={envScale}
-              />
-            </mesh>
-            <mesh position={[0, -sb.size.y / 2 - 0.12, 0]} geometry={SHARED_UNIT_BOX} scale={[sb.size.x, 0.22, sb.size.z + 0.4]}>
-              <meshStandardMaterial color="#090d16" metalness={0.92} roughness={0.25} />
-            </mesh>
-            <mesh position={[0, -sb.size.y / 2 - 0.26, 0]} geometry={SHARED_UNIT_BOX} scale={[sb.size.x * 0.92, 0.06, 0.35]}>
-              <meshBasicMaterial color={gridIsOut ? '#1e293b' : sb.accentColor} />
-            </mesh>
-            <mesh position={[0, sb.size.y / 2 + 0.08, 0]} geometry={SHARED_UNIT_BOX} scale={[sb.size.x * 0.92, 0.06, sb.size.z + 0.1]}>
-              <meshBasicMaterial color={gridIsOut ? '#1e293b' : sb.accentColor} />
-            </mesh>
-          </group>
-        ))}
+        cityData.skybridges.map((sb) => {
+          const bridgeGlowMat = gridIsOut ? bulbOffMat : getDistrictBloomMat(sb.accentColor, neonBloomBoost);
+          return (
+            <group key={sb.id} position={sb.position} rotation={[0, sb.rotationY, 0]}>
+              {/* Glazed Corridor Tube */}
+              <mesh geometry={SHARED_UNIT_BOX} scale={[sb.size.x, sb.size.y, sb.size.z]} castShadow={quality.shadows}>
+                <meshStandardMaterial
+                  color="#0f172a"
+                  metalness={0.9}
+                  roughness={0.14}
+                  transparent
+                  opacity={0.82}
+                  envMapIntensity={envScale}
+                />
+              </mesh>
+              {/* Under-Deck Box Girder & Structural Spine */}
+              <mesh position={[0, -sb.size.y / 2 - 0.16, 0]} geometry={SHARED_UNIT_BOX} material={podiumBaseMat} scale={[sb.size.x, 0.32, sb.size.z + 0.45]} />
+              <mesh position={[0, -sb.size.y / 2 - 0.4, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[sb.size.x * 0.94, 0.22, sb.size.z * 0.55]} />
+              {/* Roof Crown Coping */}
+              <mesh position={[0, sb.size.y / 2 + 0.12, 0]} geometry={SHARED_UNIT_BOX} material={parapetMat} scale={[sb.size.x, 0.2, sb.size.z + 0.32]} />
+              {/* Rhythmic Exterior Structural Portal Ribs */}
+              {([-0.36, -0.18, 0, 0.18, 0.36] as const).map((frac, rIdx) => (
+                <mesh
+                  key={`rib-${rIdx}`}
+                  position={[sb.size.x * frac, 0, 0]}
+                  geometry={SHARED_UNIT_BOX}
+                  material={finMat}
+                  scale={[0.38, sb.size.y + 0.55, sb.size.z + 0.52]}
+                />
+              ))}
+              {/* Dual HDR Accent Light Strips */}
+              <mesh position={[0, -sb.size.y / 2 - 0.32, 0]} geometry={SHARED_UNIT_BOX} material={bridgeGlowMat} scale={[sb.size.x * 0.94, 0.07, sb.size.z + 0.48]} />
+              <mesh position={[0, sb.size.y / 2 + 0.24, 0]} geometry={SHARED_UNIT_BOX} material={bridgeGlowMat} scale={[sb.size.x * 0.94, 0.06, sb.size.z + 0.18]} />
+            </group>
+          );
+        })}
 
-      {/* Detailed Streetscape Props (Transit Shelters, Cyber Kiosks, Benches, Bollards, Steam Grates) */}
+      {/* Detailed Composite Streetscape Props (Transit Shelters, Cyber Kiosks, Benches, Bollards, Steam Grates) */}
       {quality.streetFurnitureEnabled &&
-        cityData.streetProps.map((prop) => (
-          <group key={prop.id} position={prop.position} rotation={[0, prop.rotationY, 0]}>
-            {prop.type === 'TRANSIT_SHELTER' && (
-              <group>
-                <mesh position={[0, 1.35, -0.8]} geometry={SHARED_UNIT_BOX} scale={[3.8, 2.7, 0.14]} castShadow={quality.shadows}>
-                  <meshStandardMaterial color="#0f172a" metalness={0.88} roughness={0.18} />
-                </mesh>
-                <mesh position={[0, 2.75, 0]} geometry={SHARED_UNIT_BOX} scale={[4.2, 0.16, 1.9]} castShadow={quality.shadows}>
-                  <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.2} />
-                </mesh>
-                <mesh position={[0, 2.66, 0.85]} geometry={SHARED_UNIT_BOX} scale={[4.0, 0.05, 0.12]}>
-                  <meshBasicMaterial color={prop.accentColor} />
-                </mesh>
-                <mesh position={[0, 0.48, -0.35]} geometry={SHARED_UNIT_BOX} scale={[2.4, 0.12, 0.55]}>
-                  <meshStandardMaterial color="#334155" metalness={0.8} roughness={0.3} />
-                </mesh>
-              </group>
-            )}
-            {prop.type === 'CYBER_KIOSK' && (
-              <group>
-                <mesh position={[0, 1.25, 0]} geometry={SHARED_UNIT_BOX} scale={[0.85, 2.5, 0.36]} castShadow={quality.shadows}>
-                  <meshStandardMaterial color="#0b0f19" metalness={0.92} roughness={0.18} />
-                </mesh>
-                <mesh position={[0, 1.4, 0.19]} geometry={SHARED_UNIT_BOX} scale={[0.68, 1.35, 0.02]}>
-                  <meshBasicMaterial color={prop.accentColor} />
-                </mesh>
-                <mesh position={[0, 2.62, 0]} geometry={SHARED_UNIT_BOX} scale={[0.92, 0.08, 0.44]}>
-                  <meshBasicMaterial color="#f59e0b" />
-                </mesh>
-              </group>
-            )}
-            {prop.type === 'BENCH' && (
-              <group>
-                <mesh
-                  position={[0, 0.42, 0]}
-                  geometry={SHARED_UNIT_BOX}
-                  material={parapetMat}
-                  scale={[2.2, 0.12, 0.65]}
-                />
-                <mesh
-                  position={[0, 0.72, -0.26]}
-                  geometry={SHARED_UNIT_BOX}
-                  material={streetArmMat}
-                  scale={[2.2, 0.48, 0.1]}
-                />
-                <mesh
-                  position={[0, 0.12, 0]}
-                  geometry={SHARED_UNIT_BOX}
-                  material={streetLightsActive ? getDistrictBasicMat(prop.accentColor) : bulbOffMat}
-                  scale={[1.8, 0.04, 0.4]}
-                />
-              </group>
-            )}
-            {prop.type === 'BOLLARD_CLUSTER' && (
-              <group>
-                {([-1.2, 0, 1.2] as const).map((bx, bIdx) => (
-                  <group key={bIdx} position={[bx, 0, 0]}>
-                    <mesh
-                      position={[0, 0.5, 0]}
-                      geometry={SHARED_UNIT_CYLINDER}
-                      material={streetArmMat}
-                      scale={[0.24, 1.0, 0.24]}
+        cityData.streetProps.map((prop) => {
+          const propGlowMat = streetLightsActive ? getDistrictBloomMat(prop.accentColor, neonBloomBoost) : bulbOffMat;
+          return (
+            <group key={prop.id} position={prop.position} rotation={[0, prop.rotationY, 0]}>
+              {prop.type === 'TRANSIT_SHELTER' && (
+                <group>
+                  {/* Raised Shelter Curb Platform */}
+                  <mesh position={[0, 0.06, 0]} geometry={SHARED_UNIT_BOX} material={CONCRETE_BASE_MAT} scale={[4.4, 0.12, 2.0]} receiveShadow={quality.shadows} />
+                  {/* 4 Rear Steel Mullion Columns */}
+                  {([-1.85, -0.62, 0.62, 1.85] as const).map((mx, mIdx) => (
+                    <mesh key={mIdx} position={[mx, 1.42, -0.82]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.12, 2.65, 0.14]} castShadow={quality.shadows} />
+                  ))}
+                  {/* Tinted Glass Back Windscreen & Left Side Windscreen */}
+                  <mesh position={[0, 1.42, -0.82]} geometry={SHARED_UNIT_BOX} material={GLASS_WINDSCREEN_MAT} scale={[3.62, 2.38, 0.05]} />
+                  <mesh position={[-1.85, 1.42, -0.1]} geometry={SHARED_UNIT_BOX} material={GLASS_WINDSCREEN_MAT} scale={[0.05, 2.38, 1.42]} />
+                  <mesh position={[-1.85, 1.42, 0.62]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.1, 2.65, 0.1]} />
+                  {/* Cantilevered Ribbed Canopy Roof & Fascia */}
+                  <mesh position={[0, 2.78, 0.04]} geometry={SHARED_UNIT_BOX} material={parapetMat} scale={[4.5, 0.18, 2.05]} castShadow={quality.shadows} />
+                  <mesh position={[0, 2.9, 0.04]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[4.2, 0.08, 1.6]} />
+                  <mesh position={[0, 2.68, 0.98]} geometry={SHARED_UNIT_BOX} material={propGlowMat} scale={[4.2, 0.055, 0.1]} />
+                  {/* Integrated Timber-Slat Passenger Bench */}
+                  <mesh position={[-0.35, 0.46, -0.34]} geometry={SHARED_UNIT_BOX} material={TIMBER_SLAT_MAT} scale={[2.35, 0.08, 0.48]} />
+                  <mesh position={[-1.25, 0.25, -0.34]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.1, 0.42, 0.46]} />
+                  <mesh position={[0.55, 0.25, -0.34]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.1, 0.42, 0.46]} />
+                  {/* Right-Side Illuminated Transit Route Totem */}
+                  <mesh position={[1.85, 1.38, 0.12]} geometry={SHARED_UNIT_BOX} material={podiumBaseMat} scale={[0.24, 2.52, 0.78]} />
+                  <mesh position={[1.98, 1.5, 0.12]} geometry={SHARED_UNIT_BOX} material={propGlowMat} scale={[0.03, 1.55, 0.56]} />
+                </group>
+              )}
+              {prop.type === 'CYBER_KIOSK' && (
+                <group>
+                  {/* Stepped Granite Pedestal */}
+                  <mesh position={[0, 0.14, 0]} geometry={SHARED_UNIT_BOX} material={CONCRETE_BASE_MAT} scale={[1.15, 0.28, 0.68]} receiveShadow={quality.shadows} />
+                  {/* Beveled Dark Alloy Monolith Chassis */}
+                  <mesh position={[0, 1.42, 0]} geometry={SHARED_UNIT_BOX} material={podiumBaseMat} scale={[0.92, 2.32, 0.42]} castShadow={quality.shadows} />
+                  {/* Brushed Side Bezel Trim Pillars */}
+                  <mesh position={[-0.47, 1.42, 0.04]} geometry={SHARED_UNIT_BOX} material={CHROME_TRIM_MAT} scale={[0.06, 2.25, 0.44]} />
+                  <mesh position={[0.47, 1.42, 0.04]} geometry={SHARED_UNIT_BOX} material={CHROME_TRIM_MAT} scale={[0.06, 2.25, 0.44]} />
+                  {/* Recessed Interactive Display Screen & Angled Tactile Console */}
+                  <mesh position={[0, 1.62, 0.22]} geometry={SHARED_UNIT_BOX} material={getDistrictBloomMat(prop.accentColor, neonBloomBoost)} scale={[0.72, 1.25, 0.03]} />
+                  <mesh position={[0, 0.88, 0.28]} rotation={[0.42, 0, 0]} geometry={SHARED_UNIT_BOX} material={parapetMat} scale={[0.76, 0.08, 0.3]} />
+                  {/* Overhead Rain Visor Hood & Roof Telemetry Beacon */}
+                  <mesh position={[0, 2.56, 0.14]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[1.04, 0.12, 0.72]} />
+                  <mesh position={[0, 2.66, 0.06]} geometry={SHARED_UNIT_BOX} material={getDistrictBloomMat('#f59e0b', neonBloomBoost)} scale={[0.92, 0.07, 0.48]} />
+                  {/* Micro Telemetry Antenna Whip */}
+                  <mesh position={[0.32, 2.95, -0.08]} geometry={SHARED_UNIT_CYLINDER} material={CHROME_TRIM_MAT} scale={[0.03, 0.56, 0.03]} />
+                </group>
+              )}
+              {prop.type === 'BENCH' && (
+                <group>
+                  {/* 3 Sculpted Cast-Iron Support Frames & Armrests */}
+                  {([-0.92, 0, 0.92] as const).map((lx, lIdx) => (
+                    <group key={lIdx} position={[lx, 0, 0]}>
+                      <mesh position={[0, 0.23, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.08, 0.46, 0.58]} />
+                      {lIdx !== 1 && (
+                        <mesh position={[0, 0.56, -0.02]} geometry={SHARED_UNIT_BOX} material={CHROME_TRIM_MAT} scale={[0.07, 0.06, 0.56]} />
+                      )}
+                    </group>
+                  ))}
+                  {/* 3 Warm Timber Seat Slats */}
+                  {([-0.18, 0, 0.18] as const).map((sz, sIdx) => (
+                    <mesh key={sIdx} position={[0, 0.45, sz]} geometry={SHARED_UNIT_BOX} material={TIMBER_SLAT_MAT} scale={[2.24, 0.06, 0.14]} />
+                  ))}
+                  {/* Angled Dual-Slat Backrest & Rear Stanchions */}
+                  <mesh position={[-0.92, 0.68, -0.28]} rotation={[-0.18, 0, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.07, 0.52, 0.07]} />
+                  <mesh position={[0.92, 0.68, -0.28]} rotation={[-0.18, 0, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.07, 0.52, 0.07]} />
+                  <mesh position={[0, 0.68, -0.26]} rotation={[-0.18, 0, 0]} geometry={SHARED_UNIT_BOX} material={TIMBER_SLAT_MAT} scale={[2.22, 0.14, 0.06]} />
+                  <mesh position={[0, 0.86, -0.3]} rotation={[-0.18, 0, 0]} geometry={SHARED_UNIT_BOX} material={TIMBER_SLAT_MAT} scale={[2.22, 0.14, 0.06]} />
+                  {/* Recessed Under-Seat HDR Glow Strip */}
+                  <mesh position={[0, 0.16, 0]} geometry={SHARED_UNIT_BOX} material={propGlowMat} scale={[1.76, 0.04, 0.34]} />
+                </group>
+              )}
+              {prop.type === 'BOLLARD_CLUSTER' && (
+                <group>
+                  {([-1.25, 0, 1.25] as const).map((bx, bIdx) => (
+                    <group key={bIdx} position={[bx, 0, 0]}>
+                      {/* Bolted Base Flange */}
+                      <mesh position={[0, 0.05, 0]} geometry={SHARED_UNIT_CYLINDER} material={CHROME_TRIM_MAT} scale={[0.34, 0.1, 0.34]} />
+                      {/* Cylindrical Bollard Core */}
+                      <mesh position={[0, 0.52, 0]} geometry={SHARED_UNIT_CYLINDER} material={streetArmMat} scale={[0.24, 0.88, 0.24]} castShadow={quality.shadows} />
+                      {/* Brushed Collar Ring */}
+                      <mesh position={[0, 0.72, 0]} geometry={SHARED_UNIT_CYLINDER} material={CHROME_TRIM_MAT} scale={[0.26, 0.06, 0.26]} />
+                      {/* Illuminated Perimeter Light Ring */}
+                      <mesh position={[0, 0.88, 0]} geometry={SHARED_UNIT_CYLINDER} material={propGlowMat} scale={[0.25, 0.09, 0.25]} />
+                      {/* Beveled Domed Crown Cap */}
+                      <mesh position={[0, 0.99, 0]} geometry={SHARED_BOLLARD_CAP} material={parapetMat} scale={[0.92, 0.1, 0.92]} />
+                    </group>
+                  ))}
+                </group>
+              )}
+              {prop.type === 'STEAM_GRATE' && (
+                <group>
+                  {/* Steel Perimeter Curb Frame */}
+                  <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={SHARED_STEAM_PLANE} material={streetArmMat} />
+                  {/* 5 Raised Cast-Iron Grate Ribs */}
+                  {([-0.68, -0.34, 0, 0.34, 0.68] as const).map((gx, gIdx) => (
+                    <mesh key={gIdx} position={[gx, 0.02, 0]} geometry={SHARED_UNIT_BOX} material={CHROME_TRIM_MAT} scale={[0.08, 0.04, 1.02]} />
+                  ))}
+                  {/* Translucent Steam Plume */}
+                  <mesh position={[0, 1.2, 0]} geometry={SHARED_STEAM_CONE}>
+                    <meshBasicMaterial
+                      color={prop.accentColor}
+                      transparent
+                      opacity={0.09}
+                      depthWrite={false}
+                      side={THREE.DoubleSide}
                     />
-                    <mesh
-                      position={[0, 0.88, 0]}
-                      geometry={SHARED_UNIT_CYLINDER}
-                      material={streetLightsActive ? getDistrictBasicMat(prop.accentColor) : bulbOffMat}
-                      scale={[0.25, 0.08, 0.25]}
-                    />
-                  </group>
-                ))}
-              </group>
-            )}
-            {prop.type === 'STEAM_GRATE' && (
-              <group>
-                <mesh
-                  rotation={[-Math.PI / 2, 0, 0]}
-                  geometry={SHARED_STEAM_PLANE}
-                  material={streetPoleMat}
-                />
-                <mesh position={[0, 1.2, 0]} geometry={SHARED_STEAM_CONE}>
-                  <meshBasicMaterial
-                    color={prop.accentColor}
-                    transparent
-                    opacity={0.09}
-                    depthWrite={false}
-                    side={THREE.DoubleSide}
-                  />
-                </mesh>
-              </group>
-            )}
-          </group>
-        ))}
+                  </mesh>
+                </group>
+              )}
+            </group>
+          );
+        })}
 
-      {/* Street Luminaires — Turn ON at Night & OFF during Day */}
+      {/* Detailed Architectural Street Luminaires — Turn ON at Night & OFF during Day */}
       {cityData.streetlights.map((sl, idx) => (
         <group key={idx} position={sl.position} rotation={[0, sl.rotationY, 0]}>
+          {/* Octagonal Cast-Iron Plinth Base */}
+          <mesh position={[0, 0.28, 0]} geometry={SHARED_OCT_PLINTH} material={streetArmMat} scale={[1, 0.56, 1]} />
+          {/* Brushed Bolted Base Collar */}
+          <mesh position={[0, 0.62, 0]} geometry={SHARED_UNIT_CYLINDER} material={CHROME_TRIM_MAT} scale={[0.42, 0.12, 0.42]} />
+          {/* Tapered Architectural Luminaire Pole */}
+          <mesh position={[0, 3.45, 0]} geometry={SHARED_TAPER_POLE} material={streetPoleMat} scale={[1, 5.7, 1]} />
+          {/* Mid-Height Telemetry & Sensor Control Box */}
+          <mesh position={[-0.18, 2.35, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.24, 0.55, 0.28]} />
+          {/* Diagonal Support Gusset Bracket */}
+          <mesh position={[0.42, 5.82, 0]} rotation={[0, 0, -0.68]} geometry={SHARED_UNIT_BOX} material={CHROME_TRIM_MAT} scale={[0.07, 1.05, 0.08]} />
+          {/* Cantilevered Mast Arm */}
+          <mesh position={[0.98, 6.26, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[2.0, 0.13, 0.2]} />
+          {/* Aerodynamic Luminaire Cowl Housing & Heat-Sink Crest */}
+          <mesh position={[1.65, 6.22, 0]} geometry={SHARED_UNIT_BOX} material={parapetMat} scale={[0.96, 0.16, 0.44]} />
+          <mesh position={[1.65, 6.33, 0]} geometry={SHARED_UNIT_BOX} material={CHROME_TRIM_MAT} scale={[0.64, 0.05, 0.26]} />
+          {/* Warm HDR LED Diffuser Panel */}
           <mesh
-            position={[0, 3.1, 0]}
-            geometry={SHARED_UNIT_CYLINDER}
-            material={streetPoleMat}
-            scale={[0.16, 6.2, 0.16]}
-          />
-          <mesh
-            position={[0.9, 6.2, 0]}
-            geometry={SHARED_UNIT_BOX}
-            material={streetArmMat}
-            scale={[1.8, 0.12, 0.24]}
-          />
-          <mesh
-            position={[1.4, 6.12, 0]}
+            position={[1.65, 6.12, 0]}
             geometry={SHARED_UNIT_BOX}
             material={streetLightsActive ? bulbOnMat : bulbOffMat}
-            scale={[0.7, 0.05, 0.2]}
+            scale={[0.82, 0.05, 0.34]}
           />
-          {streetLightsActive && quality.maxLights >= 8 && idx % lightStep === 0 && (
-            <pointLight
-              position={[1.4, 5.8, 0]}
-              color="#fef3c7"
-              distance={isUltra ? 30 : 24}
-              decay={2}
-              intensity={isUltra ? 2.8 : 2.2}
-            />
-          )}
         </group>
       ))}
 
@@ -885,17 +1024,17 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         </>
       )}
 
-      {/* Wayfinding Signage across Central & Outer Sectors */}
-      <StreetSign position={[0, 4.25, -12]} rotationY={Math.PI} label={landmarkNames.get('central_plaza') ?? 'Central Plaza Hub'} direction="S" />
+      {/* Wayfinding Signage across Central & Outer Sectors (cleared outside widened 22m boulevards) */}
+      <StreetSign position={[0, 4.25, -14.2]} rotationY={Math.PI} label={landmarkNames.get('central_plaza') ?? 'Central Plaza Hub'} direction="S" />
       <StreetSign position={[0, 4.25, -62]} rotationY={Math.PI} label={landmarkNames.get('north_crossway') ?? 'North Crossing Avenue'} direction="N" accent="#38bdf8" />
       <StreetSign position={[28, 4.25, 28]} rotationY={Math.PI / 2} label={landmarkNames.get('apex_tower') ?? 'Apex Monolith Tower'} direction="E" accent="#f59e0b" />
       <StreetSign position={[62, 4.25, 62]} rotationY={-Math.PI / 2} label={landmarkNames.get('park_sanctuary') ?? 'Central Park Sanctuary'} direction="E" accent="#10b981" />
       <StreetSign position={[0, 4.25, 62]} rotationY={0} label={landmarkNames.get('south_crossway') ?? 'South Crossing Avenue'} direction="S" accent="#38bdf8" />
-      <StreetSign position={[-62, 4.25, -12]} rotationY={Math.PI / 2} label="Neural Quantum Sector" direction="W" accent="#4a8ad6" />
+      <StreetSign position={[-62, 4.25, -14.2]} rotationY={Math.PI / 2} label="Neural Quantum Sector" direction="W" accent="#4a8ad6" />
       <StreetSign position={[-62, 4.25, 62]} rotationY={Math.PI / 2} label="Solaris Foundry Sector" direction="W" accent="#f59e0b" />
-      <StreetSign position={[120, 4.25, -12]} rotationY={-Math.PI / 2} label="Aerostrata Spires" direction="E" accent="#38bdf8" />
+      <StreetSign position={[120, 4.25, -14.2]} rotationY={-Math.PI / 2} label="Aerostrata Spires" direction="E" accent="#38bdf8" />
 
-      {/* Overhead Avenue Holographic Wayfinding Gantry Arches across Central & Outer Corridors */}
+      {/* Wide-Span Overhead Avenue Wayfinding Truss Gantries (Straddling 22m 4-Lane Boulevards, clear of (0, 240) Park Sanctuary) */}
       {quality.streetFurnitureEnabled &&
         (
           [
@@ -908,28 +1047,49 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
             [-135, 0, Math.PI / 2, '#f59e0b'],
             [135, 0, Math.PI / 2, '#10b981'],
             [0, -225, 0, '#4a8ad6'],
-            [0, 225, 0, '#38bdf8'],
+            [0, 190, 0, '#10b981'],
             [-225, 0, Math.PI / 2, '#10b981'],
             [225, 0, Math.PI / 2, '#f59e0b'],
           ] as const
         ).map(([gx, gz, rot, accent], idx) => (
           <group key={`ave-arch-${idx}`} position={[gx, 0, gz]} rotation={[0, rot, 0]}>
-            {([-8.2, 8.2] as const).map((px, pIdx) => (
-              <mesh key={pIdx} position={[px, 4.6, 0]} geometry={SHARED_UNIT_BOX} scale={[0.48, 9.2, 0.55]}>
-                <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.2} />
-              </mesh>
+            {([-12.2, 12.2] as const).map((px, pIdx) => (
+              <group key={pIdx} position={[px, 0, 0]}>
+                {/* Concrete Curb Base Pedestal */}
+                <mesh position={[0, 0.4, 0]} geometry={SHARED_UNIT_BOX} material={CONCRETE_BASE_MAT} scale={[0.98, 0.8, 1.05]} />
+                {/* Twin-Flange Support Pier */}
+                <mesh position={[0, 4.9, 0]} geometry={SHARED_UNIT_BOX} material={streetArmMat} scale={[0.52, 8.6, 0.58]} />
+                {/* Upper Knee Brace */}
+                <mesh
+                  position={[px < 0 ? 0.65 : -0.65, 8.2, 0]}
+                  rotation={[0, 0, px < 0 ? -0.68 : 0.68]}
+                  geometry={SHARED_UNIT_BOX}
+                  material={CHROME_TRIM_MAT}
+                  scale={[0.16, 1.65, 0.24]}
+                />
+              </group>
             ))}
-            <mesh position={[0, 9.1, 0]} geometry={SHARED_UNIT_BOX} scale={[17.4, 0.55, 0.68]}>
-              <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.18} />
-            </mesh>
-            <mesh position={[0, 8.75, 0]} geometry={SHARED_UNIT_BOX} scale={[15.8, 0.1, 0.72]}>
-              <meshBasicMaterial color={gridIsOut ? '#1e293b' : accent} />
-            </mesh>
-            {/* Lane Guidance Indicators */}
-            {([-3.4, 3.4] as const).map((lx, lIdx) => (
-              <mesh key={lIdx} position={[lx, 8.45, 0]} geometry={SHARED_UNIT_BOX} scale={[1.8, 0.28, 0.14]}>
-                <meshBasicMaterial color={lIdx === 0 ? '#10b981' : '#38bdf8'} />
-              </mesh>
+            {/* Lower & Upper Overhead Structural Truss Chords (25.2m Span) */}
+            <mesh position={[0, 8.95, 0]} geometry={SHARED_UNIT_BOX} material={podiumBaseMat} scale={[25.2, 0.44, 0.66]} />
+            <mesh position={[0, 9.65, 0]} geometry={SHARED_UNIT_BOX} material={parapetMat} scale={[25.2, 0.26, 0.48]} />
+            {/* Full-Width HDR Status Accent Strip */}
+            <mesh
+              position={[0, 8.68, 0]}
+              geometry={SHARED_UNIT_BOX}
+              material={gridIsOut ? bulbOffMat : getDistrictBloomMat(accent, neonBloomBoost)}
+              scale={[23.4, 0.1, 0.7]}
+            />
+            {/* 4 Overhead Multi-Lane Guidance Displays Aligned to 4-Lane Boulevard Traffic */}
+            {([-6.8, -3.2, 3.2, 6.8] as const).map((lx, lIdx) => (
+              <group key={lIdx} position={[lx, 8.35, 0]}>
+                <mesh geometry={SHARED_UNIT_BOX} material={podiumBaseMat} scale={[2.0, 0.42, 0.22]} />
+                <mesh
+                  position={[0, 0, 0]}
+                  geometry={SHARED_UNIT_BOX}
+                  material={gridIsOut ? bulbOffMat : getDistrictBloomMat(lIdx < 2 ? '#10b981' : '#38bdf8', neonBloomBoost)}
+                  scale={[1.76, 0.22, 0.26]}
+                />
+              </group>
             ))}
           </group>
         ))}

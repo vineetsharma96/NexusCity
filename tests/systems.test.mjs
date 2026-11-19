@@ -23,10 +23,13 @@ async function systems() {
       export { TimeSystem } from './src/world/TimeSystem';
       export { NPCManager } from './src/npc/NPCManager';
       export { CityGenerator } from './src/city/CityGenerator';
+      export { ProceduralChunkGenerator } from './src/city/ProceduralChunkGenerator';
       export { WeatherSystem } from './src/world/WeatherSystem';
       export { WindSystem } from './src/world/WindSystem';
       export { TrafficLightSystem } from './src/city/TrafficLightSystem';
       export { EmergencyAlertSystem } from './src/world/EmergencyAlertSystem';
+      export { WorldPhysicsEngine } from './src/world/WorldPhysicsEngine';
+      export { InputManager } from './src/player/InputManager';
     ` },
     bundle: true, platform: 'node', format: 'esm', write: false,
   });
@@ -407,6 +410,175 @@ test('pedestrian AI spawns moving sidewalk citizens, obeys crosswalk walk signal
   assert.equal(sampleCitizen.aiState, 'CONVERSING');
   assert.equal(sampleCitizen.isWalking, false);
 });
+
+test('world road layers, central avenues, and streamed chunks stay cleanly separated and keep (0, 240) and (75, 75) parks clear', async () => {
+  const { CityGenerator, ProceduralChunkGenerator } = await systems();
+  const city = CityGenerator.generateDistrict();
+
+  // Verify NS vs EW road vertical separation, widened roadway widths, and park sanctuary road exclusions
+  for (const road of city.avenues) {
+    const isEW = Math.abs(road.rotationY) > 0.1;
+    assert.ok(Math.abs(road.position.y - (isEW ? 0.045 : 0.02)) < 1e-4, `Road Y mismatch: ${road.position.y}`);
+
+    const isGrandBoulevard = (!isEW && Math.abs(road.position.x) < 1) || (isEW && Math.abs(road.position.z) < 1);
+    assert.ok(
+      road.size.x >= (isGrandBoulevard ? 22 : 18),
+      `Expected wide road width >= ${isGrandBoulevard ? 22 : 18}m, got ${road.size.x}m`
+    );
+
+    const halfX = (isEW ? road.size.z : road.size.x) / 2;
+    const halfZ = (isEW ? road.size.x : road.size.z) / 2;
+    const minX = road.position.x - halfX;
+    const maxX = road.position.x + halfX;
+    const minZ = road.position.z - halfZ;
+    const maxZ = road.position.z + halfZ;
+
+    // Must not overlap (0, 240) Park Sanctuary
+    const overlapsNorthPark = maxX > -35 && minX < 35 && maxZ > 205 && minZ < 275;
+    assert.equal(overlapsNorthPark, false, `Road overlaps (0, 240) park: (${road.position.x}, ${road.position.z})`);
+
+    // Must not overlap (75, 75) Park Sanctuary
+    const overlapsEastPark = maxX > 40 && minX < 110 && maxZ > 40 && minZ < 110;
+    assert.equal(overlapsEastPark, false, `Road overlaps (75, 75) park: (${road.position.x}, ${road.position.z})`);
+
+    // Secondary central avenues (±75, ±165) stay bounded inside the Central District core [-174..174]
+    if (!isEW && Math.abs(road.position.x) > 10) {
+      assert.ok(minZ >= -174.5 && maxZ <= 174.5, `Secondary NS road leaked outside core: [${minZ}, ${maxZ}]`);
+    }
+    if (isEW && Math.abs(road.position.z) > 10) {
+      assert.ok(minX >= -174.5 && maxX <= 174.5, `Secondary EW road leaked outside core: [${minX}, ${maxX}]`);
+    }
+  }
+
+  // Verify streamed chunks near (0, 240) and along the Grand Boulevards have zero overlaps
+  const sampleChunks = [
+    [0, 1],
+    [-1, 1],
+    [0, 2],
+    [-1, 2],
+    [2, 2],
+  ];
+  for (const [cx, cz] of sampleChunks) {
+    const chunk = ProceduralChunkGenerator.getChunkData(cx, cz);
+
+    for (const r of chunk.roads) {
+      const isEW = Math.abs(r.rotationY) > 0.1;
+      assert.ok(Math.abs(r.position.y - (isEW ? 0.045 : 0.02)) < 1e-4);
+      assert.ok(r.size.x >= (isEW ? 18 : 20), `Expected wide streamed chunk road, got ${r.size.x}m`);
+    }
+    for (const j of chunk.junctions) {
+      assert.ok(Math.abs(j.position.y - 0.072) < 1e-4);
+    }
+    for (const sw of chunk.sidewalks) {
+      const minX = sw.position.x - sw.size.x / 2;
+      const maxX = sw.position.x + sw.size.x / 2;
+      const minZ = sw.position.z - sw.size.z / 2;
+      const maxZ = sw.position.z + sw.size.z / 2;
+
+      // Sidewalks must not encroach onto the widened 22m Grand Boulevards ([-11..11])
+      const overlapsGrandNS = maxX > -11 && minX < 11;
+      const overlapsGrandEW = maxZ > -11 && minZ < 11;
+      assert.equal(overlapsGrandNS, false, `Chunk (${cx},${cz}) sidewalk overlaps x=0 Grand Boulevard`);
+      assert.equal(overlapsGrandEW, false, `Chunk (${cx},${cz}) sidewalk overlaps z=0 Grand Boulevard`);
+
+      // Sidewalks must not intrude into the (0, 240) Park Sanctuary
+      const overlapsNorthPark = maxX > -37 && minX < 37 && maxZ > 203 && minZ < 277;
+      assert.equal(overlapsNorthPark, false, `Chunk (${cx},${cz}) sidewalk overlaps (0, 240) park`);
+    }
+  }
+});
+
+test('world physics engine computes air resistance, weather-coupled air density, and surface friction across world zones', async () => {
+  const { WorldPhysicsEngine, WeatherSystem, WindSystem } = await systems();
+  const physics = WorldPhysicsEngine.getInstance();
+  const weather = WeatherSystem.getInstance();
+  const wind = WindSystem.getInstance();
+
+  weather.setWeather('CLEAR');
+  const dryAsphalt = physics.getSurfaceAt(0, 10);
+  const dryPark = physics.getSurfaceAt(75, 75);
+  const clearRho = physics.getAirDensity();
+  assert.equal(dryAsphalt.type, 'ASPHALT');
+  assert.equal(dryPark.type, 'PARK_GRASS');
+  assert.ok(dryAsphalt.frictionMu > dryPark.frictionMu);
+  assert.ok(dryPark.rollingResistance > dryAsphalt.rollingResistance);
+
+  // Heavy rain & blizzard reduce road traction and cold temperatures raise air density
+  weather.setWeather('BLIZZARD');
+  const snowAsphalt = physics.getSurfaceAt(0, 10);
+  const coldRho = physics.getAirDensity();
+  assert.ok(snowAsphalt.frictionMu < dryAsphalt.frictionMu * 0.6);
+  assert.ok(coldRho > clearRho);
+
+  // Moving body slows cleanly under quadratic air drag + ground rolling friction
+  weather.setWeather('CLEAR');
+  wind.setWindMultiplier(0);
+  wind.update(0.1, 0);
+  const vel = new Vector3(0, 0, 25);
+  const profile = { massKg: 1460, dragCoefficient: 0.27, frontalAreaM2: 2.18, surfaceFrictionScale: 1.0 };
+  const step = physics.applyWorldForcesToVelocity(vel, 0, 10, profile, 0.05, true, 0, true);
+  assert.ok(step.dragForceN > 100, `Expected measurable aero drag at 25 m/s, got ${step.dragForceN}N`);
+  assert.ok(step.frictionForceN > 100, `Expected measurable rolling friction, got ${step.frictionForceN}N`);
+  assert.ok(vel.z < 25 && vel.z > 0);
+});
+
+test('experimental car drives forward, steers, brakes, engages reverse gear with backward wheel spin, and decelerates via world drag/friction', async () => {
+  const { VehicleInteractionSystem, InteractionSystem, InputManager, WeatherSystem } = await systems();
+  const vehicle = VehicleInteractionSystem.getInstance();
+  const interactions = InteractionSystem.getInstance();
+  WeatherSystem.getInstance().setWeather('CLEAR');
+
+  const spawnPos = new Vector3(-8.8, 0.02, 5.5);
+  vehicle.registerRideable('vx-01-experimental', 'VX-01 Apex Prototype', spawnPos, 'vehicle', Math.PI, 'car');
+  interactions.updatePlayerPosition(spawnPos);
+  assert.equal(interactions.triggerInteract(), true);
+  assert.equal(vehicle.getState().mode, 'RIDING');
+  assert.equal(vehicle.getState().variant, 'car');
+
+  // 1. Accelerate forward + steer left
+  InputManager.setVirtualMovement(-0.5, 1.0);
+  for (let i = 0; i < 30; i++) {
+    vehicle.updateMounted(0.033, 0);
+  }
+  const afterAccel = vehicle.getTelemetry();
+  assert.ok(afterAccel.forwardSpeedMs > 5, `Expected forward speed > 5 m/s, got ${afterAccel.forwardSpeedMs}`);
+  assert.ok(afterAccel.wheelSpinRad > 1.0, `Expected positive wheel spin, got ${afterAccel.wheelSpinRad}`);
+  assert.ok(afterAccel.steeringAngle > 0.05, `Expected front steering angle > 0, got ${afterAccel.steeringAngle}`);
+  assert.equal(afterAccel.gear, 'D');
+  assert.ok(afterAccel.dragForceN > 0);
+
+  // 2. Apply brakes from forward speed -> isBraking = true & negative longitudinalAccelG
+  InputManager.setVirtualMovement(0, -1.0);
+  for (let i = 0; i < 6; i++) {
+    vehicle.updateMounted(0.033, 0);
+  }
+  const whileBraking = vehicle.getTelemetry();
+  assert.equal(whileBraking.isBraking, true);
+  assert.ok(whileBraking.longitudinalAccelG < 0, `Expected negative G while braking, got ${whileBraking.longitudinalAccelG}`);
+
+  // 3. Continue holding backward -> smoothly transitions into Reverse gear with backward wheel spin
+  const spinBeforeReverse = vehicle.getTelemetry().wheelSpinRad;
+  for (let i = 0; i < 45; i++) {
+    vehicle.updateMounted(0.033, 0);
+  }
+  const whileReversing = vehicle.getTelemetry();
+  assert.equal(whileReversing.gear, 'R');
+  assert.equal(whileReversing.isReversing, true);
+  assert.ok(whileReversing.forwardSpeedMs < -2.0, `Expected negative reverse speed, got ${whileReversing.forwardSpeedMs}`);
+  assert.ok(whileReversing.wheelSpinRad < spinBeforeReverse, 'Expected wheelSpinRad to decrease when reversing');
+
+  // 4. Release pedals -> WorldPhysicsEngine air drag & rolling friction decelerates the car naturally
+  const speedBeforeCoast = Math.abs(vehicle.getTelemetry().forwardSpeedMs);
+  InputManager.setVirtualMovement(0, 0);
+  for (let i = 0; i < 30; i++) {
+    vehicle.updateMounted(0.033, 0);
+  }
+  const speedAfterCoast = Math.abs(vehicle.getTelemetry().forwardSpeedMs);
+  assert.ok(speedAfterCoast < speedBeforeCoast, `Expected coast deceleration via drag/friction (${speedBeforeCoast} -> ${speedAfterCoast})`);
+
+  vehicle.dismount();
+});
+
 
 
 

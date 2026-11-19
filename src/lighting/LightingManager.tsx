@@ -17,6 +17,31 @@ interface LightingManagerProps {
 
 const FOG_PUFF_COUNT = 64;
 
+const STREET_POOL_OFFSETS: readonly [number, number, number][] = [
+  [-12, 6.6, -12],
+  [12, 6.6, -12],
+  [-12, 6.6, 12],
+  [12, 6.6, 12],
+  [0, 7.2, -28],
+  [0, 7.2, 28],
+];
+
+interface PmremEnvController {
+  pmrem: THREE.PMREMGenerator;
+  envScene: THREE.Scene;
+  envSkyUniforms: {
+    uTop: { value: THREE.Color };
+    uMid: { value: THREE.Color };
+    uBot: { value: THREE.Color };
+    uSolarGlow: { value: THREE.Color };
+    uSunDir: { value: THREE.Vector3 };
+    uGlowStrength: { value: number };
+  };
+  accentStripMats: { mat: THREE.MeshBasicMaterial; baseColor: THREE.Color }[];
+  currentRT: THREE.WebGLRenderTarget | null;
+  rendered: boolean;
+}
+
 export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playerPosRef }) => {
   const { scene, gl } = useThree();
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
@@ -27,6 +52,8 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const bgColorRef = useRef<THREE.Color>(null);
   const fogBankMeshRef = useRef<THREE.InstancedMesh>(null);
   const fogBankMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const streetPoolRefs = useRef<(THREE.PointLight | null)[]>([]);
+  const pmremCtrlRef = useRef<PmremEnvController | null>(null);
 
   const windSystem = WindSystem.getInstance();
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -40,15 +67,17 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const smoothBounceColor = useRef(new THREE.Color('#1d4ed8'));
   const smoothFogColor = useRef(new THREE.Color('#070d1c'));
   const scratchColor = useRef(new THREE.Color());
+  const warmLampColor = useMemo(() => new THREE.Color('#ffd699'), []);
+  const coolLampColor = useMemo(() => new THREE.Color('#bae6fd'), []);
   const fallbackPos = useRef(new THREE.Vector3(0, 0, 0));
   const lastShadowTarget = useRef(new THREE.Vector3(NaN, 0, NaN));
   const lastEnvPhaseKey = useRef<string>('');
 
   const skyUniforms = useMemo(
     () => ({
-      topColor: { value: new THREE.Color('#030611') },
-      midColor: { value: new THREE.Color('#070f22') },
-      bottomColor: { value: new THREE.Color('#0d1b36') },
+      topColor: { value: new THREE.Color('#030714') },
+      midColor: { value: new THREE.Color('#081229') },
+      bottomColor: { value: new THREE.Color('#102142') },
       solarGlowColor: { value: new THREE.Color('#38bdf8') },
       sunDir: { value: new THREE.Vector3(0.4, 0.6, 0.2).normalize() },
       solarGlowStrength: { value: 0.45 },
@@ -139,34 +168,46 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   ]);
 
   const safeShadowMapSize = Math.min(quality.shadowMapSize, gl.capabilities.maxTextureSize || 4096);
+  const isUltra = quality.name === 'ULTRA';
+  const shadowCamRange = isUltra ? 120 : 85;
 
-  // Dynamically reallocate directional shadow map when shadowMapSize changes
+  // Dynamically reallocate directional shadow map when shadowMapSize, range, or shadows toggle changes
   useEffect(() => {
     const light = dirLightRef.current;
     if (!light) return;
     light.shadow.mapSize.set(safeShadowMapSize, safeShadowMapSize);
+    light.shadow.camera.left = -shadowCamRange;
+    light.shadow.camera.right = shadowCamRange;
+    light.shadow.camera.top = shadowCamRange;
+    light.shadow.camera.bottom = -shadowCamRange;
+    light.shadow.camera.updateProjectionMatrix();
     if (light.shadow.map) {
       light.shadow.map.dispose();
       light.shadow.map = null;
     }
     light.shadow.needsUpdate = true;
-  }, [safeShadowMapSize, quality.shadows]);
+  }, [safeShadowMapSize, shadowCamRange, quality.shadows]);
 
-  // High-definition procedural environment cubemap synchronized with time-of-day sky palette
+  // Physically prefiltered PMREM Image-Based Lighting (IBL) synchronized with live diurnal sky & urban softboxes
   useEffect(() => {
     if (quality.reflectionQuality === 'OFF') {
       scene.environment = null;
+      pmremCtrlRef.current = null;
       return;
     }
 
-    const cubeSize =
-      quality.reflectionQuality === 'HIGH' ? 256 : quality.reflectionQuality === 'MEDIUM' ? 128 : 64;
+    const pmrem = new THREE.PMREMGenerator(gl);
+    pmrem.compileCubemapShader();
+
     const envScene = new THREE.Scene();
-    const skyGeo = new THREE.SphereGeometry(60, 24, 12);
+    const skyGeo = new THREE.SphereGeometry(60, 28, 16);
     const envSkyUniforms = {
-      uTop: { value: new THREE.Color('#04091a') },
-      uMid: { value: new THREE.Color('#165278') },
-      uBot: { value: new THREE.Color('#070d1c') },
+      uTop: { value: new THREE.Color('#030714') },
+      uMid: { value: new THREE.Color('#102a52') },
+      uBot: { value: new THREE.Color('#070e1f') },
+      uSolarGlow: { value: new THREE.Color('#38bdf8') },
+      uSunDir: { value: new THREE.Vector3(0.4, 0.7, 0.2).normalize() },
+      uGlowStrength: { value: 0.6 },
     };
     const skyMat = new THREE.ShaderMaterial({
       uniforms: envSkyUniforms,
@@ -181,10 +222,19 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         uniform vec3 uTop;
         uniform vec3 uMid;
         uniform vec3 uBot;
+        uniform vec3 uSolarGlow;
+        uniform vec3 uSunDir;
+        uniform float uGlowStrength;
         varying vec3 vWorldPos;
         void main() {
-          float h = normalize(vWorldPos).y;
-          vec3 col = h > 0.0 ? mix(uMid, uTop, pow(h, 0.52)) : mix(uMid, uBot, min(1.0, -h * 3.2));
+          vec3 dir = normalize(vWorldPos);
+          float h = dir.y;
+          vec3 col = h > 0.0
+            ? mix(uMid, uTop, pow(h, 0.52))
+            : mix(uMid, uBot, min(1.0, -h * 2.8));
+          float sunDot = max(dot(dir, normalize(uSunDir)), 0.0);
+          float sunHighlight = pow(sunDot, 12.0) * 0.9 + pow(sunDot, 48.0) * 1.4;
+          col += uSolarGlow * sunHighlight * uGlowStrength;
           gl_FragColor = vec4(col, 1.0);
         }
       `,
@@ -192,65 +242,69 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     });
     envScene.add(new THREE.Mesh(skyGeo, skyMat));
 
-    const stripGeo = new THREE.BoxGeometry(9, 2.2, 0.5);
-    const towerGeo = new THREE.BoxGeometry(4, 18, 4);
-    const addStrip = (color: string, x: number, y: number, z: number) => {
-      const m = new THREE.Mesh(stripGeo, new THREE.MeshBasicMaterial({ color }));
+    const stripGeo = new THREE.BoxGeometry(11, 2.4, 0.5);
+    const towerGeo = new THREE.BoxGeometry(4.5, 19, 4.5);
+    const disposableMats: THREE.Material[] = [skyMat];
+    const accentStripMats: { mat: THREE.MeshBasicMaterial; baseColor: THREE.Color }[] = [];
+
+    const addSoftbox = (hex: string, x: number, y: number, z: number, scale: [number, number, number] = [1, 1, 1]) => {
+      const baseColor = new THREE.Color(hex);
+      const mat = new THREE.MeshBasicMaterial({ color: baseColor.clone(), toneMapped: false });
+      disposableMats.push(mat);
+      accentStripMats.push({ mat, baseColor });
+      const m = new THREE.Mesh(stripGeo, mat);
       m.position.set(x, y, z);
+      m.scale.set(...scale);
       m.lookAt(0, 0, 0);
       envScene.add(m);
     };
-    addStrip('#f59e0b', 20, 7, 0);
-    addStrip('#38bdf8', -20, 7, 0);
-    addStrip('#10b981', 0, 7, 20);
-    addStrip('#f43f5e', 0, 7, -20);
-    addStrip('#fde68a', 14, 14, 14);
-    addStrip('#7dd3fc', -14, 14, -14);
+
+    // Urban skyline emissive bounce panels & zenith skylight softboxes for crisp PBR specular reflections
+    addSoftbox('#f59e0b', 22, 7.5, 0);
+    addSoftbox('#38bdf8', -22, 7.5, 0);
+    addSoftbox('#10b981', 0, 7.5, 22);
+    addSoftbox('#f43f5e', 0, 7.5, -22);
+    addSoftbox('#fef3c7', 15, 16, 15, [1.4, 1.3, 1]);
+    addSoftbox('#bae6fd', -15, 16, -15, [1.4, 1.3, 1]);
+    addSoftbox('#e0f2fe', 0, 26, 0, [2.2, 1.8, 1]);
+
+    const towerMatA = new THREE.MeshBasicMaterial({ color: '#091121' });
+    const towerMatB = new THREE.MeshBasicMaterial({ color: '#111d36' });
+    disposableMats.push(towerMatA, towerMatB);
 
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
-      const dist = 26;
-      const tMesh = new THREE.Mesh(
-        towerGeo,
-        new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? '#0b1324' : '#111c33' })
-      );
+      const dist = 28;
+      const tMesh = new THREE.Mesh(towerGeo, i % 2 === 0 ? towerMatA : towerMatB);
       tMesh.position.set(Math.cos(angle) * dist, 6, Math.sin(angle) * dist);
       envScene.add(tMesh);
     }
 
-    const cubeRT = new THREE.WebGLCubeRenderTarget(cubeSize, {
-      format: THREE.RGBAFormat,
-      generateMipmaps: true,
-      minFilter: THREE.LinearMipmapLinearFilter,
-    });
-    const cubeCam = new THREE.CubeCamera(0.1, 120, cubeRT);
-    scene.environment = cubeRT.texture;
-    (
-      scene as unknown as {
-        __envUpdate?: {
-          cubeCam: THREE.CubeCamera;
-          envScene: THREE.Scene;
-          envSkyUniforms: typeof envSkyUniforms;
-          rendered: boolean;
-        };
-      }
-    ).__envUpdate = {
-      cubeCam,
+    const ctrl: PmremEnvController = {
+      pmrem,
       envScene,
       envSkyUniforms,
+      accentStripMats,
+      currentRT: null,
       rendered: false,
     };
+    pmremCtrlRef.current = ctrl;
     lastEnvPhaseKey.current = '';
 
     return () => {
       scene.environment = null;
-      cubeRT.dispose();
+      if (ctrl.currentRT) {
+        ctrl.currentRT.dispose();
+        ctrl.currentRT = null;
+      }
+      pmrem.dispose();
       skyGeo.dispose();
-      skyMat.dispose();
       stripGeo.dispose();
       towerGeo.dispose();
+      disposableMats.forEach((m) => m.dispose());
+      pmremCtrlRef.current = null;
     };
-  }, [scene, quality.reflectionQuality]);
+  }, [scene, gl, quality.reflectionQuality]);
 
   // Volumetric low-lying street fog puffs that drift with the wind when FOG or storm mist is active
   const fogPuffs = useMemo(
@@ -268,6 +322,12 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   );
   const fogPuffGeo = useMemo(() => new THREE.DodecahedronGeometry(1, 1), []);
 
+  useEffect(() => {
+    return () => {
+      fogPuffGeo.dispose();
+    };
+  }, [fogPuffGeo]);
+
   const fogStrength = THREE.MathUtils.clamp((weatherState.fogDensityMultiplier - 1.0) / 4.2, 0, 1);
 
   const fogColorTarget = useMemo(() => {
@@ -278,53 +338,82 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     return `#${baseFog.getHexString()}`;
   }, [timeState.fogColor, weatherState.lightningFlash]);
 
-  const isUltra = quality.name === 'ULTRA';
+  const localPoolCount =
+    !quality.nightLightsEnabled || quality.maxLights < 4 ? 0 : quality.maxLights >= 16 ? 6 : 4;
 
-  useFrame(({ gl: renderer, clock }, delta) => {
+  const envQualityScale =
+    quality.reflectionQuality === 'HIGH'
+      ? 1.15
+      : quality.reflectionQuality === 'MEDIUM'
+      ? 0.92
+      : quality.reflectionQuality === 'LOW'
+      ? 0.65
+      : 0;
+
+  useFrame(({ clock }, delta) => {
     const dt = Math.min(delta, 0.05);
     const dampAlpha = 1 - Math.exp(-7.5 * dt);
     const liveTime = TimeSystem.getInstance().getState();
     const liveWeather = WeatherSystem.getInstance().getState();
+    const liveEvent = LivingCityEventSystem.getInstance().getState();
     const liveFogStrength = THREE.MathUtils.clamp((liveWeather.fogDensityMultiplier - 1.0) / 4.2, 0, 1);
 
-    // 1. Refresh reflection cubemap when solar sub-phase or weather bucket shifts
-    const envData = (
-      scene as unknown as {
-        __envUpdate?: {
-          cubeCam: THREE.CubeCamera;
-          envScene: THREE.Scene;
-          envSkyUniforms: {
-            uTop: { value: THREE.Color };
-            uMid: { value: THREE.Color };
-            uBot: { value: THREE.Color };
-          };
-          rendered: boolean;
-        };
-      }
-    ).__envUpdate;
+    // 1. Refresh prefiltered PMREM IBL map when solar sub-phase or weather bucket shifts
+    const ctrl = pmremCtrlRef.current;
     const phaseKey = `${liveTime.subPhaseLabel}:${liveWeather.currentWeather}`;
-    if (envData && (!envData.rendered || lastEnvPhaseKey.current !== phaseKey)) {
-      envData.envSkyUniforms.uTop.value.set(liveTime.skyTopColor);
-      envData.envSkyUniforms.uMid.value.set(liveTime.skyMidColor);
-      envData.envSkyUniforms.uBot.value.set(liveTime.skyHorizonColor);
-      envData.cubeCam.update(renderer, envData.envScene);
-      envData.rendered = true;
+    if (ctrl && (!ctrl.rendered || lastEnvPhaseKey.current !== phaseKey)) {
+      ctrl.envSkyUniforms.uTop.value.set(liveTime.skyTopColor);
+      ctrl.envSkyUniforms.uMid.value.set(liveTime.skyMidColor);
+      ctrl.envSkyUniforms.uBot.value.set(liveTime.skyHorizonColor);
+      ctrl.envSkyUniforms.uSolarGlow.value.set(liveTime.solarGlowColor);
+      ctrl.envSkyUniforms.uSunDir.value.copy(liveTime.isNight ? liveTime.moonDirection : liveTime.sunDirection);
+      ctrl.envSkyUniforms.uGlowStrength.value = liveTime.isNight ? 0.55 : 1.05 + liveTime.goldenHourFactor * 0.45;
+
+      // Boost urban neon bounce strips at night while keeping zenith skylight crisp by day
+      const urbanStripGain = THREE.MathUtils.lerp(0.65, 1.45, liveTime.nightFactor);
+      for (let i = 0; i < ctrl.accentStripMats.length; i++) {
+        const entry = ctrl.accentStripMats[i];
+        const isZenithBox = i >= 4;
+        const gain = isZenithBox ? THREE.MathUtils.lerp(1.25, 0.65, liveTime.nightFactor) : urbanStripGain;
+        entry.mat.color.copy(entry.baseColor).multiplyScalar(gain);
+      }
+
+      const nextRT = ctrl.pmrem.fromScene(ctrl.envScene, 0.035);
+      if (ctrl.currentRT) {
+        ctrl.currentRT.dispose();
+      }
+      ctrl.currentRT = nextRT;
+      scene.environment = nextRT.texture;
+      ctrl.rendered = true;
       lastEnvPhaseKey.current = phaseKey;
     }
 
-    // 2. Smoothly interpolate Sun / Moon Orbital Direction & Key Light Position
+    if (scene.environment) {
+      const targetEnvIntensity =
+        THREE.MathUtils.lerp(1.18, 0.88, liveTime.nightFactor) *
+        envQualityScale *
+        (1.0 - liveFogStrength * 0.25);
+      scene.environmentIntensity = THREE.MathUtils.lerp(
+        scene.environmentIntensity ?? targetEnvIntensity,
+        targetEnvIntensity,
+        dampAlpha
+      );
+    }
+
+    // 2. Smoothly interpolate Sun / Moon Orbital Direction & Texel-Snapped Shadow Key Light
     const activeDir = liveTime.isNight ? liveTime.moonDirection : liveTime.sunDirection;
     smoothLightDir.current.lerp(activeDir, dampAlpha).normalize();
     const pPos = playerPosRef?.current || fallbackPos.current;
 
     if (dirLightRef.current) {
-      // Snap shadow camera target to 2m texel grid to prevent shadow swimming and redundant matrix updates
-      const snappedX = Math.round(pPos.x * 0.5) * 2;
-      const snappedZ = Math.round(pPos.z * 0.5) * 2;
+      // Texel-exact shadow camera snapping eliminates shadow swimming on all resolutions
+      const texelWorldSize = (2 * shadowCamRange) / Math.max(256, safeShadowMapSize);
+      const snappedX = Math.round(pPos.x / texelWorldSize) * texelWorldSize;
+      const snappedZ = Math.round(pPos.z / texelWorldSize) * texelWorldSize;
       dirLightRef.current.position.set(
-        snappedX + smoothLightDir.current.x * 115,
-        Math.max(30, smoothLightDir.current.y * 135),
-        snappedZ + smoothLightDir.current.z * 115
+        snappedX + smoothLightDir.current.x * 110,
+        Math.max(32, smoothLightDir.current.y * 130),
+        snappedZ + smoothLightDir.current.z * 110
       );
       if (lastShadowTarget.current.x !== snappedX || lastShadowTarget.current.z !== snappedZ) {
         lastShadowTarget.current.set(snappedX, 0, snappedZ);
@@ -346,11 +435,11 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       );
     }
 
-    // 3. Smoothly interpolate Global Illumination Sky-Bounce Fill Light (opposite key light)
+    // 3. Smoothly interpolate Global Illumination Sky-Bounce Rim Fill Light (opposite key light)
     if (bounceLightRef.current) {
       bounceLightRef.current.position.set(
         pPos.x - smoothLightDir.current.x * 85,
-        48,
+        52,
         pPos.z - smoothLightDir.current.z * 85
       );
       smoothBounceColor.current.lerp(scratchColor.current.set(liveTime.giBounceColor), dampAlpha);
@@ -385,7 +474,28 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       );
     }
 
-    // 5. Smoothly interpolate 3-Stop Sky Dome Palette & Solar Mie Scatter Glow
+    // 5. Update City-Wide Player-Local Dynamic Night Streetlight Pool (ON at night, OFF during day)
+    if (localPoolCount > 0) {
+      const gridOut = liveEvent.type === 'POWER_OUTAGE' && liveEvent.phase === 'ACTIVE';
+      const targetLampIntensity =
+        liveTime.streetLightsOn && !gridOut
+          ? (0.55 + liveTime.nightFactor * 3.1) * liveEvent.lightScale * (1.0 + liveWeather.wetnessFactor * 0.25)
+          : 0.0;
+      const anchorX = Math.round(pPos.x / 24) * 24;
+      const anchorZ = Math.round(pPos.z / 24) * 24;
+
+      for (let i = 0; i < localPoolCount; i++) {
+        const pl = streetPoolRefs.current[i];
+        if (!pl) continue;
+        const [ox, oy, oz] = STREET_POOL_OFFSETS[i];
+        pl.position.set(anchorX + ox, oy, anchorZ + oz);
+        pl.intensity = THREE.MathUtils.lerp(pl.intensity, targetLampIntensity, dampAlpha);
+        pl.visible = pl.intensity > 0.02;
+        pl.color.copy(i % 2 === 0 ? warmLampColor : coolLampColor);
+      }
+    }
+
+    // 6. Smoothly interpolate 3-Stop Sky Dome Palette & Solar Mie Scatter Glow
     skyUniforms.topColor.value.lerp(scratchColor.current.set(liveTime.skyTopColor), dampAlpha);
     skyUniforms.midColor.value.lerp(scratchColor.current.set(liveTime.skyMidColor), dampAlpha);
     skyUniforms.bottomColor.value.lerp(scratchColor.current.set(liveTime.skyHorizonColor), dampAlpha);
@@ -393,8 +503,8 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     skyUniforms.sunDir.value.copy(smoothLightDir.current);
 
     const targetGlowStrength =
-      (liveTime.isNight ? 0.25 : 0.42 + liveTime.goldenHourFactor * 0.48) *
-      (1.0 - liveWeather.rainIntensity * 0.7) *
+      (liveTime.isNight ? 0.28 : 0.46 + liveTime.goldenHourFactor * 0.5) *
+      (1.0 - Math.max(liveWeather.rainIntensity, liveWeather.snowIntensity) * 0.7) *
       (1.0 - liveFogStrength * 0.85);
     skyUniforms.solarGlowStrength.value = THREE.MathUtils.lerp(
       skyUniforms.solarGlowStrength.value,
@@ -402,9 +512,8 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       dampAlpha
     );
 
-    // 6. Smoothly interpolate Fog & Background Color/Distances
-    const liveFogHex =
-      liveWeather.lightningFlash > 0.1 ? '#e0f2fe' : liveTime.fogColor;
+    // 7. Smoothly interpolate Fog & Background Color/Distances
+    const liveFogHex = liveWeather.lightningFlash > 0.1 ? '#e0f2fe' : liveTime.fogColor;
     smoothFogColor.current.lerp(scratchColor.current.set(liveFogHex), dampAlpha);
     if (bgColorRef.current) {
       bgColorRef.current.copy(smoothFogColor.current);
@@ -423,7 +532,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       fogRef.current.far = THREE.MathUtils.lerp(fogRef.current.far, targetFar, dampAlpha);
     }
 
-    // 7. Update wind-driven volumetric street fog banks around the player
+    // 8. Update wind-driven volumetric street fog banks around the player
     if (fogBankMeshRef.current && fogBankMatRef.current) {
       const showBanks = quality.fogEnabled && liveFogStrength > 0.08;
       fogBankMeshRef.current.visible = showBanks;
@@ -469,8 +578,6 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     return pos;
   }, [isUltra]);
 
-  const shadowCamRange = isUltra ? 125 : 85;
-
   return (
     <>
       <color ref={bgColorRef} attach="background" args={[fogColorTarget]} />
@@ -500,12 +607,10 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
             void main() {
               vec3 viewDir = normalize(vWorldPosition + vec3(0.0, offset, 0.0));
               float h = max(viewDir.y, 0.0);
-              // Smooth 3-stop Rayleigh sky gradient: Horizon -> Mid-Sky -> Zenith
               vec3 baseSky = h < 0.35
                 ? mix(bottomColor, midColor, smoothstep(0.0, 0.35, h))
                 : mix(midColor, topColor, pow((h - 0.35) / 0.65, exponent));
 
-              // Anisotropic Mie solar/lunar scattering halo near the sun/moon azimuth
               float cosTheta = max(dot(normalize(vWorldPosition), normalize(sunDir)), 0.0);
               float mieHalo = pow(cosTheta, 6.0) * 0.55 + pow(cosTheta, 28.0) * 0.65;
               float horizonBand = pow(1.0 - max(abs(viewDir.y), 0.0), 3.2) * pow(cosTheta, 2.2) * 0.45;
@@ -542,7 +647,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
           <meshBasicMaterial
             color={district.accentColor}
             transparent
-            opacity={isUltra ? 0.055 : 0.03}
+            opacity={isUltra ? 0.05 : 0.028}
             side={THREE.BackSide}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
@@ -573,7 +678,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         />
       )}
 
-      {/* Global Illumination Rig: Ambient + Hemisphere Sky/Ground Bounce + Secondary GI Fill + Primary Solar Key */}
+      {/* 3-Point Physically Balanced Global Illumination Rig */}
       <ambientLight
         ref={ambientLightRef}
         color={timeState.ambientColor}
@@ -585,7 +690,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
       />
       <directionalLight
         ref={bounceLightRef}
-        position={[-45, 48, -35]}
+        position={[-45, 52, -35]}
         color={timeState.giBounceColor}
         intensity={timeState.giBounceIntensity}
       />
@@ -598,20 +703,37 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         castShadow={quality.shadows}
         shadow-mapSize-width={safeShadowMapSize}
         shadow-mapSize-height={safeShadowMapSize}
-        shadow-camera-near={10}
-        shadow-camera-far={340}
+        shadow-camera-near={5}
+        shadow-camera-far={300}
         shadow-camera-left={-shadowCamRange}
         shadow-camera-right={shadowCamRange}
         shadow-camera-top={shadowCamRange}
         shadow-camera-bottom={-shadowCamRange}
-        shadow-bias={-0.0004}
+        shadow-bias={-0.00025}
+        shadow-normalBias={0.045}
+        shadow-radius={3}
       />
+
+      {/* City-Wide Player-Local Dynamic Streetlight Pools (Follows Player Everywhere at Night, OFF by Day) */}
+      {Array.from({ length: localPoolCount }).map((_, idx) => (
+        <pointLight
+          key={`street-pool-${idx}`}
+          ref={(el) => {
+            streetPoolRefs.current[idx] = el;
+          }}
+          position={STREET_POOL_OFFSETS[idx]}
+          color={idx % 2 === 0 ? '#ffd699' : '#bae6fd'}
+          intensity={0}
+          distance={38}
+          decay={2}
+        />
+      ))}
 
       {quality.nightLightsEnabled && quality.maxLights >= 4 && timeState.streetLightsOn && (
         <pointLight
           position={[0, 16, 0]}
-          intensity={(0.5 + timeState.nightFactor * 2.5) * cityEvent.lightScale}
-          distance={105}
+          intensity={(0.5 + timeState.nightFactor * 2.2) * cityEvent.lightScale}
+          distance={95}
           color={district.primaryLightColor}
           decay={2}
         />

@@ -189,3 +189,95 @@ test('GPU framebuffer probe uses complete texture filters and cleans allocations
     else globalThis.document = previousDocument;
   }
 });
+
+test('atmospheric bloom profile strengthens and widens halos at night, reacts to rain/fog, and dims during power outages', async () => {
+  const bundle = await build({
+    stdin: { resolveDir: process.cwd(), contents: `export { computeAtmosphericBloomParams } from './src/rendering/BloomProfile';` },
+    bundle: true, platform: 'node', format: 'esm', write: false,
+  });
+  const { computeAtmosphericBloomParams } = await import(
+    `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}#${Math.random()}`
+  );
+
+  const day = computeAtmosphericBloomParams({
+    nightFactor: 0,
+    goldenHourFactor: 0,
+    wetnessFactor: 0,
+    fogDensityMultiplier: 1.0,
+    isUltra: false,
+    gridIsOut: false,
+    lightScale: 1.0,
+  });
+  const night = computeAtmosphericBloomParams({
+    nightFactor: 1,
+    goldenHourFactor: 0,
+    wetnessFactor: 0,
+    fogDensityMultiplier: 1.0,
+    isUltra: false,
+    gridIsOut: false,
+    lightScale: 1.0,
+  });
+  const rainyFoggyNight = computeAtmosphericBloomParams({
+    nightFactor: 1,
+    goldenHourFactor: 0,
+    wetnessFactor: 0.9,
+    fogDensityMultiplier: 4.5,
+    isUltra: true,
+    gridIsOut: false,
+    lightScale: 1.0,
+  });
+  const outageNight = computeAtmosphericBloomParams({
+    nightFactor: 1,
+    goldenHourFactor: 0,
+    wetnessFactor: 0,
+    fogDensityMultiplier: 1.0,
+    isUltra: false,
+    gridIsOut: true,
+    lightScale: 1.0,
+  });
+
+  // Night bloom must be noticeably stronger, wider, and have a lower threshold than crisp daytime
+  assert.ok(night.strength > day.strength * 4);
+  assert.ok(night.radius > day.radius);
+  assert.ok(night.threshold < day.threshold);
+
+  // Humid/foggy night scatters light more broadly than a clear night
+  assert.ok(rainyFoggyNight.strength > night.strength);
+  assert.ok(rainyFoggyNight.radius > night.radius);
+  assert.ok(rainyFoggyNight.threshold <= night.threshold);
+
+  // Power outage significantly reduces nighttime city bloom
+  assert.ok(outageNight.strength < night.strength * 0.5);
+  // Radius stays capped so coarse mips never overwhelm crisp circular core halos
+  assert.ok(rainyFoggyNight.radius <= 0.65);
+});
+
+test('circular bloom Gaussian kernels decay smoothly at kernel edges to eliminate square/cube halos on distant lights', async () => {
+  const bundle = await build({
+    stdin: {
+      resolveDir: process.cwd(),
+      contents: `export { computeCircularGaussianCoefficients } from './src/rendering/CircularBloomPass';`,
+    },
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    write: false,
+  });
+  const { computeCircularGaussianCoefficients } = await import(
+    `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}#${Math.random()}`
+  );
+
+  for (const radius of [5, 7, 9, 11, 13]) {
+    const coeffs = computeCircularGaussianCoefficients(radius);
+    assert.equal(coeffs.length, radius);
+    // Strictly monotonically decreasing from center to edge
+    for (let i = 1; i < coeffs.length; i++) {
+      assert.ok(coeffs[i] < coeffs[i - 1], `Expected monotonic Gaussian decay at tap ${i}`);
+    }
+    // Tail weight must drop below 4% of center peak (stock UnrealBloomPass truncates at ~60.6%, creating square/cube artifacts)
+    const edgeRatio = coeffs[coeffs.length - 1] / coeffs[0];
+    assert.ok(edgeRatio < 0.04, `Expected circular Gaussian tail ratio < 0.04 for radius ${radius}, got ${edgeRatio}`);
+  }
+});
+
+

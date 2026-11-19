@@ -221,3 +221,46 @@ test('chunk count budget changes apply while stationary and keep the nearest chu
   const nearestUnloaded = Math.min(...manager.getState().chunks.filter((chunk) => chunk.lod === 'UNLOADED').map((chunk) => chunk.distanceToPlayer));
   assert.ok(furthestActive <= nearestUnloaded);
 });
+
+test('changing character direction from forward to backward rotates smoothly over multiple frames instead of snapping instantly', () => {
+  reset();
+  const player = new KinematicController();
+  player.position.set(0, 0, 10);
+  // 1. Walk forward (-Z => rotationY approaches PI)
+  InputManager.setVirtualMovement(0, 1);
+  for (let i = 0; i < 45; i++) player.update(1 / 60, 0);
+  assert.ok(Math.abs(Math.abs(player.rotationY) - Math.PI) < 0.08, `Expected facing forward (~±PI), got ${player.rotationY}`);
+
+  // 2. Reverse input to backward (+Z => target rotationY = 0)
+  InputManager.setVirtualMovement(0, -1);
+  player.update(1 / 60, 0);
+  // After 1 frame (16.7ms), rotation must NOT snap immediately to 0
+  assert.ok(Math.abs(player.rotationY) > Math.PI * 0.75, `Turn snapped too fast in 1 frame: ${player.rotationY}`);
+
+  // After ~12 frames (~0.2s), character should be visibly mid-turn (between 30° and 155°)
+  for (let i = 0; i < 11; i++) player.update(1 / 60, 0);
+  assert.ok(
+    Math.abs(player.rotationY) > 0.35 && Math.abs(player.rotationY) < Math.PI - 0.35,
+    `Expected smooth mid-turn angle after 0.2s, got ${player.rotationY}`
+  );
+
+  // After ~45 total frames (~0.75s), character settles cleanly facing backward (~0 rad)
+  for (let i = 0; i < 35; i++) player.update(1 / 60, 0);
+  assert.ok(Math.abs(player.rotationY) < 0.08, `Expected settled backward facing (~0), got ${player.rotationY}`);
+});
+
+test('walking left and right across the widened 22m Grand Boulevard stays cleanly grounded with no curb-height glitch', () => {
+  reset();
+  const player = new KinematicController();
+  player.position.set(0, 0, 10);
+  InputManager.setVirtualMovement(1, 0);
+  for (let i = 0; i < 80; i++) {
+    player.update(1 / 60, 0);
+    if (player.position.x <= 10.8) {
+      assert.equal(player.position.y, 0, `Unexpected road height snap at x=${player.position.x}: y=${player.position.y}`);
+      assert.equal(player.isGrounded, true);
+    }
+  }
+  assert.ok(player.position.x > 7.5, 'Expected character to cross old 7.2m curb line smoothly');
+});
+

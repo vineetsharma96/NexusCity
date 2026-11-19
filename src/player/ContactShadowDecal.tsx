@@ -39,15 +39,24 @@ export const ContactShadowDecal: React.FC<ContactShadowDecalProps> = ({ playerPo
     const h = Math.max(0, p.y - ground.height);
     const factor = THREE.MathUtils.clamp(1.0 - h / 2.5, 0.0, 1.0);
 
-    meshRef.current.position.set(p.x, ground.height + 0.012, p.z);
+    meshRef.current.position.set(p.x, ground.height + 0.025, p.z);
     meshRef.current.scale.setScalar(THREE.MathUtils.lerp(0.5, 1.3, factor));
     matRef.current.opacity = THREE.MathUtils.lerp(0.0, 0.7, factor);
-  });
+  }, -1);
 
   return (
     <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[1.3, 1.3]} />
-      <meshBasicMaterial ref={matRef} map={shadowTex} transparent opacity={0.7} depthWrite={false} />
+      <meshBasicMaterial
+        ref={matRef}
+        map={shadowTex}
+        transparent
+        opacity={0.7}
+        depthWrite={false}
+        polygonOffset
+        polygonOffsetFactor={-2}
+        polygonOffsetUnits={-2}
+      />
     </mesh>
   );
 };

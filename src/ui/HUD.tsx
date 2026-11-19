@@ -16,6 +16,7 @@ import { VehicleInteractionSystem, VehicleState } from '../vehicle/VehicleIntera
 import { DialogueSystem } from '../npc/DialogueSystem';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherState, WeatherSystem, WeatherType } from '../world/WeatherSystem';
+import { Gauge, RotateCcw, Wind, Zap } from 'lucide-react';
 
 const WEATHER_CYCLE_ORDER: WeatherType[] = ['CLEAR', 'RAIN', 'HEAVY_RAIN', 'SNOW', 'BLIZZARD', 'FOG'];
 
@@ -192,6 +193,22 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     };
   }, []);
 
+  // Keyboard shortcut [R] to toggle Reverse gear when driving the Experimental Car
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (e.repeat || overlayOpenRef.current || tag === 'input' || tag === 'textarea') return;
+      if (e.key === 'r' || e.key === 'R') {
+        const vs = VehicleInteractionSystem.getInstance().getState();
+        if (vs.mode === 'RIDING' && vs.variant === 'car') {
+          VehicleInteractionSystem.getInstance().toggleReverseGear();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   if (
     cinematicPhase === 'LOADING' ||
     cinematicPhase === 'CINEMATIC_INTRO' ||
@@ -327,11 +344,15 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
                 marginTop: 4,
                 fontFamily: 'var(--font-mono)',
                 fontSize: '0.66rem',
-                color: 'var(--neon-emerald)',
+                color: vehicleState.variant === 'car' ? 'var(--neon-cyan)' : 'var(--neon-emerald)',
                 letterSpacing: '0.1em',
               }}
             >
-              {vehicleState.mode === 'RIDING' ? 'HOVER-COUPE ENGAGED [E TO EXIT]' : 'SHUTTLE LINKED [E TO RELEASE]'}
+              {vehicleState.mode === 'RIDING'
+                ? vehicleState.variant === 'car'
+                  ? 'VX-01 PROTOTYPE ENGAGED [E TO EXIT]'
+                  : 'HOVER-COUPE ENGAGED [E TO EXIT]'
+                : 'SHUTTLE LINKED [E TO RELEASE]'}
             </div>
           )}
         </div>
@@ -401,6 +422,247 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       {/* Subtle Vignette & Precision Reticle */}
       <div className="vignette-overlay" />
       {!overlayOpen && <div className="center-reticle" />}
+
+      {/* Kinetic Acceleration & Deceleration Screen Effects (works on all GPUs & mobile) */}
+      {vehicleState.mode === 'RIDING' && !overlayOpen && (() => {
+        const tel = vehicleState.telemetry;
+        const accelIntensity = Math.min(
+          1,
+          Math.max(0, tel.longitudinalAccelG) * 0.45 +
+            Math.max(0, (tel.speedMs - 11) / 34) * 0.45 +
+            (tel.isBoosting ? 0.35 : 0)
+        );
+        const decelIntensity = Math.min(
+          1,
+          Math.max(0, -tel.longitudinalAccelG) * 0.55 + (tel.isBraking && tel.speedMs > 2.5 ? 0.25 : 0)
+        );
+        return (
+          <>
+            {/* Acceleration Radial Speed-Streak Edge Frame */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'fixed',
+                inset: 0,
+                pointerEvents: 'none',
+                zIndex: 24,
+                opacity: accelIntensity > 0.04 ? accelIntensity * 0.72 : 0,
+                transition: 'opacity 90ms linear',
+                background:
+                  'repeating-conic-gradient(from 0deg at 50% 50%, rgba(56, 189, 248, 0.22) 0deg 0.8deg, transparent 0.8deg 6deg)',
+                WebkitMaskImage: 'radial-gradient(circle at center, transparent 48%, rgba(0, 0, 0, 0.95) 100%)',
+                maskImage: 'radial-gradient(circle at center, transparent 48%, rgba(0, 0, 0, 0.95) 100%)',
+              }}
+            />
+            {/* Deceleration / Braking Peripheral Crimson G-Force Squeeze */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'fixed',
+                inset: 0,
+                pointerEvents: 'none',
+                zIndex: 25,
+                opacity: decelIntensity > 0.04 ? decelIntensity * 0.82 : 0,
+                transition: 'opacity 80ms linear',
+                boxShadow: 'inset 0 0 110px 26px rgba(244, 63, 94, 0.52)',
+              }}
+            />
+          </>
+        );
+      })()}
+
+      {/* Experimental Car Cockpit Telemetry Cluster (Speed, Gear/Reverse Toggle, G-Force, Air Drag & Grip) */}
+      {vehicleState.mode === 'RIDING' && vehicleState.variant === 'car' && !overlayOpen && (() => {
+        const tel = vehicleState.telemetry;
+        const gClamped = Math.max(-1, Math.min(1, tel.longitudinalAccelG / 2.2));
+        const gWidthPct = Math.abs(gClamped) * 50;
+        const isRev = tel.gear === 'R' || tel.isReversing;
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              right: 16,
+              bottom: isMobile ? 190 : 52,
+              zIndex: 35,
+              padding: '11px 14px',
+              minWidth: 236,
+              background: 'rgba(11, 15, 25, 0.88)',
+              border: `1px solid ${tel.isBraking ? 'rgba(244, 63, 94, 0.7)' : isRev ? 'rgba(248, 250, 252, 0.65)' : 'rgba(56, 189, 248, 0.5)'}`,
+              borderRight: `3px solid ${tel.isBraking ? '#f43f5e' : isRev ? '#f8fafc' : tel.isBoosting ? '#f59e0b' : '#38bdf8'}`,
+              borderRadius: 6,
+              fontFamily: 'var(--font-mono)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 7,
+              pointerEvents: 'auto',
+            }}
+          >
+            {/* Header + Reverse Gear Toggle Button */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontSize: '0.62rem',
+                  letterSpacing: '0.14em',
+                  color: 'var(--neon-cyan)',
+                  fontWeight: 700,
+                }}
+              >
+                <Gauge size={13} />
+                VX-01 TELEMETRY
+              </span>
+              <button
+                type="button"
+                className="cyber-btn"
+                onClick={() => VehicleInteractionSystem.getInstance().toggleReverseGear()}
+                title="Toggle Reverse Gear (R)"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '2px 7px',
+                  fontSize: '0.6rem',
+                  background: isRev ? 'rgba(248, 250, 252, 0.18)' : 'rgba(15, 23, 42, 0.85)',
+                  borderColor: isRev ? '#f8fafc' : 'var(--border-subtle)',
+                  color: isRev ? '#ffffff' : 'var(--text-secondary)',
+                }}
+              >
+                <RotateCcw size={11} />
+                REV [R]
+              </button>
+            </div>
+
+            {/* Digital KM/H Readout + P / N / D / R Gear Indicator */}
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, fontVariantNumeric: 'tabular-nums' }}>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: '1.85rem',
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    color: tel.isBoosting ? 'var(--neon-amber)' : 'var(--text-primary)',
+                  }}
+                >
+                  {String(tel.speedKmh).padStart(3, '0')}
+                </span>
+                <span style={{ fontSize: '0.64rem', color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>
+                  KM/H
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(['R', 'N', 'D'] as const).map((g) => {
+                  const active = tel.gear === g;
+                  return (
+                    <span
+                      key={g}
+                      style={{
+                        width: 22,
+                        height: 22,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 3,
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        background: active
+                          ? g === 'R'
+                            ? '#f8fafc'
+                            : 'var(--neon-cyan)'
+                          : 'rgba(255, 255, 255, 0.06)',
+                        color: active ? '#07090e' : 'var(--text-muted)',
+                      }}
+                    >
+                      {g}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bidirectional Longitudinal G-Force Bar (Decel left / Accel right) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '0.58rem',
+                  color: 'var(--text-secondary)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                <span style={{ color: tel.isBraking ? '#fb7185' : 'var(--text-muted)' }}>DECEL</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--text-primary)' }}>
+                  <Zap size={10} />
+                  {tel.longitudinalAccelG >= 0 ? '+' : ''}
+                  {tel.longitudinalAccelG.toFixed(2)} G
+                </span>
+                <span style={{ color: tel.isBoosting ? 'var(--neon-amber)' : 'var(--text-muted)' }}>
+                  {tel.isBoosting ? 'BOOST' : 'ACCEL'}
+                </span>
+              </div>
+              <div
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: 5,
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: 0,
+                    bottom: 0,
+                    width: 1,
+                    background: 'rgba(255, 255, 255, 0.35)',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: gClamped >= 0 ? '50%' : `${50 - gWidthPct}%`,
+                    width: `${gWidthPct}%`,
+                    background: gClamped >= 0 ? (tel.isBoosting ? '#f59e0b' : '#38bdf8') : '#f43f5e',
+                    transition: 'width 60ms linear, left 60ms linear',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Unified World Physics Readout: Air Resistance Drag & Surface Friction */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                paddingTop: 4,
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                fontSize: '0.6rem',
+                color: 'var(--text-secondary)',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Wind size={11} />
+                DRAG {tel.dragForceN} N
+              </span>
+              <span>
+                μ {tel.surfaceGrip.toFixed(2)} · {tel.surfaceLabel}
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Discrete Frame Telemetry */}
       <div
@@ -562,16 +824,33 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
             )}
           </div>
           <div style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
-            <div>
-              <strong style={{ color: 'var(--text-primary)' }}>WASD</strong> Move ·{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>SPACE</strong> Jump ·{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>E</strong> Interact
-            </div>
-            <div>
-              <strong style={{ color: 'var(--text-primary)' }}>M</strong> Atlas ·{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>V</strong> Vista ·{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>SHIFT</strong> Sprint
-            </div>
+            {vehicleState.mode === 'RIDING' && vehicleState.variant === 'car' ? (
+              <>
+                <div>
+                  <strong style={{ color: 'var(--text-primary)' }}>W/S</strong> Throttle &amp; Brake/Rev ·{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>A/D</strong> Steer ·{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>R</strong> Reverse
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--text-primary)' }}>SPACE</strong> Handbrake ·{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>SHIFT</strong> Boost ·{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>E</strong> Exit
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <strong style={{ color: 'var(--text-primary)' }}>WASD</strong> Move ·{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>SPACE</strong> Jump ·{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>E</strong> Interact
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--text-primary)' }}>M</strong> Atlas ·{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>V</strong> Vista ·{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>SHIFT</strong> Sprint
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

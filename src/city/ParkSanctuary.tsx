@@ -169,39 +169,62 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
 
   return (
     <group position={position} name="CentralParkSanctuary">
-      {/* Main Botanical Lawn Terrace */}
+      {/* Main Botanical Lawn Terrace (top y = 0.24) */}
       <mesh position={[0, 0.12, 0]} receiveShadow={quality.shadows}>
         <boxGeometry args={[70, 0.24, 70]} />
         <meshStandardMaterial color="#052e16" roughness={0.78} metalness={0.08} />
       </mesh>
 
-      {/* Concentric Inner Moss & Clover Lawn Terrace */}
-      <mesh position={[0, 0.245, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={quality.shadows}>
+      {/* Concentric Inner Moss & Clover Lawn Terrace (y = 0.255 with polygonOffset) */}
+      <mesh position={[0, 0.255, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={quality.shadows}>
         <ringGeometry args={[19.5, 31.5, 48]} />
-        <meshStandardMaterial color="#064e3b" roughness={0.72} metalness={0.12} />
+        <meshStandardMaterial
+          color="#064e3b"
+          roughness={0.72}
+          metalness={0.12}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
+        />
       </mesh>
 
-      {/* East-West & North-South Basalt Promenade Walkways with Brass Inlays */}
-      <mesh position={[0, 0.255, 0]} receiveShadow={quality.shadows}>
-        <boxGeometry args={[68.5, 0.03, 5.4]} />
+      {/* Split Cardinal Basalt Promenade Walkways (meet lagoon rim / bridge ramps cleanly without overlapping) */}
+      <mesh position={[-24.2, 0.265, 0]} receiveShadow={quality.shadows}>
+        <boxGeometry args={[20.0, 0.04, 5.4]} />
         <meshStandardMaterial color="#0f172a" roughness={0.36} metalness={0.68} />
       </mesh>
-      <mesh position={[0, 0.255, 0]} receiveShadow={quality.shadows}>
-        <boxGeometry args={[5.4, 0.03, 68.5]} />
+      <mesh position={[24.2, 0.265, 0]} receiveShadow={quality.shadows}>
+        <boxGeometry args={[20.0, 0.04, 5.4]} />
         <meshStandardMaterial color="#0f172a" roughness={0.36} metalness={0.68} />
       </mesh>
-      {/* Circular Perimeter Ring Promenade */}
-      <mesh position={[0, 0.258, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={quality.shadows}>
+      <mesh position={[0, 0.265, -25.6]} receiveShadow={quality.shadows}>
+        <boxGeometry args={[5.4, 0.04, 17.2]} />
+        <meshStandardMaterial color="#0f172a" roughness={0.36} metalness={0.68} />
+      </mesh>
+      <mesh position={[0, 0.265, 25.6]} receiveShadow={quality.shadows}>
+        <boxGeometry args={[5.4, 0.04, 17.2]} />
+        <meshStandardMaterial color="#0f172a" roughness={0.36} metalness={0.68} />
+      </mesh>
+
+      {/* Circular Perimeter Ring Promenade (cleanly above walkways via polygonOffset) */}
+      <mesh position={[0, 0.292, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={quality.shadows}>
         <ringGeometry args={[23.5, 26.2, 48]} />
-        <meshStandardMaterial color="#111827" roughness={0.38} metalness={0.65} />
+        <meshStandardMaterial
+          color="#111827"
+          roughness={0.38}
+          metalness={0.65}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
       </mesh>
-      <mesh position={[0, 0.262, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 0.302, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[23.35, 23.5, 48]} />
-        <meshBasicMaterial color="#10b981" />
+        <meshBasicMaterial color="#10b981" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
       </mesh>
-      <mesh position={[0, 0.262, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 0.302, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[26.2, 26.35, 48]} />
-        <meshBasicMaterial color="#38bdf8" />
+        <meshBasicMaterial color="#38bdf8" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
       </mesh>
 
       {/* Perimeter Architectural Sanctuary Walls */}
@@ -248,17 +271,24 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
       ))}
 
       {/* Sunken Bioluminescent Mirror Lagoon & Basalt Basin Rim */}
-      <mesh position={[0, 0.26, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 0.285, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[16.2, 17.4, 48]} />
-        <meshStandardMaterial color="#0f172a" metalness={0.85} roughness={0.25} />
+        <meshStandardMaterial
+          color="#0f172a"
+          metalness={0.85}
+          roughness={0.25}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
       </mesh>
-      <mesh position={[0, 0.27, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 0.298, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[16.05, 16.22, 48]} />
-        <meshBasicMaterial color="#38bdf8" />
+        <meshBasicMaterial color="#38bdf8" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
       </mesh>
 
-      <mesh position={[0, 0.29, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[16.1, 48]} />
+      <mesh position={[0, 0.305, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[16.08, 48]} />
         <shaderMaterial
           ref={waterMatRef}
           uniforms={waterUniforms}
@@ -269,7 +299,8 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
             void main() {
               vUv = uv;
               vec3 pos = position;
-              pos.z += (sin(pos.x * 0.42 + uTime * 2.1) * 0.08 + cos(pos.y * 0.48 - uTime * 1.6) * 0.06) * uWindStrength;
+              float wave = (sin(pos.x * 0.42 + uTime * 2.1) * 0.022 + cos(pos.y * 0.48 - uTime * 1.6) * 0.018) * min(uWindStrength, 1.5);
+              pos.z += clamp(wave, -0.03, 0.03);
               gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
             }
           `}
@@ -380,27 +411,40 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
           <cylinderGeometry args={[0.055, 0.055, 22.8, 8]} />
           <meshBasicMaterial color="#f59e0b" />
         </mesh>
-        {/* Approach Ramps */}
-        <mesh position={[-11.5, 0.4, 0]} castShadow={quality.shadows} receiveShadow={quality.shadows}>
-          <boxGeometry args={[3.2, 0.7, 4.8]} />
-          <meshStandardMaterial color="#1e293b" roughness={0.48} />
+        {/* Approach Ramps cleanly abutting bridge deck ends at x = ±11.5 without coplanar overlap */}
+        <mesh position={[-12.9, 0.46, 0]} castShadow={quality.shadows} receiveShadow={quality.shadows}>
+          <boxGeometry args={[2.76, 0.44, 4.8]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.48} metalness={0.5} />
         </mesh>
-        <mesh position={[11.5, 0.4, 0]} castShadow={quality.shadows} receiveShadow={quality.shadows}>
-          <boxGeometry args={[3.2, 0.7, 4.8]} />
-          <meshStandardMaterial color="#1e293b" roughness={0.48} />
+        <mesh position={[12.9, 0.46, 0]} castShadow={quality.shadows} receiveShadow={quality.shadows}>
+          <boxGeometry args={[2.76, 0.44, 4.8]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.48} metalness={0.5} />
         </mesh>
       </group>
 
       {/* NE Quadrant: Zen Raked Gravel Rings & Sculptural Monolith Stones */}
-      <group position={[19, 0.25, -19]}>
+      <group position={[19, 0.275, -19]}>
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
           <circleGeometry args={[5.5, 32]} />
-          <meshStandardMaterial color="#1e293b" roughness={0.85} />
+          <meshStandardMaterial
+            color="#1e293b"
+            roughness={0.85}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
         </mesh>
         {[2.0, 3.4, 4.8].map((r, rIdx) => (
-          <mesh key={rIdx} position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh key={rIdx} position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[r - 0.08, r, 32]} />
-            <meshBasicMaterial color="#f59e0b" transparent opacity={0.45} />
+            <meshBasicMaterial
+              color="#f59e0b"
+              transparent
+              opacity={0.45}
+              polygonOffset
+              polygonOffsetFactor={-3}
+              polygonOffsetUnits={-3}
+            />
           </mesh>
         ))}
         <mesh position={[-1.2, 0.9, 0.5]} castShadow={quality.shadows}>
@@ -448,14 +492,21 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
       )}
 
       {/* SE Quadrant: Meditation Sundial Terrace */}
-      <group position={[19, 0.26, 19]}>
+      <group position={[19, 0.275, 19]}>
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
           <circleGeometry args={[5.2, 32]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.78} roughness={0.3} />
+          <meshStandardMaterial
+            color="#0f172a"
+            metalness={0.78}
+            roughness={0.3}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
         </mesh>
-        <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[4.85, 5.1, 32]} />
-          <meshBasicMaterial color="#38bdf8" />
+          <meshBasicMaterial color="#38bdf8" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
         </mesh>
         <mesh position={[0, 1.1, 0]} rotation={[0.4, 0.5, 0]}>
           <torusGeometry args={[1.1, 0.06, 8, 24]} />

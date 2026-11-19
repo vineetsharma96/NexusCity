@@ -127,60 +127,78 @@ export class CityGenerator {
     const skybridges: SkybridgeDef[] = [];
     const streetProps: CentralStreetPropDef[] = [];
 
-    // Primary & Secondary Arterial Avenues spanning the full metropolitan grid
+    // Primary World Grand Boulevards (22m wide 4-lane avenues; NS at y=0.02, EW at y=0.045 for zero Z-fighting)
+    // x = 0 Grand Boulevard is cleanly split around the (0, 240) Park Sanctuary (z in [204..276])
     avenues.push({
-      position: new THREE.Vector3(0, 0.02, 0),
-      size: new THREE.Vector3(14, 0.04, 2800),
+      position: new THREE.Vector3(0, 0.02, -598),
+      size: new THREE.Vector3(22, 0.04, 1604),
       rotationY: 0,
     });
     avenues.push({
-      position: new THREE.Vector3(0, 0.018, 0),
-      size: new THREE.Vector3(14, 0.04, 2800),
-      rotationY: Math.PI / 2,
-    });
-    avenues.push({
-      position: new THREE.Vector3(0, 0.018, -75),
-      size: new THREE.Vector3(12, 0.04, 2800),
-      rotationY: Math.PI / 2,
-    });
-    avenues.push({
-      position: new THREE.Vector3(0, 0.018, 75),
-      size: new THREE.Vector3(12, 0.04, 2800),
-      rotationY: Math.PI / 2,
-    });
-    avenues.push({
-      position: new THREE.Vector3(-75, 0.019, 0),
-      size: new THREE.Vector3(12, 0.04, 2800),
+      position: new THREE.Vector3(0, 0.02, 838),
+      size: new THREE.Vector3(22, 0.04, 1124),
       rotationY: 0,
     });
     avenues.push({
-      position: new THREE.Vector3(75, 0.019, -450),
-      size: new THREE.Vector3(12, 0.04, 960),
-      rotationY: 0,
+      position: new THREE.Vector3(0, 0.045, 0),
+      size: new THREE.Vector3(22, 0.04, 2800),
+      rotationY: Math.PI / 2,
     });
+
+    // Secondary Central District Avenues (18m wide, strictly bounded to Central Perimeter [-174..174])
+    // so they never slice through outer streamed chunk buildings or parks
     avenues.push({
-      position: new THREE.Vector3(75, 0.019, 520),
-      size: new THREE.Vector3(12, 0.04, 800),
-      rotationY: 0,
+      position: new THREE.Vector3(0, 0.045, -75),
+      size: new THREE.Vector3(18, 0.04, 348),
+      rotationY: Math.PI / 2,
     });
+    // z = 75 split around (75, 75) Park Sanctuary (x in [39..111])
     avenues.push({
-      position: new THREE.Vector3(0, 0.018, -165),
-      size: new THREE.Vector3(14, 0.04, 2800),
+      position: new THREE.Vector3(-67.5, 0.045, 75),
+      size: new THREE.Vector3(18, 0.04, 213),
       rotationY: Math.PI / 2,
     });
     avenues.push({
-      position: new THREE.Vector3(0, 0.018, 165),
-      size: new THREE.Vector3(14, 0.04, 2800),
+      position: new THREE.Vector3(142.5, 0.045, 75),
+      size: new THREE.Vector3(18, 0.04, 63),
       rotationY: Math.PI / 2,
     });
     avenues.push({
-      position: new THREE.Vector3(-165, 0.019, 0),
-      size: new THREE.Vector3(14, 0.04, 2800),
+      position: new THREE.Vector3(-75, 0.02, 0),
+      size: new THREE.Vector3(18, 0.04, 348),
+      rotationY: 0,
+    });
+    // x = 75 split around (75, 75) Park Sanctuary (z in [39..111])
+    avenues.push({
+      position: new THREE.Vector3(75, 0.02, -67.5),
+      size: new THREE.Vector3(18, 0.04, 213),
       rotationY: 0,
     });
     avenues.push({
-      position: new THREE.Vector3(165, 0.019, 0),
-      size: new THREE.Vector3(14, 0.04, 2800),
+      position: new THREE.Vector3(75, 0.02, 142.5),
+      size: new THREE.Vector3(18, 0.04, 63),
+      rotationY: 0,
+    });
+
+    // Central District Ring Road Perimeter (±165, 18m wide spanning [-174..174])
+    avenues.push({
+      position: new THREE.Vector3(0, 0.045, -165),
+      size: new THREE.Vector3(18, 0.04, 348),
+      rotationY: Math.PI / 2,
+    });
+    avenues.push({
+      position: new THREE.Vector3(0, 0.045, 165),
+      size: new THREE.Vector3(18, 0.04, 348),
+      rotationY: Math.PI / 2,
+    });
+    avenues.push({
+      position: new THREE.Vector3(-165, 0.02, 0),
+      size: new THREE.Vector3(18, 0.04, 348),
+      rotationY: 0,
+    });
+    avenues.push({
+      position: new THREE.Vector3(165, 0.02, 0),
+      size: new THREE.Vector3(18, 0.04, 348),
       rotationY: 0,
     });
 
@@ -199,13 +217,13 @@ export class CityGenerator {
       { x: 115, z: -38, w: 44, d: 42, name: 'East Orbital Tower', minH: 62, maxH: 108 },
       { x: -115, z: 38, w: 44, d: 42, name: 'West Transit Hub', minH: 42, maxH: 76 },
       // Note: (75, 75) is dedicated to Central Park Sanctuary (bounds 39..111 in X and Z), so we keep it clear!
-      { x: 136, z: 38, w: 36, d: 40, name: 'East Sanctuary Overlook', minH: 54, maxH: 92 },
+      { x: 134, z: 38, w: 34, d: 40, name: 'East Sanctuary Overlook', minH: 54, maxH: 92 },
 
       // Extended Outer Ring Monoliths around Central Core
       { x: -115, z: -115, w: 46, d: 46, name: 'Quantum Relay Bastion', minH: 64, maxH: 112 },
       { x: 115, z: -115, w: 46, d: 46, name: 'Aerostrata Conduit Spire', minH: 70, maxH: 118 },
       { x: -115, z: 115, w: 46, d: 46, name: 'Solaris Reactor Matrix', minH: 56, maxH: 96 },
-      { x: 136, z: 115, w: 36, d: 44, name: 'Botanical Terrace Tower', minH: 52, maxH: 88 },
+      { x: 134, z: 115, w: 34, d: 44, name: 'Botanical Terrace Tower', minH: 52, maxH: 88 },
     ];
 
     const neonPalette = ['#38bdf8', '#f59e0b', '#10b981', '#f43f5e', '#4a8ad6'];
@@ -272,26 +290,36 @@ export class CityGenerator {
         height: 2.8,
       });
 
+      // Position rooftop equipment cleanly atop crown decks or tier-2 setback terraces so nothing clips BuildingCrown
+      const crownTopY =
+        crownType === 'PYRAMID_LANTERN'
+          ? totalH + 5.3
+          : crownType === 'SLANTED_BLADE'
+          ? totalH + 4.56
+          : crownType === 'TWIN_FIN_CREST'
+          ? totalH + 4.58
+          : totalH + 2.8;
+      const tier2DeckY = h1 + h2;
       const rooftopEquipment: RooftopProp[] = [
         {
           type: 'ANTENNA',
-          position: new THREE.Vector3(0, totalH + 7, 0),
+          position: new THREE.Vector3(0, crownTopY + 7, 0),
           size: new THREE.Vector3(0.45, 14, 0.45),
         },
         {
           type: idx % 2 === 0 ? 'COOLING_TOWER' : 'HVAC',
-          position: new THREE.Vector3(w3 * 0.24, totalH + 1.2, d3 * 0.24),
-          size: new THREE.Vector3(2.8, 2.4, 2.8),
+          position: new THREE.Vector3(w2 * 0.41, tier2DeckY + 1.25, d2 * 0.41),
+          size: new THREE.Vector3(2.4, 2.4, 2.4),
         },
         {
           type: idx % 3 === 0 ? 'HELIPAD' : 'SOLAR_ARRAY',
-          position: new THREE.Vector3(-w3 * 0.2, totalH + 0.25, -d3 * 0.2),
-          size: new THREE.Vector3(w3 * 0.44, 0.35, d3 * 0.44),
+          position: new THREE.Vector3(0, crownTopY + 0.18, 0),
+          size: new THREE.Vector3(w3 * 0.4, 0.3, d3 * 0.4),
         },
         {
           type: 'DISH',
-          position: new THREE.Vector3(-w3 * 0.24, totalH + 1.4, d3 * 0.24),
-          size: new THREE.Vector3(1.6, 2.2, 1.6),
+          position: new THREE.Vector3(-w2 * 0.41, tier2DeckY + 1.35, d2 * 0.41),
+          size: new THREE.Vector3(1.5, 2.1, 1.5),
         },
       ];
 
@@ -427,58 +455,58 @@ export class CityGenerator {
       }
     );
 
-    // Streetscape Furniture & Sidewalk Props along Central & Extended Avenues
+    // Streetscape Furniture & Sidewalk Props along Central & Extended Avenues (cleanly seated on ±13m+ sidewalks)
     const propCoords: {
       type: CentralStreetPropDef['type'];
       pos: [number, number, number];
       rot: number;
       accent: string;
     }[] = [
-      { type: 'TRANSIT_SHELTER', pos: [-11.5, 0.2, -28], rot: Math.PI / 2, accent: '#38bdf8' },
-      { type: 'TRANSIT_SHELTER', pos: [11.5, 0.2, 28], rot: -Math.PI / 2, accent: '#f59e0b' },
-      { type: 'TRANSIT_SHELTER', pos: [-28, 0.2, -11.5], rot: 0, accent: '#10b981' },
-      { type: 'TRANSIT_SHELTER', pos: [28, 0.2, 11.5], rot: Math.PI, accent: '#38bdf8' },
-      { type: 'TRANSIT_SHELTER', pos: [-11.5, 0.2, -96], rot: Math.PI / 2, accent: '#38bdf8' },
-      { type: 'TRANSIT_SHELTER', pos: [11.5, 0.2, 96], rot: -Math.PI / 2, accent: '#f59e0b' },
-      { type: 'TRANSIT_SHELTER', pos: [-96, 0.2, -11.5], rot: 0, accent: '#f43f5e' },
-      { type: 'TRANSIT_SHELTER', pos: [96, 0.2, -11.5], rot: 0, accent: '#10b981' },
+      { type: 'TRANSIT_SHELTER', pos: [-14.4, 0.2, -28], rot: Math.PI / 2, accent: '#38bdf8' },
+      { type: 'TRANSIT_SHELTER', pos: [14.4, 0.2, 28], rot: -Math.PI / 2, accent: '#f59e0b' },
+      { type: 'TRANSIT_SHELTER', pos: [-28, 0.2, -14.4], rot: 0, accent: '#10b981' },
+      { type: 'TRANSIT_SHELTER', pos: [28, 0.2, 14.4], rot: Math.PI, accent: '#38bdf8' },
+      { type: 'TRANSIT_SHELTER', pos: [-14.4, 0.2, -96], rot: Math.PI / 2, accent: '#38bdf8' },
+      { type: 'TRANSIT_SHELTER', pos: [14.4, 0.2, 96], rot: -Math.PI / 2, accent: '#f59e0b' },
+      { type: 'TRANSIT_SHELTER', pos: [-96, 0.2, -14.4], rot: 0, accent: '#f43f5e' },
+      { type: 'TRANSIT_SHELTER', pos: [96, 0.2, -14.4], rot: 0, accent: '#10b981' },
 
-      { type: 'CYBER_KIOSK', pos: [-12.5, 0.2, -16], rot: Math.PI / 4, accent: '#38bdf8' },
-      { type: 'CYBER_KIOSK', pos: [12.5, 0.2, -16], rot: -Math.PI / 4, accent: '#f59e0b' },
-      { type: 'CYBER_KIOSK', pos: [-12.5, 0.2, 16], rot: (3 * Math.PI) / 4, accent: '#f43f5e' },
-      { type: 'CYBER_KIOSK', pos: [12.5, 0.2, 16], rot: (-3 * Math.PI) / 4, accent: '#10b981' },
-      { type: 'CYBER_KIOSK', pos: [-12.5, 0.2, -88], rot: Math.PI / 2, accent: '#38bdf8' },
-      { type: 'CYBER_KIOSK', pos: [12.5, 0.2, -88], rot: -Math.PI / 2, accent: '#f59e0b' },
-      { type: 'CYBER_KIOSK', pos: [-12.5, 0.2, 88], rot: Math.PI / 2, accent: '#10b981' },
-      { type: 'CYBER_KIOSK', pos: [-88, 0.2, -12.5], rot: 0, accent: '#f43f5e' },
-      { type: 'CYBER_KIOSK', pos: [88, 0.2, -12.5], rot: 0, accent: '#38bdf8' },
+      { type: 'CYBER_KIOSK', pos: [-15.2, 0.2, -19], rot: Math.PI / 4, accent: '#38bdf8' },
+      { type: 'CYBER_KIOSK', pos: [15.2, 0.2, -19], rot: -Math.PI / 4, accent: '#f59e0b' },
+      { type: 'CYBER_KIOSK', pos: [-15.2, 0.2, 19], rot: (3 * Math.PI) / 4, accent: '#f43f5e' },
+      { type: 'CYBER_KIOSK', pos: [15.2, 0.2, 19], rot: (-3 * Math.PI) / 4, accent: '#10b981' },
+      { type: 'CYBER_KIOSK', pos: [-15.2, 0.2, -88], rot: Math.PI / 2, accent: '#38bdf8' },
+      { type: 'CYBER_KIOSK', pos: [15.2, 0.2, -88], rot: -Math.PI / 2, accent: '#f59e0b' },
+      { type: 'CYBER_KIOSK', pos: [-15.2, 0.2, 88], rot: Math.PI / 2, accent: '#10b981' },
+      { type: 'CYBER_KIOSK', pos: [-88, 0.2, -15.2], rot: 0, accent: '#f43f5e' },
+      { type: 'CYBER_KIOSK', pos: [88, 0.2, -15.2], rot: 0, accent: '#38bdf8' },
 
-      { type: 'BENCH', pos: [-11.2, 0.2, -36], rot: Math.PI / 2, accent: '#f59e0b' },
-      { type: 'BENCH', pos: [11.2, 0.2, -36], rot: -Math.PI / 2, accent: '#38bdf8' },
-      { type: 'BENCH', pos: [-11.2, 0.2, 36], rot: Math.PI / 2, accent: '#10b981' },
-      { type: 'BENCH', pos: [11.2, 0.2, 36], rot: -Math.PI / 2, accent: '#f43f5e' },
-      { type: 'BENCH', pos: [-11.2, 0.2, -108], rot: Math.PI / 2, accent: '#38bdf8' },
-      { type: 'BENCH', pos: [11.2, 0.2, -108], rot: -Math.PI / 2, accent: '#f59e0b' },
-      { type: 'BENCH', pos: [-11.2, 0.2, 108], rot: Math.PI / 2, accent: '#10b981' },
-      { type: 'BENCH', pos: [11.2, 0.2, 108], rot: -Math.PI / 2, accent: '#38bdf8' },
-      { type: 'BENCH', pos: [-108, 0.2, -11.2], rot: 0, accent: '#f59e0b' },
-      { type: 'BENCH', pos: [108, 0.2, -11.2], rot: 0, accent: '#10b981' },
+      { type: 'BENCH', pos: [-14.2, 0.2, -36], rot: Math.PI / 2, accent: '#f59e0b' },
+      { type: 'BENCH', pos: [14.2, 0.2, -36], rot: -Math.PI / 2, accent: '#38bdf8' },
+      { type: 'BENCH', pos: [-14.2, 0.2, 36], rot: Math.PI / 2, accent: '#10b981' },
+      { type: 'BENCH', pos: [14.2, 0.2, 36], rot: -Math.PI / 2, accent: '#f43f5e' },
+      { type: 'BENCH', pos: [-14.2, 0.2, -108], rot: Math.PI / 2, accent: '#38bdf8' },
+      { type: 'BENCH', pos: [14.2, 0.2, -108], rot: -Math.PI / 2, accent: '#f59e0b' },
+      { type: 'BENCH', pos: [-14.2, 0.2, 108], rot: Math.PI / 2, accent: '#10b981' },
+      { type: 'BENCH', pos: [14.2, 0.2, 108], rot: -Math.PI / 2, accent: '#38bdf8' },
+      { type: 'BENCH', pos: [-108, 0.2, -14.2], rot: 0, accent: '#f59e0b' },
+      { type: 'BENCH', pos: [108, 0.2, -14.2], rot: 0, accent: '#10b981' },
 
-      { type: 'BOLLARD_CLUSTER', pos: [-9.5, 0.2, -14], rot: 0, accent: '#f59e0b' },
-      { type: 'BOLLARD_CLUSTER', pos: [9.5, 0.2, -14], rot: 0, accent: '#f59e0b' },
-      { type: 'BOLLARD_CLUSTER', pos: [-9.5, 0.2, 14], rot: 0, accent: '#38bdf8' },
-      { type: 'BOLLARD_CLUSTER', pos: [9.5, 0.2, 14], rot: 0, accent: '#38bdf8' },
-      { type: 'BOLLARD_CLUSTER', pos: [-9.5, 0.2, -64], rot: 0, accent: '#10b981' },
-      { type: 'BOLLARD_CLUSTER', pos: [9.5, 0.2, -64], rot: 0, accent: '#10b981' },
-      { type: 'BOLLARD_CLUSTER', pos: [-9.5, 0.2, 64], rot: 0, accent: '#f43f5e' },
-      { type: 'BOLLARD_CLUSTER', pos: [9.5, 0.2, 64], rot: 0, accent: '#f43f5e' },
+      { type: 'BOLLARD_CLUSTER', pos: [-13.4, 0.2, -17.5], rot: 0, accent: '#f59e0b' },
+      { type: 'BOLLARD_CLUSTER', pos: [13.4, 0.2, -17.5], rot: 0, accent: '#f59e0b' },
+      { type: 'BOLLARD_CLUSTER', pos: [-13.4, 0.2, 17.5], rot: 0, accent: '#38bdf8' },
+      { type: 'BOLLARD_CLUSTER', pos: [13.4, 0.2, 17.5], rot: 0, accent: '#38bdf8' },
+      { type: 'BOLLARD_CLUSTER', pos: [-13.4, 0.2, -62.5], rot: 0, accent: '#10b981' },
+      { type: 'BOLLARD_CLUSTER', pos: [13.4, 0.2, -62.5], rot: 0, accent: '#10b981' },
+      { type: 'BOLLARD_CLUSTER', pos: [-13.4, 0.2, 62.5], rot: 0, accent: '#f43f5e' },
+      { type: 'BOLLARD_CLUSTER', pos: [13.4, 0.2, 62.5], rot: 0, accent: '#f43f5e' },
 
-      { type: 'STEAM_GRATE', pos: [-5.2, 0.03, -22], rot: 0, accent: '#38bdf8' },
-      { type: 'STEAM_GRATE', pos: [5.2, 0.03, 22], rot: 0, accent: '#f59e0b' },
-      { type: 'STEAM_GRATE', pos: [-5.2, 0.03, -95], rot: 0, accent: '#10b981' },
-      { type: 'STEAM_GRATE', pos: [5.2, 0.03, 95], rot: 0, accent: '#f43f5e' },
-      { type: 'STEAM_GRATE', pos: [-95, 0.03, -5.2], rot: Math.PI / 2, accent: '#38bdf8' },
-      { type: 'STEAM_GRATE', pos: [95, 0.03, 5.2], rot: Math.PI / 2, accent: '#f59e0b' },
+      { type: 'STEAM_GRATE', pos: [-8.8, 0.088, -22], rot: 0, accent: '#38bdf8' },
+      { type: 'STEAM_GRATE', pos: [8.8, 0.088, 22], rot: 0, accent: '#f59e0b' },
+      { type: 'STEAM_GRATE', pos: [-8.8, 0.088, -95], rot: 0, accent: '#10b981' },
+      { type: 'STEAM_GRATE', pos: [8.8, 0.088, 95], rot: 0, accent: '#f43f5e' },
+      { type: 'STEAM_GRATE', pos: [-95, 0.088, -8.8], rot: Math.PI / 2, accent: '#38bdf8' },
+      { type: 'STEAM_GRATE', pos: [95, 0.088, 8.8], rot: Math.PI / 2, accent: '#f59e0b' },
     ];
 
     propCoords.forEach((p, idx) => {
@@ -492,17 +520,28 @@ export class CityGenerator {
     });
 
     for (let z = -300; z <= 300; z += 30) {
-      if (Math.abs(z) < 12 || Math.abs(Math.abs(z) - 75) < 10 || Math.abs(Math.abs(z) - 165) < 10) continue;
-      streetlights.push({ position: new THREE.Vector3(-8.5, 0, z), rotationY: 0 });
-      streetlights.push({ position: new THREE.Vector3(8.5, 0, z), rotationY: Math.PI });
+      if (
+        Math.abs(z) < 18 ||
+        Math.abs(Math.abs(z) - 75) < 13 ||
+        Math.abs(Math.abs(z) - 165) < 13 ||
+        (z >= 200 && z <= 280)
+      ) {
+        continue;
+      }
+      streetlights.push({ position: new THREE.Vector3(-12.2, 0, z), rotationY: 0 });
+      streetlights.push({ position: new THREE.Vector3(12.2, 0, z), rotationY: Math.PI });
     }
 
     for (let x = -300; x <= 300; x += 30) {
-      if (Math.abs(x) < 12 || Math.abs(Math.abs(x) - 75) < 10 || Math.abs(Math.abs(x) - 165) < 10) continue;
-      streetlights.push({ position: new THREE.Vector3(x, 0, -8.5), rotationY: -Math.PI / 2 });
-      streetlights.push({ position: new THREE.Vector3(x, 0, 8.5), rotationY: Math.PI / 2 });
-      streetlights.push({ position: new THREE.Vector3(x, 0, -67.5), rotationY: -Math.PI / 2 });
-      streetlights.push({ position: new THREE.Vector3(x, 0, 82.5), rotationY: Math.PI / 2 });
+      if (Math.abs(x) < 18 || Math.abs(Math.abs(x) - 75) < 13 || Math.abs(Math.abs(x) - 165) < 13) continue;
+      streetlights.push({ position: new THREE.Vector3(x, 0, -12.2), rotationY: -Math.PI / 2 });
+      streetlights.push({ position: new THREE.Vector3(x, 0, 12.2), rotationY: Math.PI / 2 });
+      if (Math.abs(x) <= 152) {
+        streetlights.push({ position: new THREE.Vector3(x, 0, -64.8), rotationY: -Math.PI / 2 });
+        if (x < 35 || x > 115) {
+          streetlights.push({ position: new THREE.Vector3(x, 0, 85.2), rotationY: Math.PI / 2 });
+        }
+      }
     }
 
     return { buildings, streetlights, avenues, sidewalks, skybridges, streetProps };

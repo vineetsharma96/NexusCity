@@ -75,6 +75,7 @@ export interface StreamedChunkData {
   center: THREE.Vector3;
   district: DistrictInfo;
   roads: { position: THREE.Vector3; size: THREE.Vector3; rotationY: number }[];
+  junctions: { position: THREE.Vector3; size: THREE.Vector3 }[];
   sidewalks: { position: THREE.Vector3; size: THREE.Vector3 }[];
   buildings: StreamedBuildingDef[];
   trees: TreeDef[];
@@ -104,6 +105,7 @@ export class ProceduralChunkGenerator {
     const district = DistrictGenerator.getDistrictAt(centerX, centerZ);
 
     const roads: { position: THREE.Vector3; size: THREE.Vector3; rotationY: number }[] = [];
+    const junctions: { position: THREE.Vector3; size: THREE.Vector3 }[] = [];
     const sidewalks: { position: THREE.Vector3; size: THREE.Vector3 }[] = [];
     const buildings: StreamedBuildingDef[] = [];
     const parks: PocketParkDef[] = [];
@@ -117,6 +119,7 @@ export class ProceduralChunkGenerator {
         center,
         district,
         roads,
+        junctions,
         sidewalks,
         buildings,
         trees: [],
@@ -130,33 +133,110 @@ export class ProceduralChunkGenerator {
       return empty;
     }
 
-    const roadWidth = 14;
-    roads.push({
-      position: new THREE.Vector3(centerX, 0.02, centerZ),
-      size: new THREE.Vector3(roadWidth, 0.04, size),
-      rotationY: 0,
-    });
-    roads.push({
-      position: new THREE.Vector3(centerX, 0.018, centerZ),
-      size: new THREE.Vector3(12, 0.04, size),
-      rotationY: Math.PI / 2,
-    });
+    // Helper: clip a 1D interval [a, b] outside an excluded interval [exMin, exMax]
+    const clipIntervalOutside = (a: number, b: number, exMin: number, exMax: number): [number, number][] => {
+      if (b <= exMin || a >= exMax) return [[a, b]];
+      const out: [number, number][] = [];
+      if (a < exMin) out.push([a, exMin]);
+      if (b > exMax) out.push([exMax, b]);
+      return out;
+    };
 
-    const half = size / 2;
-    const subSize = half - roadWidth / 2 - 4;
-    const quadrantOffsets = [
-      { qx: -half / 2 - roadWidth / 4, qz: -half / 2 - roadWidth / 4 },
-      { qx: half / 2 + roadWidth / 4, qz: -half / 2 - roadWidth / 4 },
-      { qx: -half / 2 - roadWidth / 4, qz: half / 2 + roadWidth / 4 },
-      { qx: half / 2 + roadWidth / 4, qz: half / 2 + roadWidth / 4 },
+    const CENTRAL_LIMIT = 175;
+    const roadWidth = 20;
+    const ewRoadWidth = 18;
+    const chunkMinX = cx * size;
+    const chunkMaxX = (cx + 1) * size;
+    const chunkMinZ = cz * size;
+    const chunkMaxZ = (cz + 1) * size;
+
+    // NS road at x = centerX (y = 0.02), clipped outside Central Core [-172..172]
+    const nsIntervals =
+      Math.abs(centerX) < CENTRAL_LIMIT
+        ? clipIntervalOutside(chunkMinZ, chunkMaxZ, -CENTRAL_LIMIT, CENTRAL_LIMIT)
+        : ([[chunkMinZ, chunkMaxZ]] as [number, number][]);
+    let hasNsAtCenter = false;
+    for (const [z0, z1] of nsIntervals) {
+      const len = z1 - z0;
+      if (len < 2) continue;
+      if (z0 <= centerZ && z1 >= centerZ) hasNsAtCenter = true;
+      roads.push({
+        position: new THREE.Vector3(centerX, 0.02, (z0 + z1) * 0.5),
+        size: new THREE.Vector3(roadWidth, 0.04, len),
+        rotationY: 0,
+      });
+    }
+
+    // EW road at z = centerZ (y = 0.045), clipped outside Central Core [-172..172]
+    const ewIntervals =
+      Math.abs(centerZ) < CENTRAL_LIMIT
+        ? clipIntervalOutside(chunkMinX, chunkMaxX, -CENTRAL_LIMIT, CENTRAL_LIMIT)
+        : ([[chunkMinX, chunkMaxX]] as [number, number][]);
+    let hasEwAtCenter = false;
+    for (const [x0, x1] of ewIntervals) {
+      const len = x1 - x0;
+      if (len < 2) continue;
+      if (x0 <= centerX && x1 >= centerX) hasEwAtCenter = true;
+      roads.push({
+        position: new THREE.Vector3((x0 + x1) * 0.5, 0.045, centerZ),
+        size: new THREE.Vector3(ewRoadWidth, 0.04, len),
+        rotationY: Math.PI / 2,
+      });
+    }
+
+    // Clean intersection junction pad covering the NS/EW crossing so lane stripes never Z-fight
+    if (hasNsAtCenter && hasEwAtCenter) {
+      junctions.push({
+        position: new THREE.Vector3(centerX, 0.072, centerZ),
+        size: new THREE.Vector3(roadWidth + 0.4, 0.02, ewRoadWidth + 0.4),
+      });
+    }
+
+    const overlapsBox = (
+      x: number,
+      z: number,
+      halfW: number,
+      halfD: number,
+      minX: number,
+      maxX: number,
+      minZ: number,
+      maxZ: number
+    ) => !(x + halfW <= minX || x - halfW >= maxX || z + halfD <= minZ || z - halfD >= maxZ);
+
+    const isInsideProtectedZone = (x: number, z: number, halfW: number, halfD: number) =>
+      overlapsBox(x, z, halfW, halfD, -175, 175, -175, 175) ||
+      overlapsBox(x, z, halfW, halfD, -39, 39, 201, 279);
+
+    const quadrantSpecs = [
+      { minX: chunkMinX + 2.5, maxX: centerX - roadWidth / 2 - 2.0, minZ: chunkMinZ + 2.5, maxZ: centerZ - ewRoadWidth / 2 - 2.0 },
+      { minX: centerX + roadWidth / 2 + 2.0, maxX: chunkMaxX - 2.5, minZ: chunkMinZ + 2.5, maxZ: centerZ - ewRoadWidth / 2 - 2.0 },
+      { minX: chunkMinX + 2.5, maxX: centerX - roadWidth / 2 - 2.0, minZ: centerZ + ewRoadWidth / 2 + 2.0, maxZ: chunkMaxZ - 2.5 },
+      { minX: centerX + roadWidth / 2 + 2.0, maxX: chunkMaxX - 2.5, minZ: centerZ + ewRoadWidth / 2 + 2.0, maxZ: chunkMaxZ - 2.5 },
     ];
 
-    quadrantOffsets.forEach((q, qIdx) => {
-      const lotCenterX = centerX + q.qx;
-      const lotCenterZ = centerZ + q.qz;
+    quadrantSpecs.forEach((q, qIdx) => {
+      // Keep clean 12.5m setback from the widened 22m Grand Boulevards along x = 0 and z = 0
+      let qMinX = q.minX;
+      let qMaxX = q.maxX;
+      let qMinZ = q.minZ;
+      let qMaxZ = q.maxZ;
+      if (cx === 0 && qMinX < 12.5) qMinX = 12.5;
+      if (cx === -1 && qMaxX > -12.5) qMaxX = -12.5;
+      if (cz === 0 && qMinZ < 12.5) qMinZ = 12.5;
+      if (cz === -1 && qMaxZ > -12.5) qMaxZ = -12.5;
 
-      // Avoid overlapping the extended Central District monolith ring [-155..165, -155..155]
-      if (lotCenterX >= -155 && lotCenterX <= 165 && lotCenterZ >= -155 && lotCenterZ <= 155) {
+      const lotW = qMaxX - qMinX;
+      const lotD = qMaxZ - qMinZ;
+      if (lotW < 18 || lotD < 18) return;
+
+      const lotCenterX = (qMinX + qMaxX) * 0.5;
+      const lotCenterZ = (qMinZ + qMaxZ) * 0.5;
+      const subW = lotW - 2;
+      const subD = lotD - 2;
+      const subSize = Math.min(subW, subD);
+
+      // Avoid overlapping the Central District [-173..173] or the (0, 240) Park Sanctuary [-39..39, 201..279]
+      if (isInsideProtectedZone(lotCenterX, lotCenterZ, lotW * 0.5, lotD * 0.5)) {
         return;
       }
 
@@ -233,14 +313,14 @@ export class ProceduralChunkGenerator {
       }
 
       sidewalks.push({
-        position: new THREE.Vector3(lotCenterX, 0.09, lotCenterZ),
-        size: new THREE.Vector3(subSize + 3, 0.18, subSize + 3),
+        position: new THREE.Vector3(lotCenterX, 0.1, lotCenterZ),
+        size: new THREE.Vector3(lotW, 0.2, lotD),
       });
 
       const [minH, maxH] = district.buildingHeightRange;
       const totalH = rng.range(minH, maxH);
-      const bldgW = rng.range(subSize * 0.66, subSize * 0.88);
-      const bldgD = rng.range(subSize * 0.66, subSize * 0.88);
+      const bldgW = rng.range(subW * 0.64, subW * 0.84);
+      const bldgD = rng.range(subD * 0.64, subD * 0.84);
 
       const numTiers = totalH > 65 ? (totalH > 110 ? 3 : 2) : 1;
       const tiers: { offset: THREE.Vector3; size: THREE.Vector3 }[] = [];
@@ -288,7 +368,9 @@ export class ProceduralChunkGenerator {
       });
     });
 
-    const { trees, bushes } = VegetationGenerator.generateChunkTrees(cx, cz, district, globalSeed);
+    const veg = VegetationGenerator.generateChunkTrees(cx, cz, district, globalSeed);
+    const trees = veg.trees.filter((t) => !isInsideProtectedZone(t.position.x, t.position.z, 2.5, 2.5));
+    const bushes = veg.bushes.filter((b) => !isInsideProtectedZone(b.position.x, b.position.z, 1.5, 1.5));
     trees.forEach((t) => {
       const r = Math.max(0.4, t.trunkRadius * 1.25);
       collisionBoxes.push({
@@ -297,11 +379,11 @@ export class ProceduralChunkGenerator {
       });
     });
 
-    const furniture: StreetFurnitureDef[] = [
+    const rawFurniture: StreetFurnitureDef[] = [
       {
         id: `fur-sl-${key}-nw`,
         type: 'STREETLIGHT',
-        position: new THREE.Vector3(centerX - 8.2, 0, centerZ - 34),
+        position: new THREE.Vector3(centerX - 11.4, 0, centerZ - 34),
         rotationY: 0,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -309,7 +391,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-sl-${key}-se`,
         type: 'STREETLIGHT',
-        position: new THREE.Vector3(centerX + 8.2, 0, centerZ + 34),
+        position: new THREE.Vector3(centerX + 11.4, 0, centerZ + 34),
         rotationY: Math.PI,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -317,7 +399,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-sl-${key}-ne`,
         type: 'STREETLIGHT',
-        position: new THREE.Vector3(centerX + 8.2, 0, centerZ - 34),
+        position: new THREE.Vector3(centerX + 11.4, 0, centerZ - 34),
         rotationY: Math.PI,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -325,7 +407,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-sl-${key}-sw`,
         type: 'STREETLIGHT',
-        position: new THREE.Vector3(centerX - 8.2, 0, centerZ + 34),
+        position: new THREE.Vector3(centerX - 11.4, 0, centerZ + 34),
         rotationY: 0,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -333,7 +415,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-sl-${key}-ew-w`,
         type: 'STREETLIGHT',
-        position: new THREE.Vector3(centerX - 34, 0, centerZ - 8.2),
+        position: new THREE.Vector3(centerX - 34, 0, centerZ - 10.4),
         rotationY: -Math.PI / 2,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -341,7 +423,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-sl-${key}-ew-e`,
         type: 'STREETLIGHT',
-        position: new THREE.Vector3(centerX + 34, 0, centerZ + 8.2),
+        position: new THREE.Vector3(centerX + 34, 0, centerZ + 10.4),
         rotationY: Math.PI / 2,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -349,7 +431,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-bench-${key}-w`,
         type: 'BENCH',
-        position: new THREE.Vector3(centerX - 9.8, 0.12, centerZ - 18),
+        position: new THREE.Vector3(centerX - 12.8, 0.12, centerZ - 20),
         rotationY: Math.PI / 2,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -357,7 +439,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-bench-${key}-e`,
         type: 'BENCH',
-        position: new THREE.Vector3(centerX + 9.8, 0.12, centerZ + 18),
+        position: new THREE.Vector3(centerX + 12.8, 0.12, centerZ + 20),
         rotationY: -Math.PI / 2,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -365,7 +447,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-kiosk-${key}`,
         type: 'CYBER_KIOSK',
-        position: new THREE.Vector3(centerX - 11.2, 0.12, centerZ + 15),
+        position: new THREE.Vector3(centerX - 13.8, 0.12, centerZ + 16),
         rotationY: Math.PI / 4,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -373,7 +455,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-bollard-${key}-n`,
         type: 'BOLLARD',
-        position: new THREE.Vector3(centerX - 9.2, 0.12, centerZ - 11.5),
+        position: new THREE.Vector3(centerX - 12.2, 0.12, centerZ - 13.5),
         rotationY: 0,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -381,7 +463,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-bollard-${key}-s`,
         type: 'BOLLARD',
-        position: new THREE.Vector3(centerX + 9.2, 0.12, centerZ + 11.5),
+        position: new THREE.Vector3(centerX + 12.2, 0.12, centerZ + 13.5),
         rotationY: 0,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -389,7 +471,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-trash-${key}`,
         type: 'TRASH_RECEPTACLE',
-        position: new THREE.Vector3(centerX + 10.6, 0.12, centerZ - 14),
+        position: new THREE.Vector3(centerX + 13.4, 0.12, centerZ - 15),
         rotationY: -Math.PI / 2,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -397,7 +479,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-bus-${key}-ns`,
         type: 'BUS_STOP',
-        position: new THREE.Vector3(centerX + 9.6, 0.12, centerZ - 22),
+        position: new THREE.Vector3(centerX + 13.0, 0.12, centerZ - 24),
         rotationY: -Math.PI / 2,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -405,7 +487,7 @@ export class ProceduralChunkGenerator {
       {
         id: `fur-bus-${key}-ew`,
         type: 'BUS_STOP',
-        position: new THREE.Vector3(centerX - 22, 0.12, centerZ - 9.6),
+        position: new THREE.Vector3(centerX - 24, 0.12, centerZ - 12.2),
         rotationY: 0,
         accentColor: district.accentColor,
         emissiveColor: district.primaryLightColor,
@@ -434,11 +516,11 @@ export class ProceduralChunkGenerator {
         ? 'CITY_TOTEM'
         : 'STEAM_VENT';
 
-    const biomeProps: BiomePropDef[] = [
+    const rawBiomeProps: BiomePropDef[] = [
       {
         id: `biome-prop-${key}-0`,
         type: primaryBiomeType,
-        position: new THREE.Vector3(centerX + 10.5, 0, centerZ + 22),
+        position: new THREE.Vector3(centerX + 13.6, 0, centerZ + 25),
         rotationY: 0,
         size: new THREE.Vector3(1.8, 4.6, 1.8),
         color: '#1e293b',
@@ -447,7 +529,7 @@ export class ProceduralChunkGenerator {
       {
         id: `biome-prop-${key}-1`,
         type: secondaryBiomeType,
-        position: new THREE.Vector3(centerX - 10.5, 0, centerZ - 22),
+        position: new THREE.Vector3(centerX - 13.6, 0, centerZ - 25),
         rotationY: Math.PI / 2,
         size: new THREE.Vector3(1.6, 3.8, 1.6),
         color: '#0f172a',
@@ -456,7 +538,7 @@ export class ProceduralChunkGenerator {
       {
         id: `biome-prop-${key}-2`,
         type: primaryBiomeType,
-        position: new THREE.Vector3(centerX + 22, 0, centerZ - 10.5),
+        position: new THREE.Vector3(centerX + 25, 0, centerZ - 12.8),
         rotationY: Math.PI / 4,
         size: new THREE.Vector3(1.7, 4.2, 1.7),
         color: '#1e293b',
@@ -465,13 +547,16 @@ export class ProceduralChunkGenerator {
       {
         id: `biome-prop-${key}-3`,
         type: 'CITY_TOTEM',
-        position: new THREE.Vector3(centerX - 22, 0, centerZ + 10.5),
+        position: new THREE.Vector3(centerX - 25, 0, centerZ + 12.8),
         rotationY: 0,
         size: new THREE.Vector3(1.3, 4.8, 1.3),
         color: '#111827',
         emissiveColor: district.secondaryLightColor,
       },
     ];
+
+    const furniture = rawFurniture.filter((f) => !isInsideProtectedZone(f.position.x, f.position.z, 2, 2));
+    const biomeProps = rawBiomeProps.filter((bp) => !isInsideProtectedZone(bp.position.x, bp.position.z, 2, 2));
 
     const chunkData: StreamedChunkData = {
       key,
@@ -480,6 +565,7 @@ export class ProceduralChunkGenerator {
       center,
       district,
       roads,
+      junctions,
       sidewalks,
       buildings,
       trees,

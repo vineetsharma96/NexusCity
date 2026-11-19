@@ -34,14 +34,17 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
 
   const windSystem = WindSystem.getInstance();
   const armorNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
+  const armorNormalScale = useMemo(() => new THREE.Vector2(0.35, 0.35), []);
   const roughness = THREE.MathUtils.lerp(0.24, 0.06, weather.wetnessFactor);
   const metalness = THREE.MathUtils.lerp(0.84, 0.96, weather.wetnessFactor);
 
   useFrame((_, delta) => {
     if (!rootRef.current) return;
     rootRef.current.position.copy(state.position);
-    rootRef.current.rotation.y = state.rotationY;
-    rootRef.current.rotation.z = THREE.MathUtils.damp(rootRef.current.rotation.z, state.bankAngle || 0, 12, delta);
+    rootRef.current.rotation.set(0, state.rotationY, 0);
+    if (bodyRef.current) {
+      bodyRef.current.rotation.z = THREE.MathUtils.damp(bodyRef.current.rotation.z, state.bankAngle || 0, 12, delta);
+    }
 
     const gait = state.gait;
     const cycleSpeed =
@@ -122,7 +125,7 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
       dampRot(rightShinRef.current, 'x', up ? 0.85 : 0.35, 14, delta);
       dampRot(coatTailRef.current, 'x', up ? 0.65 : 0.85, 14, delta);
     }
-  });
+  }, -1);
 
   const isBoosting = state.gait === 'RUN' || state.gait === 'JUMP_UP';
   const accentColor = isBoosting ? '#f59e0b' : '#38bdf8';
@@ -189,7 +192,7 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
             <meshStandardMaterial
               color="#0f172a"
               normalMap={armorNormal}
-              normalScale={new THREE.Vector2(0.35, 0.35)}
+              normalScale={armorNormalScale}
               metalness={metalness}
               roughness={roughness}
             />

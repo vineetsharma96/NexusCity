@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { VehicleInteractionSystem, VehicleState } from './VehicleInteractionSystem';
+import { VehicleInteractionSystem } from './VehicleInteractionSystem';
 import { QualityManager } from '../rendering/QualityManager';
 import { TransitScheduleSystem } from './TransitScheduleSystem';
 import { InteractionSystem } from '../interaction/InteractionSystem';
 import { AudioManager } from '../audio/AudioManager';
+import { ExperimentalCar } from './ExperimentalCar';
 
 interface RideableTransitLayerProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
@@ -102,7 +103,9 @@ const THRUSTER_POD_OFFSETS: [number, number, number][] = [
 ];
 
 export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
-  const [vehicleState, setVehicleState] = useState<VehicleState>(() => VehicleInteractionSystem.getInstance().getState());
+  const [neonUpgraded, setNeonUpgraded] = useState<boolean>(
+    () => VehicleInteractionSystem.getInstance().getState().upgrades.neon > 0
+  );
   const fleetRefs = useRef<(THREE.Group | null)[]>([]);
   const shuttleRef = useRef<THREE.Group>(null);
   const beaconRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -114,7 +117,12 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
   const shuttleTargetRef = useRef(new THREE.Vector3());
 
   useEffect(() => {
-    RIDEABLE_FLEET.forEach((v) => {
+    RIDEABLE_FLEET.forEach((v, idx) => {
+      const grp = fleetRefs.current[idx];
+      if (grp) {
+        grp.position.set(...v.position);
+        grp.rotation.set(0, v.rotationY, 0);
+      }
       system.registerRideable(
         v.id,
         v.label,
@@ -123,6 +131,9 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
         v.rotationY
       );
     });
+    if (shuttleRef.current) {
+      shuttleRef.current.position.set(-7, 0.62, 10);
+    }
     system.registerRideable('central-transit-node', 'Autonomous Mag-Shuttle', initialTransitPos, 'transit');
 
     const interactions = InteractionSystem.getInstance();
@@ -158,7 +169,16 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
     };
   }, [system, initialTransitPos]);
 
-  useEffect(() => system.subscribe(setVehicleState), [system]);
+  useEffect(() => {
+    let prevNeon = system.getState().upgrades.neon > 0;
+    return system.subscribe((next) => {
+      const nextNeon = next.upgrades.neon > 0;
+      if (nextNeon !== prevNeon) {
+        prevNeon = nextNeon;
+        setNeonUpgraded(nextNeon);
+      }
+    });
+  }, [system]);
 
   useFrame(({ clock, camera }, delta) => {
     const live = system.getState();
@@ -220,14 +240,17 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
         system.syncRideablePosition('central-transit-node', shuttleRef.current.position);
       }
     }
-  });
+  }, -1);
 
-  const neon = vehicleState.upgrades.neon > 0;
+  const neon = neonUpgraded;
   const shadows = QualityManager.current.shadows;
   const stops = TransitScheduleSystem.getInstance().getStops();
 
   return (
     <group name="RideableTransitAndServiceLayer">
+      {/* 0. Controllable 4-Wheel Experimental GT Prototype (VX-01) */}
+      <ExperimentalCar />
+
       {/* 1. City-Wide Fleet of Player Rideable Hover-Coupes (Multi-Part Composite Aerodynamic Chassis) */}
       {RIDEABLE_FLEET.map((vDef, vIdx) => {
         const accent = neon ? '#f59e0b' : vDef.accentColor;
@@ -237,8 +260,6 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
             ref={(el) => {
               fleetRefs.current[vIdx] = el;
             }}
-            position={vDef.position}
-            rotation={[0, vDef.rotationY, 0]}
           >
             {/* Primary Lower Monocoque Body */}
             <mesh castShadow={shadows}>
@@ -390,7 +411,7 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
       ))}
 
       {/* 3. Autonomous Multi-Window Mag-Shuttle */}
-      <group ref={shuttleRef} position={[-7, 0.62, 10]}>
+      <group ref={shuttleRef}>
         {/* Lower Mag-Lev Chassis */}
         <mesh castShadow={shadows}>
           <boxGeometry args={[2.16, 0.68, 5.1]} />

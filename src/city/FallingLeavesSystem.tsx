@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { VegetationGenerator } from './VegetationGenerator';
 import { WindSystem } from '../world/WindSystem';
 import { QualityManager } from '../rendering/QualityManager';
+import { WorldPhysicsEngine } from '../world/WorldPhysicsEngine';
 
 interface FallingLeavesSystemProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
@@ -165,6 +166,13 @@ export const FallingLeavesSystem: React.FC<FallingLeavesSystemProps> = ({
     const windVec = windSystem.getVector();
     const gust = windSystem.getGustFactor();
     const pPos = playerPosRef.current;
+    const worldPhysics = WorldPhysicsEngine.getInstance();
+    const airDensity = worldPhysics.getAirDensity();
+    const groundSurface = worldPhysics.getSurfaceAt(pPos.x, pPos.z);
+    // Denser air slows terminal fall and increases aerodynamic drag; lower surface friction lets gusts slide grounded leaves farther
+    const aeroDragRate = 1.85 * airDensity;
+    const leafTerminalVy = -1.38 / airDensity;
+    const groundSlideFactor = Math.max(0.06, 0.22 * (1.0 - groundSurface.frictionMu * 0.55));
 
     // Instantaneous player movement velocity for physical leaf-wake interaction
     const pvx = (pPos.x - prevPlayerPosRef.current.x) / Math.max(0.001, dt);
@@ -221,10 +229,10 @@ export const FallingLeavesSystem: React.FC<FallingLeavesSystemProps> = ({
         leaf.y = floorY;
         leaf.restTimer += dt;
 
-        // Strong wind gusts can slide or re-lift grounded leaves
-        if (gust > 1.55) {
-          leaf.x += windVec.x * 0.14 * dt;
-          leaf.z += windVec.z * 0.14 * dt;
+        // Strong wind gusts overcome surface friction to slide grounded leaves
+        if (gust > 1.45) {
+          leaf.x += windVec.x * groundSlideFactor * dt;
+          leaf.z += windVec.z * groundSlideFactor * dt;
         }
 
         // Respawn in tree canopy after resting on the ground
@@ -246,14 +254,15 @@ export const FallingLeavesSystem: React.FC<FallingLeavesSystemProps> = ({
         dummy.rotation.set(0.08, leaf.ry, 0.06);
         dummy.scale.setScalar(leaf.scale);
       } else {
-        // Leaf is airborne: apply aerodynamic flutter, gravity, and global WindSystem drift
+        // Leaf is airborne: apply WorldPhysicsEngine air density drag, flutter, and global WindSystem drift
         const flutterX = Math.sin(t * 2.8 + leaf.phase) * 1.35;
         const flutterZ = Math.cos(t * 2.4 + leaf.phase * 1.3) * 1.35;
 
-        // Aerodynamic drag & terminal fall velocity
-        leaf.vx *= Math.max(0, 1 - dt * 2.2);
-        leaf.vz *= Math.max(0, 1 - dt * 2.2);
-        leaf.vy = THREE.MathUtils.lerp(leaf.vy, -1.15, dt * 2.6);
+        // Aerodynamic drag & density-coupled terminal fall velocity
+        const dragKeep = Math.exp(-aeroDragRate * dt);
+        leaf.vx *= dragKeep;
+        leaf.vz *= dragKeep;
+        leaf.vy = THREE.MathUtils.lerp(leaf.vy, leafTerminalVy, dt * 2.6);
 
         leaf.x += (windVec.x * 0.36 * gust + flutterX + leaf.vx) * dt;
         leaf.y += (leaf.vy + windVec.y * 0.18) * dt;

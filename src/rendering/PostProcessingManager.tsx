@@ -3,36 +3,45 @@ import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { QualitySettings } from './QualityManager';
 import { WebGLCapabilities } from './WebGLCapabilities';
 import { TimeSystem } from '../world/TimeSystem';
 import { WeatherSystem } from '../world/WeatherSystem';
+import { LivingCityEventSystem } from '../world/LivingCityEventSystem';
 import { createNeonGradePass } from './NeonGradePass';
+import { computeAtmosphericBloomParams } from './BloomProfile';
+import { CircularBloomPass } from './CircularBloomPass';
+import { VehicleInteractionSystem } from '../vehicle/VehicleInteractionSystem';
 
-interface PostProcessingManagerProps {
+export interface PostProcessingManagerProps {
   quality: QualitySettings;
+  bloomIntensityMultiplier?: number;
 }
 
-export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({ quality }) => {
+export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({
+  quality,
+  bloomIntensityMultiplier = 1.0,
+}) => {
   const { gl, scene, camera, size } = useThree();
   const composerRef = useRef<EffectComposer | null>(null);
-  const bloomPassRef = useRef<UnrealBloomPass | null>(null);
+  const bloomPassRef = useRef<CircularBloomPass | null>(null);
   const gradePassRef = useRef<ShaderPass | null>(null);
   const pipelineBrokenRef = useRef(false);
 
   const canUsePost = useMemo(() => {
     const caps = WebGLCapabilities.detect();
-    return quality.postProcessing && !caps.isVirGL && caps.supportsHalfFloatRenderTarget;
-  }, [quality.postProcessing]);
+    return (quality.postProcessing || quality.bloom) && !caps.isVirGL && caps.supportsHalfFloatRenderTarget;
+  }, [quality.postProcessing, quality.bloom]);
 
   const isUltra = quality.name === 'ULTRA' || quality.reflectionQuality === 'HIGH';
 
   useEffect(() => {
     if (!canUsePost) {
       composerRef.current = null;
+      bloomPassRef.current = null;
+      gradePassRef.current = null;
       return;
     }
 
@@ -44,40 +53,68 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({ qu
       const rtWidth = Math.max(1, Math.floor(size.width * clampedDpr));
       const rtHeight = Math.max(1, Math.floor(size.height * clampedDpr));
 
-      // Linear HalfFloat render target (no sRGB colorSpace on HalfFloat to prevent WebGL2 internalformat mismatch)
-      const renderTarget = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
-        type: THREE.HalfFloatType,
-        format: THREE.RGBAFormat,
-        depthBuffer: true,
-        stencilBuffer: false,
-      });
+      // Linear HalfFloat render target with WebGL2 MSAA preserves HDR (>1.0) city light values for selective bloom
+      const desiredSamples = quality.antiAliasing && gl.capabilities.isWebGL2 ? 4 : 0;
+      let renderTarget: THREE.WebGLRenderTarget;
+      try {
+        renderTarget = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
+          type: THREE.HalfFloatType,
+          format: THREE.RGBAFormat,
+          depthBuffer: true,
+          stencilBuffer: false,
+          samples: desiredSamples,
+        });
+      } catch {
+        renderTarget = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
+          type: THREE.HalfFloatType,
+          format: THREE.RGBAFormat,
+          depthBuffer: true,
+          stencilBuffer: false,
+          samples: 0,
+        });
+      }
 
       const composer = new EffectComposer(gl, renderTarget);
       composer.setPixelRatio(clampedDpr);
       composer.setSize(size.width, size.height);
       composer.addPass(new RenderPass(scene, camera));
 
-      const bloomScale = isUltra ? 1 : 2;
-      const bloomPass = new UnrealBloomPass(
-        new THREE.Vector2(
-          Math.max(1, Math.floor((size.width * clampedDpr) / bloomScale)),
-          Math.max(1, Math.floor((size.height * clampedDpr) / bloomScale))
-        ),
-        quality.bloom ? (isUltra ? 0.42 : 0.34) : 0.0,
-        isUltra ? 0.56 : 0.46,
-        isUltra ? 0.78 : 0.84
+      const initialTime = TimeSystem.getInstance().getState();
+      const initialWeather = WeatherSystem.getInstance().getState();
+      const initialEvent = LivingCityEventSystem.getInstance().getState();
+      const initialBloom = computeAtmosphericBloomParams({
+        nightFactor: initialTime.nightFactor,
+        goldenHourFactor: initialTime.goldenHourFactor,
+        wetnessFactor: initialWeather.wetnessFactor,
+        fogDensityMultiplier: initialWeather.fogDensityMultiplier,
+        isUltra,
+        gridIsOut: initialEvent.type === 'POWER_OUTAGE' && initialEvent.phase === 'ACTIVE',
+        lightScale: initialEvent.lightScale,
+      });
+
+      // CircularBloomPass internally halves to rtWidth/2 × rtHeight/2 on mip 0;
+      // passing full rtWidth × rtHeight prevents coarse mip 4 from collapsing into blocky squares on distant lights
+      const bloomPass = new CircularBloomPass(
+        new THREE.Vector2(rtWidth, rtHeight),
+        quality.bloom ? initialBloom.strength * bloomIntensityMultiplier : 0.0,
+        initialBloom.radius,
+        initialBloom.threshold
       );
       bloomPass.enabled = quality.bloom;
       composer.addPass(bloomPass);
       bloomPassRef.current = bloomPass;
 
+      // Run ACESFilmic tone mapping + linear->sRGB conversion on full HDR bloom buffer BEFORE color grading
+      composer.addPass(new OutputPass());
+
       const gradePass = createNeonGradePass();
+      gradePass.enabled = quality.postProcessing;
       gradePass.uniforms.uUltraClarity.value = quality.sharpeningEnabled
         ? isUltra
-          ? 1.0
-          : 0.55
+          ? 0.95
+          : 0.5
         : 0.0;
-      gradePass.uniforms.uVignette.value = quality.vignetteEnabled ? 0.26 : 0.0;
+      gradePass.uniforms.uVignette.value = quality.vignetteEnabled ? 0.22 : 0.0;
       if (gradePass.uniforms.uTexelSize?.value?.set) {
         gradePass.uniforms.uTexelSize.value.set(1 / rtWidth, 1 / rtHeight);
       } else {
@@ -86,21 +123,36 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({ qu
       composer.addPass(gradePass);
       gradePassRef.current = gradePass;
 
-      composer.addPass(new OutputPass());
-
       composerRef.current = composer;
       pipelineBrokenRef.current = false;
 
       return () => {
+        bloomPass.dispose();
         composer.dispose();
         renderTarget.dispose();
+        bloomPassRef.current = null;
+        gradePassRef.current = null;
         composerRef.current = null;
       };
     } catch {
       pipelineBrokenRef.current = true;
       composerRef.current = null;
+      bloomPassRef.current = null;
+      gradePassRef.current = null;
     }
-  }, [canUsePost, quality.bloom, quality.dpr[0], quality.dpr[1], isUltra, gl, scene, camera]);
+  }, [
+    canUsePost,
+    quality.postProcessing,
+    quality.bloom,
+    quality.antiAliasing,
+    quality.dpr[0],
+    quality.dpr[1],
+    isUltra,
+    bloomIntensityMultiplier,
+    gl,
+    scene,
+    camera,
+  ]);
 
   useEffect(() => {
     const targetDpr = Math.max(quality.dpr[0], Math.min(window.devicePixelRatio || 1, quality.dpr[1]));
@@ -113,20 +165,18 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({ qu
       composerRef.current.setSize(size.width, size.height);
     }
     if (bloomPassRef.current) {
-      const bloomScale = isUltra ? 1 : 2;
-      bloomPassRef.current.resolution.set(
-        Math.max(1, Math.floor(rtWidth / bloomScale)),
-        Math.max(1, Math.floor(rtHeight / bloomScale))
-      );
+      bloomPassRef.current.resolution.set(rtWidth, rtHeight);
+      bloomPassRef.current.setSize(rtWidth, rtHeight);
       bloomPassRef.current.enabled = quality.bloom;
     }
     if (gradePassRef.current) {
+      gradePassRef.current.enabled = quality.postProcessing;
       gradePassRef.current.uniforms.uUltraClarity.value = quality.sharpeningEnabled
         ? isUltra
-          ? 1.0
-          : 0.55
+          ? 0.95
+          : 0.5
         : 0.0;
-      gradePassRef.current.uniforms.uVignette.value = quality.vignetteEnabled ? 0.26 : 0.0;
+      gradePassRef.current.uniforms.uVignette.value = quality.vignetteEnabled ? 0.22 : 0.0;
       if (gradePassRef.current.uniforms.uTexelSize?.value?.set) {
         gradePassRef.current.uniforms.uTexelSize.value.set(1 / rtWidth, 1 / rtHeight);
       }
@@ -134,6 +184,7 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({ qu
   }, [
     size.width,
     size.height,
+    quality.postProcessing,
     quality.bloom,
     quality.sharpeningEnabled,
     quality.vignetteEnabled,
@@ -149,23 +200,79 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({ qu
       return;
     }
 
+    const dt = Math.min(delta, 0.05);
+    const dampAlpha = 1 - Math.exp(-4.5 * dt);
     const timeState = TimeSystem.getInstance().getState();
     const weatherState = WeatherSystem.getInstance().getState();
+    const eventState = LivingCityEventSystem.getInstance().getState();
 
     if (bloomPassRef.current && quality.bloom) {
-      const ultraBoost = isUltra ? 0.08 : 0.0;
-      const targetStrength =
-        0.16 + ultraBoost + timeState.nightFactor * 0.26 + weatherState.wetnessFactor * 0.14;
-      bloomPassRef.current.strength = THREE.MathUtils.lerp(bloomPassRef.current.strength, targetStrength, delta * 3);
+      const targetBloom = computeAtmosphericBloomParams({
+        nightFactor: timeState.nightFactor,
+        goldenHourFactor: timeState.goldenHourFactor,
+        wetnessFactor: weatherState.wetnessFactor,
+        fogDensityMultiplier: weatherState.fogDensityMultiplier,
+        isUltra,
+        gridIsOut: eventState.type === 'POWER_OUTAGE' && eventState.phase === 'ACTIVE',
+        lightScale: eventState.lightScale,
+      });
+
+      bloomPassRef.current.strength = THREE.MathUtils.lerp(
+        bloomPassRef.current.strength,
+        targetBloom.strength * bloomIntensityMultiplier,
+        dampAlpha
+      );
+      bloomPassRef.current.radius = THREE.MathUtils.lerp(
+        bloomPassRef.current.radius,
+        targetBloom.radius,
+        dampAlpha
+      );
+      bloomPassRef.current.threshold = THREE.MathUtils.lerp(
+        bloomPassRef.current.threshold,
+        targetBloom.threshold,
+        dampAlpha
+      );
     }
 
-    if (gradePassRef.current) {
+    if (gradePassRef.current && quality.postProcessing) {
       gradePassRef.current.uniforms.uNightFactor.value = timeState.nightFactor;
       gradePassRef.current.uniforms.uRainIntensity.value = weatherState.rainIntensity;
+
+      const vState = VehicleInteractionSystem.getInstance().getState();
+      const isRiding = vState.mode === 'RIDING';
+      const tel = vState.telemetry;
+      const targetAccelRush = isRiding
+        ? THREE.MathUtils.clamp(
+            Math.max(0, tel.longitudinalAccelG) * 0.45 +
+              THREE.MathUtils.clamp((tel.speedMs - 10) / 36, 0, 1) * 0.45 +
+              (tel.isBoosting ? 0.35 : 0),
+            0,
+            1
+          )
+        : 0;
+      const targetDecelPulse = isRiding
+        ? THREE.MathUtils.clamp(
+            Math.max(0, -tel.longitudinalAccelG) * 0.52 +
+              (tel.isBraking && tel.speedMs > 2.5 ? 0.22 : 0),
+            0,
+            1
+          )
+        : 0;
+      const fxAlpha = 1 - Math.exp(-8.5 * dt);
+      gradePassRef.current.uniforms.uAccelRush.value = THREE.MathUtils.lerp(
+        gradePassRef.current.uniforms.uAccelRush.value,
+        targetAccelRush,
+        fxAlpha
+      );
+      gradePassRef.current.uniforms.uDecelPulse.value = THREE.MathUtils.lerp(
+        gradePassRef.current.uniforms.uDecelPulse.value,
+        targetDecelPulse,
+        fxAlpha
+      );
     }
 
     try {
-      composerRef.current.render(delta);
+      composerRef.current.render(dt);
     } catch {
       pipelineBrokenRef.current = true;
       gl.render(scene, camera);

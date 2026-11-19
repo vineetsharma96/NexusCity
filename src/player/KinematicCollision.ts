@@ -219,12 +219,30 @@ export class KinematicCollisionSolver {
     let height = 0.0;
     let surface: 'ASPHALT' | 'SIDEWALK' | 'PARK' = 'ASPHALT';
 
-    if (x >= 40 && x <= 110 && z >= 40 && z <= 110) {
+    const inEastPark = x >= 39 && x <= 111 && z >= 39 && z <= 111;
+    const inNorthPark = x >= -36 && x <= 36 && z >= 204 && z <= 276;
+
+    if (inEastPark || inNorthPark) {
       height = 0.2;
       surface = 'PARK';
-    } else if (Math.abs(x) > 7.2 && Math.abs(z) > 7.2 && Math.abs(Math.abs(z) - 75) > 6.2) {
-      height = 0.2;
-      surface = 'SIDEWALK';
+    } else {
+      const onGrandNS = Math.abs(x) <= 11.2;
+      const onGrandEW = Math.abs(z) <= 11.2;
+      const inCentralCore = Math.abs(x) <= 174 && Math.abs(z) <= 174;
+      const onCentralSecondary =
+        inCentralCore &&
+        (Math.abs(Math.abs(x) - 75) <= 9.2 ||
+          Math.abs(Math.abs(z) - 75) <= 9.2 ||
+          Math.abs(Math.abs(x) - 165) <= 9.2 ||
+          Math.abs(Math.abs(z) - 165) <= 9.2);
+      const modX = Math.abs((((x % 120) + 120) % 120) - 60);
+      const modZ = Math.abs((((z % 120) + 120) % 120) - 60);
+      const onStreamedRoad = !inCentralCore && (modX <= 10.2 || modZ <= 9.2);
+
+      if (!onGrandNS && !onGrandEW && !onCentralSecondary && !onStreamedRoad) {
+        height = 0.2;
+        surface = 'SIDEWALK';
+      }
     }
 
     const allBoxes = this.getAllBoxes();

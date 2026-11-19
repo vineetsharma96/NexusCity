@@ -134,6 +134,7 @@ class InputManagerImpl {
     }
     if (this.uiBlocked) return;
     if (KEY_TO_ACTION[e.code]) {
+      if (e.repeat && this.heldCodes.has(e.code)) return;
       this.heldCodes.add(e.code);
       this.syncActionsFromHeld();
       this.notify();

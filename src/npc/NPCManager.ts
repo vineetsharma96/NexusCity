@@ -106,26 +106,26 @@ export class NPCManager {
     const routes: { routeType: SidewalkRouteType; waypoints: THREE.Vector3[] }[] = [];
     const y = 0.2;
 
-    // 1. North-South Central Avenue Sidewalks (West & East curbs, with crosswalk connections)
+    // 1. North-South Central Avenue Sidewalks (West & East curbs at ±13.4m outside 22m boulevard)
     const nsWestA: THREE.Vector3[] = [
-      new THREE.Vector3(-9.8, y, -135),
-      new THREE.Vector3(-9.8, y, -82),
-      new THREE.Vector3(-9.8, y, -68),
-      new THREE.Vector3(-9.8, y, -14.5),
-      new THREE.Vector3(-9.8, y, 14.5),
-      new THREE.Vector3(-9.8, y, 68),
-      new THREE.Vector3(-9.8, y, 82),
-      new THREE.Vector3(-9.8, y, 135),
+      new THREE.Vector3(-13.4, y, -135),
+      new THREE.Vector3(-13.4, y, -86),
+      new THREE.Vector3(-13.4, y, -64),
+      new THREE.Vector3(-13.4, y, -16.5),
+      new THREE.Vector3(-13.4, y, 16.5),
+      new THREE.Vector3(-13.4, y, 64),
+      new THREE.Vector3(-13.4, y, 86),
+      new THREE.Vector3(-13.4, y, 135),
     ];
     const nsEastA: THREE.Vector3[] = [
-      new THREE.Vector3(9.8, y, 135),
-      new THREE.Vector3(9.8, y, 82),
-      new THREE.Vector3(9.8, y, 68),
-      new THREE.Vector3(9.8, y, 14.5),
-      new THREE.Vector3(9.8, y, -14.5),
-      new THREE.Vector3(9.8, y, -68),
-      new THREE.Vector3(9.8, y, -82),
-      new THREE.Vector3(9.8, y, -135),
+      new THREE.Vector3(13.4, y, 135),
+      new THREE.Vector3(13.4, y, 86),
+      new THREE.Vector3(13.4, y, 64),
+      new THREE.Vector3(13.4, y, 16.5),
+      new THREE.Vector3(13.4, y, -16.5),
+      new THREE.Vector3(13.4, y, -64),
+      new THREE.Vector3(13.4, y, -86),
+      new THREE.Vector3(13.4, y, -135),
     ];
     routes.push({ routeType: 'NS_AVENUE', waypoints: nsWestA });
     routes.push({ routeType: 'NS_AVENUE', waypoints: [...nsWestA].reverse() });
@@ -137,10 +137,10 @@ export class NPCManager {
       routeType: 'NS_AVENUE',
       waypoints: [
         new THREE.Vector3(-61, y, -130),
-        new THREE.Vector3(-61, y, -68),
-        new THREE.Vector3(-61, y, -14.5),
-        new THREE.Vector3(-61, y, 14.5),
-        new THREE.Vector3(-61, y, 68),
+        new THREE.Vector3(-61, y, -64),
+        new THREE.Vector3(-61, y, -16.5),
+        new THREE.Vector3(-61, y, 16.5),
+        new THREE.Vector3(-61, y, 64),
         new THREE.Vector3(-61, y, 130),
       ],
     });
@@ -148,29 +148,29 @@ export class NPCManager {
       routeType: 'NS_AVENUE',
       waypoints: [
         new THREE.Vector3(61, y, -130),
-        new THREE.Vector3(61, y, -68),
-        new THREE.Vector3(61, y, -14.5),
-        new THREE.Vector3(61, y, 14.5),
+        new THREE.Vector3(61, y, -64),
+        new THREE.Vector3(61, y, -16.5),
+        new THREE.Vector3(61, y, 16.5),
         new THREE.Vector3(61, y, 36),
       ],
     });
 
-    // 2. East-West Central Avenue Sidewalks (z = ±9.8, with crosswalk crossings across NS avenue)
+    // 2. East-West Central Avenue Sidewalks (z = ±13.4, with crosswalk crossings across NS boulevard)
     const ewNorth: THREE.Vector3[] = [
-      new THREE.Vector3(-125, y, -9.8),
-      new THREE.Vector3(-64, y, -9.8),
-      new THREE.Vector3(-14.5, y, -9.8),
-      new THREE.Vector3(14.5, y, -9.8),
-      new THREE.Vector3(64, y, -9.8),
-      new THREE.Vector3(125, y, -9.8),
+      new THREE.Vector3(-125, y, -13.4),
+      new THREE.Vector3(-63, y, -13.4),
+      new THREE.Vector3(-16.5, y, -13.4),
+      new THREE.Vector3(16.5, y, -13.4),
+      new THREE.Vector3(63, y, -13.4),
+      new THREE.Vector3(125, y, -13.4),
     ];
     const ewSouth: THREE.Vector3[] = [
-      new THREE.Vector3(125, y, 9.8),
-      new THREE.Vector3(64, y, 9.8),
-      new THREE.Vector3(14.5, y, 9.8),
-      new THREE.Vector3(-14.5, y, 9.8),
-      new THREE.Vector3(-64, y, 9.8),
-      new THREE.Vector3(-125, y, 9.8),
+      new THREE.Vector3(125, y, 13.4),
+      new THREE.Vector3(63, y, 13.4),
+      new THREE.Vector3(16.5, y, 13.4),
+      new THREE.Vector3(-16.5, y, 13.4),
+      new THREE.Vector3(-63, y, 13.4),
+      new THREE.Vector3(-125, y, 13.4),
     ];
     routes.push({ routeType: 'EW_AVENUE', waypoints: ewNorth });
     routes.push({ routeType: 'EW_AVENUE', waypoints: [...ewNorth].reverse() });
@@ -587,19 +587,19 @@ export class NPCManager {
     const dist = Math.hypot(dx, dz);
     if (dist < 0.01) return false;
 
-    // Crossing the North-South Avenue (road spans x in [-7.5, 7.5])
+    // Crossing the North-South Grand Boulevard (22m road spans x in [-11, 11])
     const crossesNSAvenue =
-      (Math.abs(pos.x) >= 7.8 && Math.abs(pos.x) <= 15.5) &&
-      (pos.x * target.x < 0 || Math.abs(target.x) < 7.0) &&
+      (Math.abs(pos.x) >= 7.8 && Math.abs(pos.x) <= 17.5) &&
+      (pos.x * target.x < 0 || Math.abs(target.x) < 10.5) &&
       Math.abs(dx) > Math.abs(dz);
     if (crossesNSAvenue && !lights.ewWalk) {
       return true;
     }
 
-    // Crossing the East-West Avenue (road spans z in [-7.5, 7.5])
+    // Crossing the East-West Grand Boulevard (22m road spans z in [-11, 11])
     const crossesEWAvenue =
-      (Math.abs(pos.z) >= 7.8 && Math.abs(pos.z) <= 15.5) &&
-      (pos.z * target.z < 0 || Math.abs(target.z) < 7.0) &&
+      (Math.abs(pos.z) >= 7.8 && Math.abs(pos.z) <= 17.5) &&
+      (pos.z * target.z < 0 || Math.abs(target.z) < 10.5) &&
       Math.abs(dz) > Math.abs(dx);
     if (crossesEWAvenue && !lights.nsWalk) {
       return true;
@@ -609,7 +609,7 @@ export class NPCManager {
   }
 
   private isInsideRoadwayCrosswalk(pos: THREE.Vector3): boolean {
-    return Math.abs(pos.x) < 7.6 || Math.abs(pos.z) < 7.6;
+    return Math.abs(pos.x) < 11.4 || Math.abs(pos.z) < 11.4;
   }
 
   /**
