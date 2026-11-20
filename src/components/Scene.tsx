@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { LightingManager } from '../lighting/LightingManager';
@@ -101,6 +101,9 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
   const internalPosRef = useRef(new THREE.Vector3(0, 0.2, 10));
   const playerPosRef = externalPosRef || internalPosRef;
   const teleportFnRef = useRef<((pos: THREE.Vector3) => void) | null>(null);
+  const registerTeleport = useCallback((fn: (pos: THREE.Vector3) => void) => {
+    teleportFnRef.current = fn;
+  }, []);
 
   useEffect(() => {
     return QualityManager.subscribe(setQuality);
@@ -146,7 +149,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
           far: Math.min(2400, Math.max(1000, quality.drawDistance * 1.4)),
         }}
         gl={{
-          antialias: quality.antiAliasing,
+          antialias: quality.antiAliasing && !quality.postProcessing && !quality.bloom,
           powerPreference: 'high-performance',
           stencil: false,
           depth: true,
@@ -184,9 +187,7 @@ export const Scene: React.FC<SceneProps> = ({ playerPosRef: externalPosRef }) =>
 
         <PlayerController
           playerPosRef={playerPosRef}
-          registerTeleport={(fn) => {
-            teleportFnRef.current = fn;
-          }}
+          registerTeleport={registerTeleport}
         />
       </Canvas>
     </div>

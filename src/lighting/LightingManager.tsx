@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { QualitySettings } from '../rendering/QualityManager';
+import { WebGLCapabilities } from '../rendering/WebGLCapabilities';
 import { TimeSystem, TimeLightingState } from '../world/TimeSystem';
 import { WeatherSystem, WeatherState } from '../world/WeatherSystem';
 import { WindSystem } from '../world/WindSystem';
@@ -53,6 +54,7 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   const fogBankMeshRef = useRef<THREE.InstancedMesh>(null);
   const fogBankMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const streetPoolRefs = useRef<(THREE.PointLight | null)[]>([]);
+  const centralBeaconLightRef = useRef<THREE.PointLight>(null);
   const pmremCtrlRef = useRef<PmremEnvController | null>(null);
 
   const windSystem = WindSystem.getInstance();
@@ -167,9 +169,11 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     cityEvent.lightScale,
   ]);
 
-  const safeShadowMapSize = Math.min(quality.shadowMapSize, gl.capabilities.maxTextureSize || 4096);
+  const gpuCaps = useMemo(() => WebGLCapabilities.detect(), []);
+  const maxShadowBudget = gpuCaps.isMobile ? 1024 : 2048;
+  const safeShadowMapSize = Math.min(quality.shadowMapSize, maxShadowBudget, gl.capabilities.maxTextureSize || 2048);
   const isUltra = quality.name === 'ULTRA';
-  const shadowCamRange = isUltra ? 120 : 85;
+  const shadowCamRange = isUltra ? 92 : 70;
 
   // Dynamically reallocate directional shadow map when shadowMapSize, range, or shadows toggle changes
   useEffect(() => {
@@ -339,7 +343,13 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
   }, [timeState.fogColor, weatherState.lightningFlash]);
 
   const localPoolCount =
-    !quality.nightLightsEnabled || quality.maxLights < 4 ? 0 : quality.maxLights >= 16 ? 6 : 4;
+    !quality.nightLightsEnabled || quality.maxLights < 4
+      ? 0
+      : quality.maxLights >= 20
+      ? 4
+      : quality.maxLights >= 12
+      ? 3
+      : 2;
 
   const envQualityScale =
     quality.reflectionQuality === 'HIGH'
@@ -475,11 +485,11 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
     }
 
     // 5. Update City-Wide Player-Local Dynamic Night Streetlight Pool (ON at night, OFF during day)
+    const gridOut = liveEvent.type === 'POWER_OUTAGE' && liveEvent.phase === 'ACTIVE';
     if (localPoolCount > 0) {
-      const gridOut = liveEvent.type === 'POWER_OUTAGE' && liveEvent.phase === 'ACTIVE';
       const targetLampIntensity =
         liveTime.streetLightsOn && !gridOut
-          ? (0.55 + liveTime.nightFactor * 3.1) * liveEvent.lightScale * (1.0 + liveWeather.wetnessFactor * 0.25)
+          ? (0.65 + liveTime.nightFactor * 3.4) * liveEvent.lightScale * (1.0 + liveWeather.wetnessFactor * 0.25)
           : 0.0;
       const anchorX = Math.round(pPos.x / 24) * 24;
       const anchorZ = Math.round(pPos.z / 24) * 24;
@@ -490,9 +500,20 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         const [ox, oy, oz] = STREET_POOL_OFFSETS[i];
         pl.position.set(anchorX + ox, oy, anchorZ + oz);
         pl.intensity = THREE.MathUtils.lerp(pl.intensity, targetLampIntensity, dampAlpha);
-        pl.visible = pl.intensity > 0.02;
         pl.color.copy(i % 2 === 0 ? warmLampColor : coolLampColor);
       }
+    }
+
+    if (centralBeaconLightRef.current) {
+      const targetCentral =
+        liveTime.streetLightsOn && !gridOut
+          ? (0.5 + liveTime.nightFactor * 2.2) * liveEvent.lightScale
+          : 0.0;
+      centralBeaconLightRef.current.intensity = THREE.MathUtils.lerp(
+        centralBeaconLightRef.current.intensity,
+        targetCentral,
+        dampAlpha
+      );
     }
 
     // 6. Smoothly interpolate 3-Stop Sky Dome Palette & Solar Mie Scatter Glow
@@ -729,10 +750,11 @@ export const LightingManager: React.FC<LightingManagerProps> = ({ quality, playe
         />
       ))}
 
-      {quality.nightLightsEnabled && quality.maxLights >= 4 && timeState.streetLightsOn && (
+      {quality.nightLightsEnabled && quality.maxLights >= 4 && (
         <pointLight
+          ref={centralBeaconLightRef}
           position={[0, 16, 0]}
-          intensity={(0.5 + timeState.nightFactor * 2.2) * cityEvent.lightScale}
+          intensity={0}
           distance={95}
           color={district.primaryLightColor}
           decay={2}

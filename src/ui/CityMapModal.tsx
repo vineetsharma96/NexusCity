@@ -219,9 +219,7 @@ export const CityMapModal: React.FC<CityMapModalProps> = ({ playerPosRef }) => {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(7, 9, 14, 0.95)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+        backgroundColor: 'rgba(7, 9, 14, 0.96)',
         zIndex: 160,
         display: 'flex',
         flexDirection: 'column',

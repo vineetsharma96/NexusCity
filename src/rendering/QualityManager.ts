@@ -138,11 +138,11 @@ export const QUALITY_PROFILES: Record<Exclude<QualityPreset, 'AUTO' | 'CUSTOM'>,
   },
   HIGH: {
     name: 'HIGH',
-    dpr: [1.0, 1.5],
+    dpr: [1.0, 1.35],
     drawDistance: 720,
     shadows: true,
-    shadowMapSize: 2048,
-    maxLights: 20,
+    shadowMapSize: 1536,
+    maxLights: 16,
     particlesDensity: 1.0,
     NPCDensity: 1.0,
     LODQuality: 'HIGH',
@@ -171,11 +171,11 @@ export const QUALITY_PROFILES: Record<Exclude<QualityPreset, 'AUTO' | 'CUSTOM'>,
   },
   ULTRA: {
     name: 'ULTRA',
-    dpr: [1.5, 2.0],
+    dpr: [1.25, 1.5],
     drawDistance: 1200,
     shadows: true,
-    shadowMapSize: 4096,
-    maxLights: 36,
+    shadowMapSize: 2048,
+    maxLights: 24,
     particlesDensity: 1.6,
     NPCDensity: 1.35,
     LODQuality: 'HIGH',
@@ -284,6 +284,14 @@ class QualityManagerImpl {
       return this.applyCapabilityGuards({ ...QUALITY_PROFILES.LOW, name: 'LOW', dpr: [0.85, 1.0] });
     }
     if (caps.isMobile) {
+      const capableMobile = !caps.isConstrained && caps.supportsHalfFloatRenderTarget && caps.maxTextureSize >= 4096;
+      if (capableMobile) {
+        return this.applyCapabilityGuards({
+          ...QUALITY_PROFILES.MEDIUM,
+          name: 'MEDIUM',
+          dpr: [0.9, Math.min(caps.recommendedDpr, 1.2)],
+        });
+      }
       return this.applyCapabilityGuards({
         ...QUALITY_PROFILES.LITE,
         name: 'LITE',
@@ -301,7 +309,7 @@ class QualityManagerImpl {
     }
     return this.applyCapabilityGuards({
       ...QUALITY_PROFILES.HIGH,
-      dpr: [1.0, Math.min(1.5, caps.recommendedDpr)],
+      dpr: [1.0, Math.min(1.35, caps.recommendedDpr)],
     });
   }
 

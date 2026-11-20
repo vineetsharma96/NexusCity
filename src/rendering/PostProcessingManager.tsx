@@ -13,6 +13,7 @@ import { LivingCityEventSystem } from '../world/LivingCityEventSystem';
 import { createNeonGradePass } from './NeonGradePass';
 import { computeAtmosphericBloomParams } from './BloomProfile';
 import { CircularBloomPass } from './CircularBloomPass';
+import { computeCappedBloomResolution } from './StaticInstanceBatcher';
 import { VehicleInteractionSystem } from '../vehicle/VehicleInteractionSystem';
 
 export interface PostProcessingManagerProps {
@@ -53,8 +54,10 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({
       const rtWidth = Math.max(1, Math.floor(size.width * clampedDpr));
       const rtHeight = Math.max(1, Math.floor(size.height * clampedDpr));
 
-      // Linear HalfFloat render target with WebGL2 MSAA preserves HDR (>1.0) city light values for selective bloom
-      const desiredSamples = quality.antiAliasing && gl.capabilities.isWebGL2 ? 4 : 0;
+      const caps = WebGLCapabilities.detect();
+      // Linear HalfFloat render target preserves HDR (>1.0) city light values for selective bloom.
+      // Use 2x MSAA on desktop WebGL2 and 0x on mobile tile GPUs (Snapdragon/Adreno) to avoid 130MB+ 4x MSAA HalfFloat resolves.
+      const desiredSamples = quality.antiAliasing && gl.capabilities.isWebGL2 && !caps.isMobile ? 2 : 0;
       let renderTarget: THREE.WebGLRenderTarget;
       try {
         renderTarget = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
@@ -92,10 +95,11 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({
         lightScale: initialEvent.lightScale,
       });
 
-      // CircularBloomPass internally halves to rtWidth/2 × rtHeight/2 on mip 0;
-      // passing full rtWidth × rtHeight prevents coarse mip 4 from collapsing into blocky squares on distant lights
+      // Cap bloom pyramid long edge (960px mobile / 1152px desktop) to cut fragment fillrate 3x-4x
+      // while keeping mip 4 >= 20px so distant lights stay smoothly circular without square artifacts.
+      const bloomDims = computeCappedBloomResolution(rtWidth, rtHeight, caps.isMobile ? 960 : 1152);
       const bloomPass = new CircularBloomPass(
-        new THREE.Vector2(rtWidth, rtHeight),
+        new THREE.Vector2(bloomDims.width, bloomDims.height),
         quality.bloom ? initialBloom.strength * bloomIntensityMultiplier : 0.0,
         initialBloom.radius,
         initialBloom.threshold
@@ -165,8 +169,10 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({
       composerRef.current.setSize(size.width, size.height);
     }
     if (bloomPassRef.current) {
-      bloomPassRef.current.resolution.set(rtWidth, rtHeight);
-      bloomPassRef.current.setSize(rtWidth, rtHeight);
+      const caps = WebGLCapabilities.detect();
+      const bloomDims = computeCappedBloomResolution(rtWidth, rtHeight, caps.isMobile ? 960 : 1152);
+      bloomPassRef.current.resolution.set(bloomDims.width, bloomDims.height);
+      bloomPassRef.current.setSize(bloomDims.width, bloomDims.height);
       bloomPassRef.current.enabled = quality.bloom;
     }
     if (gradePassRef.current) {

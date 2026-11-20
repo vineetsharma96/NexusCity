@@ -148,11 +148,11 @@ export class ChunkManager {
           : quality.LODQuality === 'MEDIUM'
           ? 0.85
           : isUltra
-          ? 1.45
+          ? 1.18
           : 1.0;
-      const highLimit = 185 * lodScale;
-      const medLimit = 380 * lodScale;
-      const lowLimit = Math.min(quality.drawDistance * 1.15, (isUltra ? 960 : 780) * lodScale);
+      const highLimit = 165 * lodScale;
+      const medLimit = 310 * lodScale;
+      const lowLimit = Math.min(quality.drawDistance * 1.15, (isUltra ? 1150 : 780) * Math.max(1.0, lodScale));
 
       const highLimitSq = highLimit * highLimit;
       const medLimitSq = medLimit * medLimit;

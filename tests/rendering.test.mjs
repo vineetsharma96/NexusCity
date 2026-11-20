@@ -280,4 +280,97 @@ test('circular bloom Gaussian kernels decay smoothly at kernel edges to eliminat
   }
 });
 
+test('InstanceBatchBuilder collapses hundreds of tree and prop meshes into minimal draw-call buckets with valid matrices and color backfill', async () => {
+  const bundle = await build({
+    stdin: {
+      resolveDir: process.cwd(),
+      contents: `
+        export { InstanceBatchBuilder } from './src/rendering/StaticInstanceBatcher';
+        export { VegetationGenerator } from './src/city/VegetationGenerator';
+      `,
+    },
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    write: false,
+  });
+  const { InstanceBatchBuilder, VegetationGenerator } = await import(
+    `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}#${Math.random()}`
+  );
+
+  const builder = new InstanceBatchBuilder();
+  const treeKeys = {
+    planterPlinth: 'planterPlinth',
+    planterCoping: 'planterCoping',
+    soilBed: 'soilBed',
+    planterTrim: 'planterTrim',
+    mound: 'mound',
+    rootFlare: 'rootFlare',
+    trunk: 'trunk',
+    branch: 'branch',
+    foliage: 'foliage',
+  };
+
+  const avenueTrees = VegetationGenerator.generateTrees(847291);
+  for (const tree of avenueTrees) {
+    builder.addTree(tree, treeKeys);
+  }
+
+  // Mix untinted then tinted instances in one bucket to verify white backfill
+  builder.addWorld('facade', 0, 5, 0, 4, 10, 4);
+  builder.addWorld('facade', 10, 5, 0, 4, 10, 4, 0, Math.PI / 4, 0, '#ff8800');
+
+  const buckets = builder.build();
+  const totalInstances = builder.getTotalInstanceCount();
+
+  assert.ok(totalInstances > 500, `Expected >500 batched sub-meshes across avenue trees, got ${totalInstances}`);
+  assert.ok(buckets.size <= 10, `Expected <=10 draw-call buckets, got ${buckets.size}`);
+
+  const expectedFoliageCount = avenueTrees.reduce((acc, t) => acc + t.leafClusters.length, 0);
+  const foliage = buckets.get('foliage');
+  assert.ok(foliage && foliage.count === expectedFoliageCount && expectedFoliageCount > 150);
+  assert.equal(foliage.matrices.length, foliage.count * 16);
+  assert.ok(foliage.colors && foliage.colors.length === foliage.count * 3);
+
+  const facade = buckets.get('facade');
+  assert.ok(facade && facade.count === 2);
+  assert.ok(facade.colors && facade.colors.length === 6);
+  // First untinted instance backfilled to pure white (1, 1, 1)
+  assert.deepEqual([facade.colors[0], facade.colors[1], facade.colors[2]], [1, 1, 1]);
+  // Second instance tinted orange (R > G > B)
+  assert.ok(facade.colors[3] > facade.colors[4] && facade.colors[4] > facade.colors[5]);
+});
+
+test('computeCappedBloomResolution bounds high-DPI bloom targets while preserving aspect ratio and circular mip clarity', async () => {
+  const bundle = await build({
+    stdin: {
+      resolveDir: process.cwd(),
+      contents: `export { computeCappedBloomResolution } from './src/rendering/StaticInstanceBatcher';`,
+    },
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    write: false,
+  });
+  const { computeCappedBloomResolution } = await import(
+    `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}#${Math.random()}`
+  );
+
+  // High-DPI tablet (2560x1600 @ mobile cap 960)
+  const tablet = computeCappedBloomResolution(2560, 1600, 960);
+  assert.equal(tablet.width, 960);
+  assert.equal(tablet.height, 600);
+  assert.ok(tablet.height / 16 >= 20, 'Coarsest bloom mip must stay >= 20px for smooth circular halos');
+
+  // 4K desktop (3840x2160 @ desktop cap 1152)
+  const desktop = computeCappedBloomResolution(3840, 2160, 1152);
+  assert.equal(desktop.width, 1152);
+  assert.equal(desktop.height, 648);
+
+  // Already-small target passes through unchanged
+  const small = computeCappedBloomResolution(800, 600, 1152);
+  assert.deepEqual(small, { width: 800, height: 600 });
+});
+
+
 

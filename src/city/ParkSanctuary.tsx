@@ -6,6 +6,8 @@ import { WeatherSystem } from '../world/WeatherSystem';
 import { TimeSystem } from '../world/TimeSystem';
 import { WindSystem } from '../world/WindSystem';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
+import { InstanceBatchBuilder } from '../rendering/StaticInstanceBatcher';
+import { InstanceBucketSpec, InstancedBatchLayer } from '../rendering/InstancedBatchView';
 
 interface ParkSanctuaryProps {
   position?: [number, number, number];
@@ -17,31 +19,25 @@ interface ParkTreeSpec {
   crownRadius: number;
   primaryColor: string;
   secondaryColor: string;
-  emissiveColor: string;
 }
 
 const PARK_TREES: ParkTreeSpec[] = [
-  // NW Quadrant: Sakura Blossom Grove
-  { pos: [-22, -20], height: 6.4, crownRadius: 3.3, primaryColor: '#fb7185', secondaryColor: '#fda4af', emissiveColor: '#e11d48' },
-  { pos: [-14, -24], height: 5.8, crownRadius: 2.9, primaryColor: '#fda4af', secondaryColor: '#fecdd3', emissiveColor: '#f43f5e' },
-  { pos: [-26, -12], height: 6.2, crownRadius: 3.1, primaryColor: '#fb7185', secondaryColor: '#fda4af', emissiveColor: '#e11d48' },
-  { pos: [-17, -13], height: 5.5, crownRadius: 2.7, primaryColor: '#f43f5e', secondaryColor: '#fda4af', emissiveColor: '#e11d48' },
-  // NE Quadrant: Golden Ginkgo Zen Grove
-  { pos: [22, -20], height: 6.8, crownRadius: 3.4, primaryColor: '#f59e0b', secondaryColor: '#fbbf24', emissiveColor: '#d97706' },
-  { pos: [14, -24], height: 6.0, crownRadius: 2.9, primaryColor: '#fbbf24', secondaryColor: '#fde047', emissiveColor: '#d97706' },
-  { pos: [26, -12], height: 6.4, crownRadius: 3.2, primaryColor: '#f59e0b', secondaryColor: '#fbbf24', emissiveColor: '#b45309' },
-  { pos: [17, -13], height: 5.6, crownRadius: 2.7, primaryColor: '#fbbf24', secondaryColor: '#fde047', emissiveColor: '#d97706' },
-  // SW Quadrant: Bioluminescent Emerald & Cyan Glade
-  { pos: [-22, 20], height: 6.5, crownRadius: 3.3, primaryColor: '#10b981', secondaryColor: '#34d399', emissiveColor: '#059669' },
-  { pos: [-14, 24], height: 5.9, crownRadius: 2.9, primaryColor: '#34d399', secondaryColor: '#6ee7b7', emissiveColor: '#10b981' },
-  { pos: [-26, 12], height: 6.2, crownRadius: 3.1, primaryColor: '#059669', secondaryColor: '#38bdf8', emissiveColor: '#0284c7' },
-  // SE Quadrant: Autumn & Sakura Overlook Grove
-  { pos: [22, 20], height: 6.6, crownRadius: 3.3, primaryColor: '#fb7185', secondaryColor: '#f59e0b', emissiveColor: '#e11d48' },
-  { pos: [14, 24], height: 5.9, crownRadius: 2.8, primaryColor: '#f59e0b', secondaryColor: '#fda4af', emissiveColor: '#d97706' },
-  { pos: [26, 12], height: 6.2, crownRadius: 3.0, primaryColor: '#10b981', secondaryColor: '#fbbf24', emissiveColor: '#059669' },
-  // Lagoon Perimeter Willows
-  { pos: [-27, -4.5], height: 6.0, crownRadius: 3.0, primaryColor: '#10b981', secondaryColor: '#34d399', emissiveColor: '#059669' },
-  { pos: [27, 4.5], height: 6.0, crownRadius: 3.0, primaryColor: '#f59e0b', secondaryColor: '#fbbf24', emissiveColor: '#d97706' },
+  { pos: [-22, -20], height: 6.4, crownRadius: 3.3, primaryColor: '#fb7185', secondaryColor: '#fda4af' },
+  { pos: [-14, -24], height: 5.8, crownRadius: 2.9, primaryColor: '#fda4af', secondaryColor: '#fecdd3' },
+  { pos: [-26, -12], height: 6.2, crownRadius: 3.1, primaryColor: '#fb7185', secondaryColor: '#fda4af' },
+  { pos: [-17, -13], height: 5.5, crownRadius: 2.7, primaryColor: '#f43f5e', secondaryColor: '#fda4af' },
+  { pos: [22, -20], height: 6.8, crownRadius: 3.4, primaryColor: '#f59e0b', secondaryColor: '#fbbf24' },
+  { pos: [14, -24], height: 6.0, crownRadius: 2.9, primaryColor: '#fbbf24', secondaryColor: '#fde047' },
+  { pos: [26, -12], height: 6.4, crownRadius: 3.2, primaryColor: '#f59e0b', secondaryColor: '#fbbf24' },
+  { pos: [17, -13], height: 5.6, crownRadius: 2.7, primaryColor: '#fbbf24', secondaryColor: '#fde047' },
+  { pos: [-22, 20], height: 6.5, crownRadius: 3.3, primaryColor: '#10b981', secondaryColor: '#34d399' },
+  { pos: [-14, 24], height: 5.9, crownRadius: 2.9, primaryColor: '#34d399', secondaryColor: '#6ee7b7' },
+  { pos: [-26, 12], height: 6.2, crownRadius: 3.1, primaryColor: '#059669', secondaryColor: '#38bdf8' },
+  { pos: [22, 20], height: 6.6, crownRadius: 3.3, primaryColor: '#fb7185', secondaryColor: '#f59e0b' },
+  { pos: [14, 24], height: 5.9, crownRadius: 2.8, primaryColor: '#f59e0b', secondaryColor: '#fda4af' },
+  { pos: [26, 12], height: 6.2, crownRadius: 3.0, primaryColor: '#10b981', secondaryColor: '#fbbf24' },
+  { pos: [-27, -4.5], height: 6.0, crownRadius: 3.0, primaryColor: '#10b981', secondaryColor: '#34d399' },
+  { pos: [27, 4.5], height: 6.0, crownRadius: 3.0, primaryColor: '#f59e0b', secondaryColor: '#fbbf24' },
 ];
 
 const LOTUS_PADS: { x: number; z: number; r: number; flowerColor: string; phase: number }[] = [
@@ -55,32 +51,72 @@ const LOTUS_PADS: { x: number; z: number; r: number; flowerColor: string; phase:
   { x: 8.4, z: 9.6, r: 0.7, flowerColor: '#34d399', phase: 5.8 },
 ];
 
+const BAMBOO_STALKS: readonly [number, number, number][] = [
+  [-2.2, -1.8, 6.2],
+  [-1.5, -2.4, 5.4],
+  [-2.8, -0.9, 5.8],
+  [1.8, 2.1, 6.5],
+  [2.5, 1.4, 5.6],
+  [1.2, 2.7, 5.9],
+  [-0.5, 1.6, 5.2],
+  [0.8, -1.5, 6.0],
+];
+
+const LANTERN_POSITIONS: readonly [number, number][] = [
+  [-16, -6], [16, -6], [-16, 6], [16, 6],
+  [-6, -18], [6, -18], [-6, 18], [6, 18],
+  [-24, -4], [24, -4], [-24, 4], [24, 4],
+];
+
+const BENCH_SPECS: readonly [number, number, number][] = [
+  [-18, -10, Math.PI / 4],
+  [18, -10, -Math.PI / 4],
+  [-18, 10, (3 * Math.PI) / 4],
+  [18, 10, -(3 * Math.PI) / 4],
+];
+
+// Shared static geometries & materials across both ParkSanctuary instances
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const UNIT_CYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 10);
+const UNIT_TRUNK = new THREE.CylinderGeometry(0.22, 0.44, 1, 8);
+const UNIT_CROWN = new THREE.DodecahedronGeometry(1, 1);
+const UNIT_SPHERE = new THREE.SphereGeometry(0.2, 8, 8);
+const STEP_STONE_GEO = new THREE.CylinderGeometry(1.15, 1.25, 0.1, 12);
+const STEP_RING_GEO = new THREE.RingGeometry(0.98, 1.08, 12);
+const LILY_PAD_GEO = new THREE.CircleGeometry(1, 14);
+const LILY_FLOWER_GEO = new THREE.OctahedronGeometry(0.22, 0);
+
+const MAT_WALL = new THREE.MeshStandardMaterial({ color: '#0b1120', roughness: 0.28, metalness: 0.86 });
+const MAT_NAVY = new THREE.MeshStandardMaterial({ color: '#0f172a', metalness: 0.9, roughness: 0.2 });
+const MAT_SLATE = new THREE.MeshStandardMaterial({ color: '#1e293b', roughness: 0.35, metalness: 0.75 });
+const MAT_BAMBOO = new THREE.MeshStandardMaterial({
+  color: '#10b981',
+  emissive: '#059669',
+  emissiveIntensity: 0.28,
+  roughness: 0.35,
+});
+const MAT_TRUNK = new THREE.MeshStandardMaterial({ color: '#271e16', roughness: 0.82 });
+const MAT_CROWN = new THREE.MeshStandardMaterial({
+  color: '#ffffff',
+  emissive: '#1e293b',
+  emissiveIntensity: 0.24,
+  roughness: 0.48,
+});
+const MAT_BASIC_COLORED = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+const MAT_LILY_PAD = new THREE.MeshStandardMaterial({ color: '#065f46', roughness: 0.65, metalness: 0.15 });
+
 export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0, 75] }) => {
   const origin = useMemo(() => new THREE.Vector3(...position), [position[0], position[1], position[2]]);
   const waterMatRef = useRef<THREE.ShaderMaterial>(null);
-  const foliageRef = useRef<THREE.Group>(null);
   const lotusRef = useRef<THREE.Group>(null);
   const lilyGroupRef = useRef<THREE.Group>(null);
   const windSystem = WindSystem.getInstance();
   const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
-  const [streetLightsOn, setStreetLightsOn] = useState<boolean>(
-    () => TimeSystem.getInstance().getState().streetLightsOn
-  );
 
-  useEffect(() => {
-    let lastLightsOn = TimeSystem.getInstance().getState().streetLightsOn;
-    const uQual = QualityManager.subscribe(setQuality);
-    const uTime = TimeSystem.getInstance().subscribe((s) => {
-      if (s.streetLightsOn !== lastLightsOn) {
-        lastLightsOn = s.streetLightsOn;
-        setStreetLightsOn(s.streetLightsOn);
-      }
-    });
-    return () => {
-      uQual();
-      uTime();
-    };
-  }, []);
+  const lanternGlowMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), []);
+  useEffect(() => () => lanternGlowMat.dispose(), [lanternGlowMat]);
+
+  useEffect(() => QualityManager.subscribe(setQuality), []);
 
   // Perimeter walls with 8m-wide entry portals on all 4 cardinal directions
   const walls = useMemo(
@@ -116,6 +152,123 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
     return () => colliders.forEach(({ center }) => KinematicCollisionSolver.removeBox(center));
   }, [origin, walls]);
 
+  // Batch static walls, gates, stepping stones, bamboo, lanterns, benches & 16 multi-crown trees (~12 draw calls total!)
+  const batchedBuckets = useMemo(() => {
+    const b = new InstanceBatchBuilder();
+
+    // 4 Cardinal walkways
+    b.addWorld('box_navy', -24.2, 0.265, 0, 20.0, 0.04, 5.4);
+    b.addWorld('box_navy', 24.2, 0.265, 0, 20.0, 0.04, 5.4);
+    b.addWorld('box_navy', 0, 0.265, -25.6, 5.4, 0.04, 17.2);
+    b.addWorld('box_navy', 0, 0.265, 25.6, 5.4, 0.04, 17.2);
+
+    // Perimeter walls + neon trims
+    walls.forEach((w, idx) => {
+      b.addWorld('box_wall', w.position[0], w.position[1], w.position[2], w.size[0], w.size[1], w.size[2]);
+      b.addWorld(
+        'box_basic',
+        w.position[0],
+        w.position[1] + 0.62,
+        w.position[2],
+        w.size[0],
+        0.04,
+        w.size[2],
+        0,
+        0,
+        0,
+        idx % 2 === 0 ? '#10b981' : '#38bdf8'
+      );
+    });
+
+    // 4 Cardinal Sanctuary Portal Gates
+    const gates: readonly [number, number, number, string][] = [
+      [0, -34.4, 0, '#10b981'],
+      [0, 34.4, Math.PI, '#10b981'],
+      [-34.4, 0, Math.PI / 2, '#38bdf8'],
+      [34.4, 0, -Math.PI / 2, '#f59e0b'],
+    ];
+    for (const [gx, gz, rot, accent] of gates) {
+      b.addLocal('cyl_navy', gx, 0.24, gz, rot, -3.6, 2.6, 0, 0.5, 5.2, 0.5);
+      b.addLocal('cyl_navy', gx, 0.24, gz, rot, 3.6, 2.6, 0, 0.5, 5.2, 0.5);
+      b.addLocal('box_wall', gx, 0.24, gz, rot, 0, 5.1, 0, 9.2, 0.36, 0.55);
+      b.addLocal('box_basic', gx, 0.24, gz, rot, 0, 4.45, 0, 7.8, 0.16, 0.36, 0, 0, 0, accent);
+    }
+
+    // North-South Lagoon Stepping Stones
+    const stoneZs = [-13, -10.5, -8, -5.5, 5.5, 8, 10.5, 13];
+    stoneZs.forEach((sz, idx) => {
+      b.addWorld('step_stone', 0, 0.3, sz, 1, 1, 1);
+      b.addWorld('step_ring', 0, 0.355, sz, 1, 1, 1, -Math.PI / 2, 0, 0, idx % 2 === 0 ? '#10b981' : '#38bdf8');
+    });
+
+    // SW Quadrant Bamboo Stalk Clusters
+    if (quality.vegetationEnabled) {
+      for (const [bx, bz, bh] of BAMBOO_STALKS) {
+        b.addWorld('cyl_bamboo', -19 + bx, 0.24 + bh / 2, 19 + bz, 0.25, bh, 0.25);
+        b.addWorld('cyl_basic', -19 + bx, 0.24 + bh * 0.5, 19 + bz, 0.28, 0.08, 0.28, 0, 0, 0, '#34d399');
+      }
+    }
+
+    // Lantern Bollards & Curved Viewing Benches
+    if (quality.streetFurnitureEnabled) {
+      LANTERN_POSITIONS.forEach(([lx, lz], idx) => {
+        b.addWorld('cyl_navy', lx, 0.24 + 0.65, lz, 0.28, 1.3, 0.28);
+        b.addWorld(
+          'lantern_orb',
+          lx,
+          0.24 + 1.38,
+          lz,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          idx % 3 === 0 ? '#10b981' : idx % 3 === 1 ? '#f59e0b' : '#38bdf8'
+        );
+      });
+
+      BENCH_SPECS.forEach(([bx, bz, rot], idx) => {
+        b.addLocal('box_slate', bx, 0.25, bz, rot, 0, 0.32, 0, 2.6, 0.14, 0.7);
+        b.addLocal('box_navy', bx, 0.25, bz, rot, 0, 0.62, -0.28, 2.6, 0.45, 0.1);
+        b.addLocal('box_lantern', bx, 0.25, bz, rot, 0, 0.12, 0, 2.2, 0.04, 0.45, 0, 0, 0, idx % 2 === 0 ? '#10b981' : '#f59e0b');
+      });
+    }
+
+    // 16 Multi-Layered Botanical Grove Trees (3 crowns + trunk = 64 meshes -> 2 draw calls!)
+    if (quality.vegetationEnabled) {
+      for (const tree of PARK_TREES) {
+        const [tx, tz] = tree.pos;
+        const r = tree.crownRadius;
+        b.addWorld('tree_trunk', tx, 0.2 + tree.height * 0.45, tz, 1, tree.height * 0.9, 1);
+        b.addWorld('tree_crown', tx, 0.2 + tree.height, tz, r, r, r, 0, 0, 0, tree.primaryColor);
+        b.addWorld('tree_crown', tx + r * 0.35, 0.2 + tree.height + r * 0.42, tz + r * 0.25, r * 0.72, r * 0.72, r * 0.72, 0, 0, 0, tree.secondaryColor);
+        b.addWorld('tree_crown', tx - r * 0.42, 0.2 + tree.height - r * 0.25, tz - r * 0.3, r * 0.65, r * 0.65, r * 0.65, 0, 0, 0, tree.secondaryColor);
+      }
+    }
+
+    return b.build();
+  }, [walls, quality.vegetationEnabled, quality.streetFurnitureEnabled]);
+
+  const bucketSpecs = useMemo<InstanceBucketSpec[]>(
+    () => [
+      { key: 'box_wall', geometry: UNIT_BOX, material: MAT_WALL, castShadow: quality.shadows, receiveShadow: quality.shadows },
+      { key: 'box_navy', geometry: UNIT_BOX, material: MAT_NAVY, receiveShadow: quality.shadows },
+      { key: 'box_slate', geometry: UNIT_BOX, material: MAT_SLATE, receiveShadow: quality.shadows },
+      { key: 'box_basic', geometry: UNIT_BOX, material: MAT_BASIC_COLORED },
+      { key: 'box_lantern', geometry: UNIT_BOX, material: lanternGlowMat },
+      { key: 'cyl_navy', geometry: UNIT_CYL, material: MAT_NAVY },
+      { key: 'cyl_bamboo', geometry: UNIT_CYL, material: MAT_BAMBOO },
+      { key: 'cyl_basic', geometry: UNIT_CYL, material: MAT_BASIC_COLORED },
+      { key: 'step_stone', geometry: STEP_STONE_GEO, material: MAT_SLATE },
+      { key: 'step_ring', geometry: STEP_RING_GEO, material: MAT_BASIC_COLORED },
+      { key: 'lantern_orb', geometry: UNIT_SPHERE, material: lanternGlowMat },
+      { key: 'tree_trunk', geometry: UNIT_TRUNK, material: MAT_TRUNK, castShadow: quality.shadows },
+      { key: 'tree_crown', geometry: UNIT_CROWN, material: MAT_CROWN, castShadow: quality.shadows },
+    ],
+    [quality.shadows, lanternGlowMat]
+  );
+
   const waterUniforms = useMemo(
     () => ({
       uTime: { value: 0 },
@@ -128,11 +281,22 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
     []
   );
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock, camera }) => {
+    const dx = camera.position.x - origin.x;
+    const dz = camera.position.z - origin.z;
+    if (dx * dx + dz * dz > 260 * 260) return;
+
     const t = clock.getElapsedTime();
     const wState = WeatherSystem.getInstance().getState();
-    const windVec = windSystem.getVector();
+    const tState = TimeSystem.getInstance().getState();
     const gust = windSystem.getGustFactor();
+
+    const lanternActive = tState.streetLightsOn && QualityManager.current.nightLightsEnabled;
+    if (lanternActive) {
+      lanternGlowMat.color.setScalar(1.0 + tState.nightFactor * 1.1);
+    } else {
+      lanternGlowMat.color.set('#1e293b');
+    }
 
     if (waterMatRef.current) {
       waterMatRef.current.uniforms.uTime.value = t;
@@ -156,26 +320,17 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
         pad.rotation.z = Math.sin(t * 1.5 + spec.phase) * 0.04 * gust;
       });
     }
-
-    if (foliageRef.current) {
-      const swayX = Math.sin(t * 1.45) * 0.045 * gust + windVec.x * 0.003;
-      const swayZ = Math.cos(t * 1.2) * 0.045 * gust + windVec.z * 0.003;
-      foliageRef.current.children.forEach((c, idx) => {
-        c.rotation.x = swayX * (0.85 + (idx % 3) * 0.2);
-        c.rotation.z = swayZ * (0.85 + ((idx + 1) % 3) * 0.2);
-      });
-    }
   });
 
   return (
     <group position={position} name="CentralParkSanctuary">
-      {/* Main Botanical Lawn Terrace (top y = 0.24) */}
+      {/* Main Botanical Lawn Terrace */}
       <mesh position={[0, 0.12, 0]} receiveShadow={quality.shadows}>
         <boxGeometry args={[70, 0.24, 70]} />
         <meshStandardMaterial color="#052e16" roughness={0.78} metalness={0.08} />
       </mesh>
 
-      {/* Concentric Inner Moss & Clover Lawn Terrace (y = 0.255 with polygonOffset) */}
+      {/* Concentric Inner Moss & Clover Lawn Terrace */}
       <mesh position={[0, 0.255, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={quality.shadows}>
         <ringGeometry args={[19.5, 31.5, 48]} />
         <meshStandardMaterial
@@ -188,25 +343,7 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
         />
       </mesh>
 
-      {/* Split Cardinal Basalt Promenade Walkways (meet lagoon rim / bridge ramps cleanly without overlapping) */}
-      <mesh position={[-24.2, 0.265, 0]} receiveShadow={quality.shadows}>
-        <boxGeometry args={[20.0, 0.04, 5.4]} />
-        <meshStandardMaterial color="#0f172a" roughness={0.36} metalness={0.68} />
-      </mesh>
-      <mesh position={[24.2, 0.265, 0]} receiveShadow={quality.shadows}>
-        <boxGeometry args={[20.0, 0.04, 5.4]} />
-        <meshStandardMaterial color="#0f172a" roughness={0.36} metalness={0.68} />
-      </mesh>
-      <mesh position={[0, 0.265, -25.6]} receiveShadow={quality.shadows}>
-        <boxGeometry args={[5.4, 0.04, 17.2]} />
-        <meshStandardMaterial color="#0f172a" roughness={0.36} metalness={0.68} />
-      </mesh>
-      <mesh position={[0, 0.265, 25.6]} receiveShadow={quality.shadows}>
-        <boxGeometry args={[5.4, 0.04, 17.2]} />
-        <meshStandardMaterial color="#0f172a" roughness={0.36} metalness={0.68} />
-      </mesh>
-
-      {/* Circular Perimeter Ring Promenade (cleanly above walkways via polygonOffset) */}
+      {/* Circular Perimeter Ring Promenade */}
       <mesh position={[0, 0.292, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={quality.shadows}>
         <ringGeometry args={[23.5, 26.2, 48]} />
         <meshStandardMaterial
@@ -226,49 +363,6 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
         <ringGeometry args={[26.2, 26.35, 48]} />
         <meshBasicMaterial color="#38bdf8" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
       </mesh>
-
-      {/* Perimeter Architectural Sanctuary Walls */}
-      {walls.map((w, idx) => (
-        <group key={idx} position={w.position}>
-          <mesh castShadow={quality.shadows} receiveShadow={quality.shadows}>
-            <boxGeometry args={w.size} />
-            <meshStandardMaterial color="#0b1120" roughness={0.28} metalness={0.86} />
-          </mesh>
-          <mesh position={[0, 0.62, 0]}>
-            <boxGeometry args={[w.size[0], 0.04, w.size[2]]} />
-            <meshBasicMaterial color={idx % 2 === 0 ? '#10b981' : '#38bdf8'} />
-          </mesh>
-        </group>
-      ))}
-
-      {/* 4 Cardinal Illuminated Sanctuary Portal Gates (Torii-inspired Neo-Arches) */}
-      {(
-        [
-          [0, -34.4, 0, '#10b981'],
-          [0, 34.4, Math.PI, '#10b981'],
-          [-34.4, 0, Math.PI / 2, '#38bdf8'],
-          [34.4, 0, -Math.PI / 2, '#f59e0b'],
-        ] as const
-      ).map(([gx, gz, rot, accent], idx) => (
-        <group key={`gate-${idx}`} position={[gx, 0.24, gz]} rotation={[0, rot, 0]}>
-          <mesh position={[-3.6, 2.6, 0]} castShadow={quality.shadows}>
-            <cylinderGeometry args={[0.22, 0.28, 5.2, 10]} />
-            <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
-          </mesh>
-          <mesh position={[3.6, 2.6, 0]} castShadow={quality.shadows}>
-            <cylinderGeometry args={[0.22, 0.28, 5.2, 10]} />
-            <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
-          </mesh>
-          <mesh position={[0, 5.1, 0]} castShadow={quality.shadows}>
-            <boxGeometry args={[9.2, 0.36, 0.55]} />
-            <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.2} />
-          </mesh>
-          <mesh position={[0, 4.45, 0]}>
-            <boxGeometry args={[7.8, 0.16, 0.36]} />
-            <meshBasicMaterial color={accent} />
-          </mesh>
-        </group>
-      ))}
 
       {/* Sunken Bioluminescent Mirror Lagoon & Basalt Basin Rim */}
       <mesh position={[0, 0.285, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -331,41 +425,22 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
       <group ref={lilyGroupRef}>
         {LOTUS_PADS.map((pad, idx) => (
           <group key={`lily-${idx}`} position={[pad.x, 0.31, pad.z]}>
-            <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <circleGeometry args={[pad.r, 16]} />
-              <meshStandardMaterial color="#065f46" roughness={0.65} metalness={0.15} />
-            </mesh>
-            <mesh position={[0, 0.08, 0]}>
-              <octahedronGeometry args={[0.22, 0]} />
+            <mesh rotation={[-Math.PI / 2, 0, 0]} scale={[pad.r, pad.r, 1]} geometry={LILY_PAD_GEO} material={MAT_LILY_PAD} />
+            <mesh position={[0, 0.08, 0]} geometry={LILY_FLOWER_GEO}>
               <meshBasicMaterial color={pad.flowerColor} />
             </mesh>
           </group>
         ))}
       </group>
 
-      {/* North-South Lagoon Stepping Stones */}
-      {([-13, -10.5, -8, -5.5, 5.5, 8, 10.5, 13] as const).map((sz, idx) => (
-        <group key={`step-${idx}`} position={[0, 0.3, sz]}>
-          <mesh>
-            <cylinderGeometry args={[1.15, 1.25, 0.1, 12]} />
-            <meshStandardMaterial color="#1e293b" roughness={0.35} metalness={0.75} />
-          </mesh>
-          <mesh position={[0, 0.055, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0.98, 1.08, 12]} />
-            <meshBasicMaterial color={idx % 2 === 0 ? '#10b981' : '#38bdf8'} />
-          </mesh>
-        </group>
-      ))}
-
       {/* Grand Botanical Conservatory Rib Arches Spanning Lagoon */}
       {([-0.55, 0, 0.55] as const).map((rotY, idx) => (
         <group key={`arch-${idx}`} position={[0, 0.25, 0]} rotation={[0, rotY, 0]}>
-          <mesh rotation={[0, 0, 0]}>
-            <torusGeometry args={[16.5, 0.14, 10, 48, Math.PI]} />
-            <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.18} />
+          <mesh material={MAT_NAVY}>
+            <torusGeometry args={[16.5, 0.14, 10, 40, Math.PI]} />
           </mesh>
-          <mesh rotation={[0, 0, 0]}>
-            <torusGeometry args={[16.22, 0.045, 8, 48, Math.PI]} />
+          <mesh>
+            <torusGeometry args={[16.22, 0.045, 8, 40, Math.PI]} />
             <meshBasicMaterial color={idx === 1 ? '#10b981' : '#38bdf8'} />
           </mesh>
         </group>
@@ -378,22 +453,20 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
           <meshBasicMaterial color="#10b981" wireframe />
         </mesh>
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[2.1, 0.05, 8, 36]} />
+          <torusGeometry args={[2.1, 0.05, 8, 32]} />
           <meshBasicMaterial color="#38bdf8" />
         </mesh>
         <mesh rotation={[Math.PI / 4, Math.PI / 4, 0]}>
-          <torusGeometry args={[2.75, 0.04, 8, 36]} />
+          <torusGeometry args={[2.75, 0.04, 8, 32]} />
           <meshBasicMaterial color="#f59e0b" />
         </mesh>
       </group>
 
-      {/* Sculpted Central Promenade Bridge with Illuminated Glass Balustrades */}
+      {/* Sculpted Central Promenade Bridge */}
       <group>
-        <mesh position={[0, 0.85, 0]} castShadow={quality.shadows} receiveShadow={quality.shadows}>
+        <mesh position={[0, 0.85, 0]} castShadow={quality.shadows} receiveShadow={quality.shadows} material={MAT_SLATE}>
           <boxGeometry args={[23, 0.35, 4.6]} />
-          <meshStandardMaterial color="#1e293b" roughness={0.42} metalness={0.65} />
         </mesh>
-        {/* Glass Balustrades */}
         <mesh position={[0, 1.25, -2.15]}>
           <boxGeometry args={[22.4, 0.55, 0.06]} />
           <meshStandardMaterial color="#38bdf8" transparent opacity={0.32} metalness={0.9} roughness={0.1} />
@@ -402,7 +475,6 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
           <boxGeometry args={[22.4, 0.55, 0.06]} />
           <meshStandardMaterial color="#38bdf8" transparent opacity={0.32} metalness={0.9} roughness={0.1} />
         </mesh>
-        {/* Brass Handrails */}
         <mesh position={[0, 1.55, -2.15]} rotation={[0, 0, Math.PI / 2]}>
           <cylinderGeometry args={[0.055, 0.055, 22.8, 8]} />
           <meshBasicMaterial color="#f59e0b" />
@@ -411,101 +483,42 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
           <cylinderGeometry args={[0.055, 0.055, 22.8, 8]} />
           <meshBasicMaterial color="#f59e0b" />
         </mesh>
-        {/* Approach Ramps cleanly abutting bridge deck ends at x = ±11.5 without coplanar overlap */}
-        <mesh position={[-12.9, 0.46, 0]} castShadow={quality.shadows} receiveShadow={quality.shadows}>
+        <mesh position={[-12.9, 0.46, 0]} receiveShadow={quality.shadows} material={MAT_SLATE}>
           <boxGeometry args={[2.76, 0.44, 4.8]} />
-          <meshStandardMaterial color="#1e293b" roughness={0.48} metalness={0.5} />
         </mesh>
-        <mesh position={[12.9, 0.46, 0]} castShadow={quality.shadows} receiveShadow={quality.shadows}>
+        <mesh position={[12.9, 0.46, 0]} receiveShadow={quality.shadows} material={MAT_SLATE}>
           <boxGeometry args={[2.76, 0.44, 4.8]} />
-          <meshStandardMaterial color="#1e293b" roughness={0.48} metalness={0.5} />
         </mesh>
       </group>
 
       {/* NE Quadrant: Zen Raked Gravel Rings & Sculptural Monolith Stones */}
       <group position={[19, 0.275, -19]}>
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[5.5, 32]} />
-          <meshStandardMaterial
-            color="#1e293b"
-            roughness={0.85}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
+          <circleGeometry args={[5.5, 28]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.85} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
         </mesh>
         {[2.0, 3.4, 4.8].map((r, rIdx) => (
           <mesh key={rIdx} position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[r - 0.08, r, 32]} />
-            <meshBasicMaterial
-              color="#f59e0b"
-              transparent
-              opacity={0.45}
-              polygonOffset
-              polygonOffsetFactor={-3}
-              polygonOffsetUnits={-3}
-            />
+            <ringGeometry args={[r - 0.08, r, 28]} />
+            <meshBasicMaterial color="#f59e0b" transparent opacity={0.45} polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
           </mesh>
         ))}
-        <mesh position={[-1.2, 0.9, 0.5]} castShadow={quality.shadows}>
+        <mesh position={[-1.2, 0.9, 0.5]} material={MAT_SLATE}>
           <dodecahedronGeometry args={[1.1, 0]} />
-          <meshStandardMaterial color="#334155" roughness={0.75} metalness={0.2} />
         </mesh>
-        <mesh position={[1.4, 0.65, -0.8]} castShadow={quality.shadows}>
+        <mesh position={[1.4, 0.65, -0.8]} material={MAT_SLATE}>
           <dodecahedronGeometry args={[0.8, 0]} />
-          <meshStandardMaterial color="#475569" roughness={0.75} metalness={0.2} />
         </mesh>
       </group>
-
-      {/* SW Quadrant: Bioluminescent Bamboo Stalk Clusters */}
-      {quality.vegetationEnabled && (
-        <group position={[-19, 0.24, 19]}>
-          {(
-            [
-              [-2.2, -1.8, 6.2],
-              [-1.5, -2.4, 5.4],
-              [-2.8, -0.9, 5.8],
-              [1.8, 2.1, 6.5],
-              [2.5, 1.4, 5.6],
-              [1.2, 2.7, 5.9],
-              [-0.5, 1.6, 5.2],
-              [0.8, -1.5, 6.0],
-            ] as const
-          ).map(([bx, bz, bh], bIdx) => (
-            <group key={`bamboo-${bIdx}`} position={[bx, 0, bz]}>
-              <mesh position={[0, bh / 2, 0]} castShadow={quality.shadows}>
-                <cylinderGeometry args={[0.11, 0.14, bh, 8]} />
-                <meshStandardMaterial
-                  color="#10b981"
-                  emissive="#059669"
-                  emissiveIntensity={0.28}
-                  roughness={0.35}
-                />
-              </mesh>
-              <mesh position={[0, bh * 0.5, 0]}>
-                <cylinderGeometry args={[0.14, 0.14, 0.08, 8]} />
-                <meshBasicMaterial color="#34d399" />
-              </mesh>
-            </group>
-          ))}
-        </group>
-      )}
 
       {/* SE Quadrant: Meditation Sundial Terrace */}
       <group position={[19, 0.275, 19]}>
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[5.2, 32]} />
-          <meshStandardMaterial
-            color="#0f172a"
-            metalness={0.78}
-            roughness={0.3}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
+          <circleGeometry args={[5.2, 28]} />
+          <meshStandardMaterial color="#0f172a" metalness={0.78} roughness={0.3} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
         </mesh>
         <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[4.85, 5.1, 32]} />
+          <ringGeometry args={[4.85, 5.1, 28]} />
           <meshBasicMaterial color="#38bdf8" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
         </mesh>
         <mesh position={[0, 1.1, 0]} rotation={[0.4, 0.5, 0]}>
@@ -514,127 +527,8 @@ export const ParkSanctuary: React.FC<ParkSanctuaryProps> = ({ position = [75, 0,
         </mesh>
       </group>
 
-      {/* Sanctuary Lantern Bollards & Curved Viewing Benches */}
-      {quality.streetFurnitureEnabled && (
-        <>
-          {(
-            [
-              [-16, -6],
-              [16, -6],
-              [-16, 6],
-              [16, 6],
-              [-6, -18],
-              [6, -18],
-              [-6, 18],
-              [6, 18],
-              [-24, -4],
-              [24, -4],
-              [-24, 4],
-              [24, 4],
-            ] as const
-          ).map(([lx, lz], idx) => {
-            const lanternActive = streetLightsOn && quality.nightLightsEnabled;
-            return (
-              <group key={`lantern-${idx}`} position={[lx, 0.24, lz]}>
-                <mesh position={[0, 0.65, 0]}>
-                  <cylinderGeometry args={[0.12, 0.16, 1.3, 8]} />
-                  <meshStandardMaterial color="#0f172a" metalness={0.88} roughness={0.2} />
-                </mesh>
-                <mesh position={[0, 1.38, 0]}>
-                  <sphereGeometry args={[0.2, 8, 8]} />
-                  {lanternActive ? (
-                    <meshBasicMaterial color={idx % 3 === 0 ? '#10b981' : idx % 3 === 1 ? '#f59e0b' : '#38bdf8'} />
-                  ) : (
-                    <meshStandardMaterial color="#1e293b" metalness={0.65} roughness={0.4} />
-                  )}
-                </mesh>
-              </group>
-            );
-          })}
-
-          {(
-            [
-              [-18, -10, Math.PI / 4],
-              [18, -10, -Math.PI / 4],
-              [-18, 10, (3 * Math.PI) / 4],
-              [18, 10, -(3 * Math.PI) / 4],
-            ] as const
-          ).map(([bx, bz, rot], idx) => {
-            const benchLightActive = streetLightsOn && quality.nightLightsEnabled;
-            return (
-              <group key={`park-bench-${idx}`} position={[bx, 0.25, bz]} rotation={[0, rot, 0]}>
-                <mesh position={[0, 0.32, 0]} castShadow={quality.shadows}>
-                  <boxGeometry args={[2.6, 0.14, 0.7]} />
-                  <meshStandardMaterial color="#1e293b" metalness={0.75} roughness={0.32} />
-                </mesh>
-                <mesh position={[0, 0.62, -0.28]}>
-                  <boxGeometry args={[2.6, 0.45, 0.1]} />
-                  <meshStandardMaterial color="#0f172a" metalness={0.85} roughness={0.25} />
-                </mesh>
-                <mesh position={[0, 0.12, 0]}>
-                  <boxGeometry args={[2.2, 0.04, 0.45]} />
-                  {benchLightActive ? (
-                    <meshBasicMaterial color={idx % 2 === 0 ? '#10b981' : '#f59e0b'} />
-                  ) : (
-                    <meshStandardMaterial color="#1e293b" metalness={0.65} roughness={0.4} />
-                  )}
-                </mesh>
-              </group>
-            );
-          })}
-        </>
-      )}
-
-      {/* Multi-Layered Botanical Grove Trees (16 Sculpted Multi-Crown Trees) */}
-      {quality.vegetationEnabled && (
-        <group ref={foliageRef}>
-          {PARK_TREES.map((tree, idx) => (
-            <group key={idx} position={[tree.pos[0], 0.2, tree.pos[1]]}>
-              {/* Sculpted Trunk & Root Flare */}
-              <mesh position={[0, tree.height * 0.45, 0]} castShadow={quality.shadows}>
-                <cylinderGeometry args={[0.22, 0.44, tree.height * 0.9, 8]} />
-                <meshStandardMaterial color="#271e16" roughness={0.82} />
-              </mesh>
-              {/* Primary Canopy Crown */}
-              <mesh position={[0, tree.height, 0]} castShadow={quality.shadows}>
-                <dodecahedronGeometry args={[tree.crownRadius, 1]} />
-                <meshStandardMaterial
-                  color={tree.primaryColor}
-                  emissive={tree.emissiveColor}
-                  emissiveIntensity={0.26}
-                  roughness={0.48}
-                />
-              </mesh>
-              {/* Secondary Upper Blossom/Foliage Crown */}
-              <mesh
-                position={[tree.crownRadius * 0.35, tree.height + tree.crownRadius * 0.42, tree.crownRadius * 0.25]}
-                castShadow={quality.shadows}
-              >
-                <dodecahedronGeometry args={[tree.crownRadius * 0.72, 1]} />
-                <meshStandardMaterial
-                  color={tree.secondaryColor}
-                  emissive={tree.emissiveColor}
-                  emissiveIntensity={0.32}
-                  roughness={0.45}
-                />
-              </mesh>
-              {/* Lower Weeping Bough Cluster */}
-              <mesh
-                position={[-tree.crownRadius * 0.42, tree.height - tree.crownRadius * 0.25, -tree.crownRadius * 0.3]}
-                castShadow={quality.shadows}
-              >
-                <dodecahedronGeometry args={[tree.crownRadius * 0.65, 1]} />
-                <meshStandardMaterial
-                  color={tree.secondaryColor}
-                  emissive={tree.emissiveColor}
-                  emissiveIntensity={0.22}
-                  roughness={0.5}
-                />
-              </mesh>
-            </group>
-          ))}
-        </group>
-      )}
+      {/* Instanced Walls, Gates, Stepping Stones, Bamboo, Lanterns, Benches & 16 Multi-Crown Grove Trees */}
+      <InstancedBatchLayer buckets={batchedBuckets} specs={bucketSpecs} name="ParkSanctuaryStaticBatched" />
     </group>
   );
 };

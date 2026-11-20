@@ -29,14 +29,25 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
   const rightShinRef = useRef<THREE.Group>(null);
   const animTime = useRef(0);
 
-  const [weather, setWeather] = useState(() => WeatherSystem.getInstance().getState());
-  useEffect(() => WeatherSystem.getInstance().subscribe(setWeather), []);
+  const [wetnessBucket, setWetnessBucket] = useState(
+    () => Math.round(WeatherSystem.getInstance().getState().wetnessFactor * 10) / 10
+  );
+  useEffect(() => {
+    let lastBucket = Math.round(WeatherSystem.getInstance().getState().wetnessFactor * 10) / 10;
+    return WeatherSystem.getInstance().subscribe((w) => {
+      const next = Math.round(w.wetnessFactor * 10) / 10;
+      if (next !== lastBucket) {
+        lastBucket = next;
+        setWetnessBucket(next);
+      }
+    });
+  }, []);
 
   const windSystem = WindSystem.getInstance();
   const armorNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
   const armorNormalScale = useMemo(() => new THREE.Vector2(0.35, 0.35), []);
-  const roughness = THREE.MathUtils.lerp(0.24, 0.06, weather.wetnessFactor);
-  const metalness = THREE.MathUtils.lerp(0.84, 0.96, weather.wetnessFactor);
+  const roughness = THREE.MathUtils.lerp(0.24, 0.06, wetnessBucket);
+  const metalness = THREE.MathUtils.lerp(0.84, 0.96, wetnessBucket);
 
   useFrame((_, delta) => {
     if (!rootRef.current) return;
@@ -148,12 +159,12 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
           <meshBasicMaterial color="#f59e0b" />
         </mesh>
         {/* Left Hip Utility Pouch & Right Hip Data-Blade Scabbard */}
-        <mesh position={[-0.21, 0.04, 0.02]} castShadow>
+        <mesh position={[-0.21, 0.04, 0.02]}>
           <boxGeometry args={[0.05, 0.11, 0.12]} />
           <meshStandardMaterial color="#0f172a" metalness={0.85} roughness={0.3} />
         </mesh>
         <group position={[0.21, 0.02, -0.02]} rotation={[0.45, 0, 0.1]}>
-          <mesh castShadow>
+          <mesh>
             <boxGeometry args={[0.035, 0.38, 0.065]} />
             <meshStandardMaterial color="#111827" metalness={0.92} roughness={0.2} />
           </mesh>
@@ -165,11 +176,11 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
 
         {/* Dynamic Articulated Split Cyber-Trench Coat Tail */}
         <group ref={coatTailRef} position={[0, 0.05, -0.12]}>
-          <mesh position={[-0.095, -0.22, -0.02]} rotation={[0, 0, 0.08]} castShadow>
+          <mesh position={[-0.095, -0.22, -0.02]} rotation={[0, 0, 0.08]}>
             <boxGeometry args={[0.16, 0.42, 0.025]} />
             <meshStandardMaterial color="#0b1120" metalness={0.65} roughness={0.42} />
           </mesh>
-          <mesh position={[0.095, -0.22, -0.02]} rotation={[0, 0, -0.08]} castShadow>
+          <mesh position={[0.095, -0.22, -0.02]} rotation={[0, 0, -0.08]}>
             <boxGeometry args={[0.16, 0.42, 0.025]} />
             <meshStandardMaterial color="#0b1120" metalness={0.65} roughness={0.42} />
           </mesh>
@@ -198,11 +209,11 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
             />
           </mesh>
           {/* Sculpted Left/Right Pectoral Armor Plates */}
-          <mesh position={[-0.1, 0.08, 0.13]} rotation={[0, 0.12, 0]} castShadow>
+          <mesh position={[-0.1, 0.08, 0.13]} rotation={[0, 0.12, 0]}>
             <boxGeometry args={[0.17, 0.16, 0.03]} />
             <meshStandardMaterial color="#1e293b" metalness={0.92} roughness={0.18} />
           </mesh>
-          <mesh position={[0.1, 0.08, 0.13]} rotation={[0, -0.12, 0]} castShadow>
+          <mesh position={[0.1, 0.08, 0.13]} rotation={[0, -0.12, 0]}>
             <boxGeometry args={[0.17, 0.16, 0.03]} />
             <meshStandardMaterial color="#1e293b" metalness={0.92} roughness={0.18} />
           </mesh>
@@ -216,7 +227,7 @@ export const ProceduralProtagonist: React.FC<ProceduralProtagonistProps> = ({ st
             <meshBasicMaterial color="#38bdf8" />
           </mesh>
           {/* High Armored Cyber-Collar */}
-          <mesh position={[0, 0.23, -0.02]} castShadow>
+          <mesh position={[0, 0.23, -0.02]}>
             <cylinderGeometry args={[0.14, 0.16, 0.09, 12, 1, true, Math.PI * 0.25, Math.PI * 1.5]} />
             <meshStandardMaterial color="#0b1120" metalness={0.9} roughness={0.22} side={THREE.DoubleSide} />
           </mesh>

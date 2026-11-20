@@ -29,16 +29,20 @@ function getChannelPool(channel: 1 | 2 | 3): ChannelPoolEntry {
   let entry = channelPool.get(channel);
   if (!entry) {
     const c = document.createElement('canvas');
-    c.width = 512;
-    c.height = 320;
+    c.width = 320;
+    c.height = 200;
     const tex = new THREE.CanvasTexture(c);
     tex.minFilter = THREE.LinearFilter;
     tex.magFilter = THREE.LinearFilter;
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.generateMipmaps = false;
+    const ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.scale(320 / 512, 200 / 320);
+    }
     entry = {
       canvas: c,
-      ctx: c.getContext('2d'),
+      ctx,
       texture: tex,
       lastDraw: -1,
       ticker: 0,
@@ -96,15 +100,15 @@ export const CyberVideoBillboard: React.FC<CyberVideoBillboardProps> = React.mem
     if (dx * dx + dy * dy + dz * dz > 210 * 210) return;
 
     const time = clock.getElapsedTime();
-    // Deduplicate canvas redraw across all billboards sharing the same channel (10 FPS update rate)
-    if (time - poolEntry.lastDraw < 0.1) return;
+    // Deduplicate canvas redraw across all billboards sharing the same channel (5 FPS update rate)
+    if (time - poolEntry.lastDraw < 0.2) return;
     poolEntry.lastDraw = time;
 
     const ctx = poolEntry.ctx;
     if (!ctx) return;
 
-    const w = poolEntry.canvas.width;
-    const h = poolEntry.canvas.height;
+    const w = 512;
+    const h = 320;
     const weather = weatherRef.current;
     const emergency = emergencyRef.current;
     const cityEvent = eventRef.current;
