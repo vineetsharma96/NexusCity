@@ -4,6 +4,36 @@ import { useFrame } from '@react-three/fiber';
 import { VehicleInteractionSystem } from './VehicleInteractionSystem';
 import { QualityManager } from '../rendering/QualityManager';
 import { TimeSystem } from '../world/TimeSystem';
+import {
+  createAirfoilWingGeometry,
+  createAlloySpokeGeometry,
+  createAPillarGeometry,
+  createBrakeCaliperGeometry,
+  createBucketSeatGeometry,
+  createCanardWingletGeometry,
+  createDiffuserFinGeometry,
+  createEngineLouverGeometry,
+  createExhaustNozzleGeometry,
+  createFlyingButtressGeometry,
+  createForgedRimBarrelGeometry,
+  createFrontAccentLightGeometry,
+  createFrontHeadlightGeometry,
+  createFrontSplitterGeometry,
+  createKineticRailGeometry,
+  createMirrorStalkGeometry,
+  createRearDiffuserGeometry,
+  createRearTaillightBladeGeometry,
+  createReverseLightGeometry,
+  createRoofSpineGeometry,
+  createSculptedHypercarBodyGeometry,
+  createSculptedTireGeometry,
+  createSideSillLightGeometry,
+  createSideSkirtGeometry,
+  createSteeringYokeGeometry,
+  createSwanNeckPylonGeometry,
+  createTeardropCanopyGeometry,
+  createWingEndplateGeometry,
+} from './ExperimentalCarGeometry';
 
 const CAR_ID = 'vx-01-experimental';
 const CAR_LABEL = 'VX-01 Apex Prototype';
@@ -39,102 +69,192 @@ export const ExperimentalCar: React.FC = () => {
   const steeringYokeRef = useRef<THREE.Group>(null);
   const rearWingBladeRef = useRef<THREE.Group>(null);
 
-  const headLightMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const headLightLeftMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const headLightRightMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const brakeLightMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const reverseLightMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const exhaustGlowMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const coreRailMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const reverseLightLeftMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const reverseLightRightMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const exhaustGlowLeftMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const exhaustGlowRightMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const coreRailLeftMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const coreRailRightMatRef = useRef<THREE.MeshBasicMaterial>(null);
 
   const system = VehicleInteractionSystem.getInstance();
   const shadows = QualityManager.current.shadows;
 
-  // Shared procedural geometries for 4 articulated wheels & sculpted body details
-  const wheelGeos = useMemo(() => {
-    const tire = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, WHEEL_WIDTH, 24);
-    tire.rotateZ(Math.PI / 2);
+  // Sculpted, compound-curved procedural hypercar & wheel geometries (zero blocky cubes)
+  const geos = useMemo(() => {
+    const bodyMonocoque = createSculptedHypercarBodyGeometry();
+    const canopyGlass = createTeardropCanopyGeometry();
+    const frontSplitter = createFrontSplitterGeometry();
+    const canardWinglet = createCanardWingletGeometry();
+    const sideSkirt = createSideSkirtGeometry();
+    const wingAirfoil = createAirfoilWingGeometry(2.02);
+    const wingEndplate = createWingEndplateGeometry();
+    const wingPylon = createSwanNeckPylonGeometry();
+    const rearDiffuser = createRearDiffuserGeometry();
+    const diffuserFin = createDiffuserFinGeometry();
+    const buttressLeft = createFlyingButtressGeometry(1);
+    const buttressRight = createFlyingButtressGeometry(-1);
+    const aPillarLeft = createAPillarGeometry(1);
+    const aPillarRight = createAPillarGeometry(-1);
+    const roofSpine = createRoofSpineGeometry();
+    const headlightLeft = createFrontHeadlightGeometry(1);
+    const headlightRight = createFrontHeadlightGeometry(-1);
+    const frontAccentLight = createFrontAccentLightGeometry();
+    const rearTaillight = createRearTaillightBladeGeometry();
+    const reverseLightLeft = createReverseLightGeometry(1);
+    const reverseLightRight = createReverseLightGeometry(-1);
+    const mirrorStalkLeft = createMirrorStalkGeometry(1);
+    const mirrorStalkRight = createMirrorStalkGeometry(-1);
+    const mirrorPod = new THREE.SphereGeometry(0.068, 16, 12);
+    mirrorPod.scale(1.25, 0.58, 1.6);
 
-    const rimBarrel = new THREE.CylinderGeometry(0.245, 0.245, WHEEL_WIDTH + 0.014, 18);
-    rimBarrel.rotateZ(Math.PI / 2);
+    const engineLouver = createEngineLouverGeometry();
+    const kineticRailLeft = createKineticRailGeometry(1);
+    const kineticRailRight = createKineticRailGeometry(-1);
+    const sideSillLightLeft = createSideSillLightGeometry(1);
+    const sideSillLightRight = createSideSillLightGeometry(-1);
+    const bucketSeat = createBucketSeatGeometry();
+    const steeringYoke = createSteeringYokeGeometry();
+    const exhaustNozzle = createExhaustNozzleGeometry();
 
-    const rimLip = new THREE.TorusGeometry(0.245, 0.018, 8, 22);
+    // Sculpted wheel & brake assemblies
+    const tire = createSculptedTireGeometry(WHEEL_RADIUS, WHEEL_WIDTH);
+    const rimBarrel = createForgedRimBarrelGeometry(WHEEL_RADIUS, WHEEL_WIDTH);
+    const rimLip = new THREE.TorusGeometry(0.246, 0.015, 10, 28);
     rimLip.rotateY(Math.PI / 2);
-
-    const tireBeadRing = new THREE.TorusGeometry(0.325, 0.022, 8, 22);
+    const tireBeadRing = new THREE.TorusGeometry(0.322, 0.018, 10, 28);
     tireBeadRing.rotateY(Math.PI / 2);
-
-    const hubCore = new THREE.CylinderGeometry(0.068, 0.074, WHEEL_WIDTH + 0.032, 12);
+    const hubCore = new THREE.CylinderGeometry(0.066, 0.072, WHEEL_WIDTH + 0.026, 16);
     hubCore.rotateZ(Math.PI / 2);
-
-    const spoke = new THREE.BoxGeometry(0.032, 0.22, 0.044);
-    const treadTick = new THREE.BoxGeometry(WHEEL_WIDTH + 0.008, 0.024, 0.035);
-
-    const brakeDisc = new THREE.CylinderGeometry(0.195, 0.195, 0.036, 18);
+    const spoke = createAlloySpokeGeometry();
+    const treadLug = new THREE.CapsuleGeometry(0.011, WHEEL_WIDTH * 0.72, 4, 8);
+    treadLug.rotateZ(Math.PI / 2);
+    const brakeDisc = new THREE.CylinderGeometry(0.195, 0.195, 0.032, 24);
     brakeDisc.rotateZ(Math.PI / 2);
+    const caliper = createBrakeCaliperGeometry();
 
-    const caliper = new THREE.BoxGeometry(0.085, 0.14, 0.09);
+    // Curved cockpit dashboard cowl
+    const dashCowl = new THREE.CylinderGeometry(0.09, 0.11, 1.18, 16, 1, false, 0, Math.PI);
+    dashCowl.rotateZ(Math.PI / 2);
+    dashCowl.scale(1, 0.72, 1.35);
 
-    return { tire, rimBarrel, rimLip, tireBeadRing, hubCore, spoke, treadTick, brakeDisc, caliper };
+    return {
+      bodyMonocoque,
+      canopyGlass,
+      frontSplitter,
+      canardWinglet,
+      sideSkirt,
+      wingAirfoil,
+      wingEndplate,
+      wingPylon,
+      rearDiffuser,
+      diffuserFin,
+      buttressLeft,
+      buttressRight,
+      aPillarLeft,
+      aPillarRight,
+      roofSpine,
+      headlightLeft,
+      headlightRight,
+      frontAccentLight,
+      rearTaillight,
+      reverseLightLeft,
+      reverseLightRight,
+      mirrorStalkLeft,
+      mirrorStalkRight,
+      mirrorPod,
+      engineLouver,
+      kineticRailLeft,
+      kineticRailRight,
+      sideSillLightLeft,
+      sideSillLightRight,
+      bucketSeat,
+      steeringYoke,
+      exhaustNozzle,
+      tire,
+      rimBarrel,
+      rimLip,
+      tireBeadRing,
+      hubCore,
+      spoke,
+      treadLug,
+      brakeDisc,
+      caliper,
+      dashCowl,
+    };
   }, []);
 
-  // Shared sculpted carbon/metallic/glass/rubber PBR materials with wide roughness contrast
+  // Automotive clearcoat metallic paint, satin carbon, obsidian glass & matte tire PBR materials
   const mats = useMemo(() => {
-    const bodyPaint = new THREE.MeshStandardMaterial({
-      color: '#e2e8f0',
-      metalness: 0.88,
-      roughness: 0.16,
+    const bodyPaint = new THREE.MeshPhysicalMaterial({
+      color: '#dce4ef',
+      metalness: 0.82,
+      roughness: 0.17,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.06,
     });
-    const bodySecondary = new THREE.MeshStandardMaterial({
-      color: '#0f172a',
-      metalness: 0.86,
-      roughness: 0.24,
+    const bodySecondary = new THREE.MeshPhysicalMaterial({
+      color: '#0e1627',
+      metalness: 0.78,
+      roughness: 0.22,
+      clearcoat: 0.85,
+      clearcoatRoughness: 0.1,
     });
-    const forgedCarbon = new THREE.MeshStandardMaterial({
-      color: '#181e29',
-      metalness: 0.28,
-      roughness: 0.56,
+    const forgedCarbon = new THREE.MeshPhysicalMaterial({
+      color: '#171d27',
+      metalness: 0.26,
+      roughness: 0.48,
+      clearcoat: 0.45,
+      clearcoatRoughness: 0.24,
     });
     const brushedTitanium = new THREE.MeshStandardMaterial({
-      color: '#94a3b8',
+      color: '#9fb0c5',
       metalness: 0.94,
-      roughness: 0.26,
+      roughness: 0.24,
     });
     const alloyRim = new THREE.MeshStandardMaterial({
-      color: '#cbd5e1',
+      color: '#d8e1ec',
       metalness: 0.95,
-      roughness: 0.18,
+      roughness: 0.16,
     });
     const tireRubber = new THREE.MeshStandardMaterial({
       color: '#11141a',
-      metalness: 0.06,
-      roughness: 0.86,
+      metalness: 0.05,
+      roughness: 0.88,
     });
     const tireWallAccent = new THREE.MeshStandardMaterial({
-      color: '#252c38',
-      metalness: 0.12,
-      roughness: 0.72,
+      color: '#232a36',
+      metalness: 0.1,
+      roughness: 0.74,
     });
     const brakeRotor = new THREE.MeshStandardMaterial({
       color: '#64748b',
       metalness: 0.88,
       roughness: 0.34,
     });
-    const brakeCaliper = new THREE.MeshStandardMaterial({
+    const brakeCaliper = new THREE.MeshPhysicalMaterial({
       color: '#ef4444',
-      metalness: 0.65,
-      roughness: 0.28,
+      metalness: 0.55,
+      roughness: 0.24,
+      clearcoat: 0.9,
+      clearcoatRoughness: 0.12,
     });
-    const canopyGlass = new THREE.MeshStandardMaterial({
-      color: '#09111f',
-      metalness: 0.96,
-      roughness: 0.06,
+    const canopyGlass = new THREE.MeshPhysicalMaterial({
+      color: '#07101f',
+      metalness: 0.86,
+      roughness: 0.05,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.03,
       transparent: true,
-      opacity: 0.68,
+      opacity: 0.62,
       depthWrite: false,
     });
     const interiorLeather = new THREE.MeshStandardMaterial({
-      color: '#1e293b',
-      metalness: 0.15,
-      roughness: 0.68,
+      color: '#1d2638',
+      metalness: 0.12,
+      roughness: 0.72,
     });
 
     return {
@@ -152,13 +272,13 @@ export const ExperimentalCar: React.FC = () => {
     };
   }, []);
 
-  // Dispose procedural resources on unmount
+  // Dispose all procedural GPU geometries and PBR materials cleanly on unmount
   useEffect(() => {
     return () => {
-      Object.values(wheelGeos).forEach((g) => g.dispose());
+      Object.values(geos).forEach((g) => g.dispose());
       Object.values(mats).forEach((m) => m.dispose());
     };
-  }, [wheelGeos, mats]);
+  }, [geos, mats]);
 
   // Register controllable experimental wheeled car with VehicleInteractionSystem and set initial transform once
   useEffect(() => {
@@ -181,7 +301,7 @@ export const ExperimentalCar: React.FC = () => {
 
   const smoothPitchRef = useRef(0);
   const smoothRollRef = useRef(0);
-  const smoothWingRef = useRef(0.08);
+  const smoothWingRef = useRef(-0.08);
   const parkedSpinRef = useRef(0);
 
   useFrame(({ clock }, delta) => {
@@ -204,7 +324,7 @@ export const ExperimentalCar: React.FC = () => {
       parkedSpinRef.current = telemetry.wheelSpinRad;
     }
 
-    // Ackermann steering angle (inner wheel turns slightly sharper than outer wheel)
+    // Ackermann front steering (inner wheel turns sharper than outer wheel)
     const innerBias = 1.12;
     const outerBias = 0.92;
     const leftSteer = steerAngle > 0 ? steerAngle * innerBias : steerAngle * outerBias;
@@ -213,7 +333,7 @@ export const ExperimentalCar: React.FC = () => {
     if (frontLeftSteerRef.current) frontLeftSteerRef.current.rotation.y = leftSteer;
     if (frontRightSteerRef.current) frontRightSteerRef.current.rotation.y = rightSteer;
 
-    // Spin all 4 wheels forward (+) or backward (-) proportional to true ground distance
+    // Spin all 4 wheels forward (+) or backward (-) proportional to ground displacement
     for (let i = 0; i < 4; i++) {
       const spinGroup = wheelSpinRefs.current[i];
       if (spinGroup) {
@@ -221,12 +341,12 @@ export const ExperimentalCar: React.FC = () => {
       }
     }
 
-    // Cockpit steering yoke follows steering input
+    // Articulated cockpit steering yoke rotates smoothly with steering input
     if (steeringYokeRef.current) {
       steeringYokeRef.current.rotation.z = -steerAngle * 2.35;
     }
 
-    // Dynamic chassis suspension pitch (squat back on accel, nose-dive on braking) and cornering body roll
+    // Dynamic chassis suspension pitch (accel squat / brake dive) and cornering roll
     const targetPitch = telemetry ? THREE.MathUtils.clamp(-telemetry.longitudinalAccelG * 0.022, -0.055, 0.055) : 0;
     const targetRoll = telemetry ? THREE.MathUtils.clamp(telemetry.lateralAccelG * 0.032, -0.06, 0.06) : 0;
     const suspDamp = 1 - Math.exp(-10 * dt);
@@ -234,16 +354,16 @@ export const ExperimentalCar: React.FC = () => {
     smoothRollRef.current = THREE.MathUtils.lerp(smoothRollRef.current, targetRoll, suspDamp);
 
     if (chassisRef.current) {
-      const engineIdleVib = isActive ? Math.sin(t * 28) * 0.002 : 0;
+      const engineIdleVib = isActive ? Math.sin(t * 28) * 0.0018 : 0;
       chassisRef.current.rotation.x = smoothPitchRef.current;
       chassisRef.current.rotation.z = smoothRollRef.current;
       chassisRef.current.position.y = engineIdleVib;
     }
 
-    // Active GT Aero Wing: deploys upward as an airbrake under braking, trims flat during boost
+    // Active swan-neck airfoil wing: deploys as airbrake on braking, flattens during boost
     const targetWingTilt = telemetry
       ? telemetry.isBraking && telemetry.speedMs > 2.5
-        ? -0.46
+        ? -0.44
         : telemetry.isBoosting
         ? 0.02
         : -0.08 - Math.min(0.12, telemetry.speedMs * 0.003)
@@ -253,11 +373,14 @@ export const ExperimentalCar: React.FC = () => {
       rearWingBladeRef.current.rotation.x = smoothWingRef.current;
     }
 
-    // Dynamic HDR Lighting (headlights, brake light bar, reverse lamps, exhaust flare)
+    // Dynamic HDR Lighting (curved laser headlamps, full-width brake blade, reverse lamps, exhaust flare)
     const nightFactor = TimeSystem.getInstance().getState().nightFactor;
     const headGain = 1.25 + nightFactor * 1.9 + (isActive ? 0.35 : 0);
-    if (headLightMatRef.current) {
-      headLightMatRef.current.color.set('#f0f9ff').multiplyScalar(headGain);
+    if (headLightLeftMatRef.current) {
+      headLightLeftMatRef.current.color.set('#f0f9ff').multiplyScalar(headGain);
+    }
+    if (headLightRightMatRef.current) {
+      headLightRightMatRef.current.color.set('#f0f9ff').multiplyScalar(headGain);
     }
 
     const isBraking = telemetry?.isBraking ?? false;
@@ -269,93 +392,96 @@ export const ExperimentalCar: React.FC = () => {
       brakeLightMatRef.current.color.set('#f43f5e').multiplyScalar(brakeGain);
     }
 
-    if (reverseLightMatRef.current) {
-      if (isReversing) {
-        reverseLightMatRef.current.color.set('#ffffff').multiplyScalar(2.9 + nightFactor * 0.8);
-      } else {
-        reverseLightMatRef.current.color.set('#1e293b');
-      }
+    const revColor = isReversing ? '#ffffff' : '#1e293b';
+    const revScale = isReversing ? 2.9 + nightFactor * 0.8 : 1.0;
+    if (reverseLightLeftMatRef.current) {
+      reverseLightLeftMatRef.current.color.set(revColor).multiplyScalar(revScale);
+    }
+    if (reverseLightRightMatRef.current) {
+      reverseLightRightMatRef.current.color.set(revColor).multiplyScalar(revScale);
     }
 
-    if (exhaustGlowMatRef.current) {
-      const throttleGlow = isBoosting
-        ? 3.6 + Math.sin(t * 40) * 0.4
-        : telemetry && telemetry.longitudinalAccelG > 0.25
-        ? 1.9
-        : 0.45;
-      exhaustGlowMatRef.current.color
-        .set(isBoosting ? '#38bdf8' : '#f59e0b')
-        .multiplyScalar(throttleGlow);
+    const throttleGlow = isBoosting
+      ? 3.6 + Math.sin(t * 40) * 0.4
+      : telemetry && telemetry.longitudinalAccelG > 0.25
+      ? 1.9
+      : 0.45;
+    const exhaustHex = isBoosting ? '#38bdf8' : '#f59e0b';
+    if (exhaustGlowLeftMatRef.current) {
+      exhaustGlowLeftMatRef.current.color.set(exhaustHex).multiplyScalar(throttleGlow);
+    }
+    if (exhaustGlowRightMatRef.current) {
+      exhaustGlowRightMatRef.current.color.set(exhaustHex).multiplyScalar(throttleGlow);
     }
 
-    if (coreRailMatRef.current) {
-      const pulse = 1.25 + Math.sin(t * (isBoosting ? 12 : 3.2)) * 0.25 + (isBoosting ? 1.4 : 0);
-      coreRailMatRef.current.color.set(isReversing ? '#f8fafc' : '#38bdf8').multiplyScalar(pulse);
+    const railPulse = 1.25 + Math.sin(t * (isBoosting ? 12 : 3.2)) * 0.25 + (isBoosting ? 1.4 : 0);
+    const railHex = isReversing ? '#f8fafc' : '#38bdf8';
+    if (coreRailLeftMatRef.current) {
+      coreRailLeftMatRef.current.color.set(railHex).multiplyScalar(railPulse);
+    }
+    if (coreRailRightMatRef.current) {
+      coreRailRightMatRef.current.color.set(railHex).multiplyScalar(railPulse);
     }
   }, -1);
 
   return (
     <group ref={rootRef} name="ExperimentalCar_VX01">
-      {/* ==================== 4 ARTICULATED MOVING WHEELS ==================== */}
+      {/* ==================== 4 ARTICULATED SCULPTED WHEELS ==================== */}
       {WHEEL_MOUNTS.map((w, idx) => {
         const steerRef = w.key === 'FL' ? frontLeftSteerRef : w.key === 'FR' ? frontRightSteerRef : undefined;
         const outerSign = w.isLeft ? 1 : -1;
         return (
           <group key={w.key} position={[w.x, WHEEL_RADIUS, w.z]}>
-            {/* Steering Knuckle Pivot (front wheels steer cleanly left/right; rear wheels stay aligned) */}
+            {/* Steering Knuckle Pivot */}
             <group ref={steerRef}>
-              {/* Stationary Ventilated Brake Rotor & Crimson 6-Piston Brake Caliper */}
-              <mesh position={[-outerSign * 0.04, 0, 0]} geometry={wheelGeos.brakeDisc} material={mats.brakeRotor} />
+              {/* Ventilated Brake Rotor & Curved Crimson 6-Piston Brake Caliper */}
+              <mesh position={[-outerSign * 0.04, 0, 0]} geometry={geos.brakeDisc} material={mats.brakeRotor} />
               <mesh
-                position={[-outerSign * 0.03, 0.04, w.isFront ? -0.14 : 0.14]}
-                geometry={wheelGeos.caliper}
+                position={[-outerSign * 0.03, 0, 0]}
+                rotation={[w.isFront ? Math.PI : 0, 0, 0]}
+                geometry={geos.caliper}
                 material={mats.brakeCaliper}
               />
 
-              {/* Spinning Tire & 5-Spoke Alloy Rim Assembly (rotates around X forward/backward!) */}
+              {/* Spinning Sculpted Tire & Forged 5-Spoke Alloy Wheel */}
               <group
                 ref={(el) => {
                   wheelSpinRefs.current[idx] = el;
                 }}
               >
-                {/* Wide Performance Rubber Tire */}
-                <mesh geometry={wheelGeos.tire} material={mats.tireRubber} castShadow={shadows} />
-                {/* Sidewall Bead Ring */}
+                <mesh geometry={geos.tire} material={mats.tireRubber} castShadow={shadows} />
                 <mesh
-                  position={[outerSign * (WHEEL_WIDTH * 0.48), 0, 0]}
-                  geometry={wheelGeos.tireBeadRing}
+                  position={[outerSign * (WHEEL_WIDTH * 0.46), 0, 0]}
+                  geometry={geos.tireBeadRing}
                   material={mats.tireWallAccent}
                 />
-                {/* Recessed Brushed Alloy Rim Barrel & Outer Rim Lip */}
-                <mesh geometry={wheelGeos.rimBarrel} material={mats.bodySecondary} />
+                <mesh geometry={geos.rimBarrel} material={mats.bodySecondary} />
                 <mesh
-                  position={[outerSign * (WHEEL_WIDTH * 0.49), 0, 0]}
-                  geometry={wheelGeos.rimLip}
+                  position={[outerSign * (WHEEL_WIDTH * 0.48), 0, 0]}
+                  geometry={geos.rimLip}
                   material={mats.alloyRim}
                 />
-                {/* Center-Lock Hub */}
-                <mesh geometry={wheelGeos.hubCore} material={mats.brushedTitanium} />
-                <mesh position={[outerSign * (WHEEL_WIDTH * 0.54), 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.038, 0.038, 0.025, 6]} />
+                <mesh geometry={geos.hubCore} material={mats.brushedTitanium} />
+                <mesh position={[outerSign * (WHEEL_WIDTH * 0.53), 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[0.038, 0.038, 0.024, 6]} />
                   <meshBasicMaterial color="#38bdf8" />
                 </mesh>
 
-                {/* 5 Distinct Radial Alloy Spokes + Tire Shoulder Ticks (makes forward/reverse spin unmistakable) */}
+                {/* 5 Tapered Beveled Alloy Spokes + Smooth Capsule Shoulder Lugs */}
                 {SPOKE_ANGLES.map((angle, sIdx) => {
                   const sinA = Math.sin(angle);
                   const cosA = Math.cos(angle);
                   return (
                     <React.Fragment key={sIdx}>
                       <mesh
-                        position={[outerSign * (WHEEL_WIDTH * 0.43), cosA * 0.125, sinA * 0.125]}
+                        position={[outerSign * (WHEEL_WIDTH * 0.36), 0, 0]}
                         rotation={[angle, 0, 0]}
-                        geometry={wheelGeos.spoke}
+                        geometry={geos.spoke}
                         material={mats.alloyRim}
                       />
                       <mesh
-                        position={[0, cosA * (WHEEL_RADIUS - 0.008), sinA * (WHEEL_RADIUS - 0.008)]}
-                        rotation={[angle, 0, 0]}
-                        geometry={wheelGeos.treadTick}
+                        position={[0, cosA * (WHEEL_RADIUS - 0.005), sinA * (WHEEL_RADIUS - 0.005)]}
+                        geometry={geos.treadLug}
                         material={mats.tireWallAccent}
                       />
                     </React.Fragment>
@@ -367,235 +493,101 @@ export const ExperimentalCar: React.FC = () => {
         );
       })}
 
-      {/* ==================== SUSPENDED COMPOSITE CHASSIS BODY ==================== */}
+      {/* ==================== SMOOTH SCULPTED HYPERCAR MONOCOQUE CHASSIS ==================== */}
       <group ref={chassisRef}>
-        {/* 1. Carbon Undertray Floorpan (narrowed at front/rear axles for full wheel-turn clearance) & Side Skirts */}
-        <mesh position={[0, 0.21, 0]} material={mats.forgedCarbon} castShadow={shadows}>
-          <boxGeometry args={[1.66, 0.11, 1.92]} />
-        </mesh>
-        <mesh position={[0, 0.21, 1.56]} material={mats.forgedCarbon} castShadow={shadows}>
-          <boxGeometry args={[1.14, 0.11, 1.32]} />
-        </mesh>
-        <mesh position={[0, 0.21, -1.56]} material={mats.forgedCarbon} castShadow={shadows}>
-          <boxGeometry args={[1.2, 0.11, 1.32]} />
-        </mesh>
-        {([-0.99, 0.99] as const).map((sx, idx) => (
-          <group key={`skirt-${idx}`} position={[sx, 0.24, 0]}>
-            {/* Sculpted Carbon Side Skirt Blade */}
-            <mesh material={mats.forgedCarbon} castShadow={shadows}>
-              <boxGeometry args={[0.2, 0.14, 1.82]} />
-            </mesh>
-            {/* Lower Body Door Sill & Side Intake Scoop */}
-            <mesh position={[sx > 0 ? -0.05 : 0.05, 0.24, -0.02]} material={mats.bodyPaint} castShadow={shadows}>
-              <boxGeometry args={[0.24, 0.36, 1.76]} />
-            </mesh>
-            {/* Dark Recessed Mid-Engine Side Air Intake Vent */}
-            <mesh position={[sx > 0 ? 0.06 : -0.06, 0.28, -0.54]} material={mats.bodySecondary}>
-              <boxGeometry args={[0.09, 0.26, 0.58]} />
-            </mesh>
-            {/* Side Sill Cyan Aero Accent Strip */}
-            <mesh position={[sx > 0 ? 0.105 : -0.105, -0.02, 0]}>
-              <boxGeometry args={[0.015, 0.025, 1.72]} />
-              <meshBasicMaterial color="#38bdf8" />
-            </mesh>
-          </group>
-        ))}
+        {/* 1. Primary Compound-Curved Lofted Monocoque Body Shell (Clearcoat Silver-Pearl) */}
+        <mesh
+          geometry={geos.bodyMonocoque}
+          material={mats.bodyPaint}
+          castShadow={shadows}
+          receiveShadow
+        />
 
-        {/* 2. Central Monocoque Tub (full-width cabin + narrow front/rear wheel-well bulkheads so turned tires never clip) */}
-        <mesh position={[0, 0.44, 0]} material={mats.bodyPaint} castShadow={shadows} receiveShadow>
-          <boxGeometry args={[1.56, 0.38, 1.88]} />
-        </mesh>
-        <mesh position={[0, 0.44, 1.48]} material={mats.bodyPaint} castShadow={shadows}>
-          <boxGeometry args={[1.14, 0.36, 1.16]} />
-        </mesh>
-        <mesh position={[0, 0.44, -1.5]} material={mats.bodyPaint} castShadow={shadows}>
-          <boxGeometry args={[1.22, 0.36, 1.2]} />
+        {/* 2. Panoramic Compound-Curved Teardrop Glass Canopy, A-Pillars & Dorsal Roof Intake */}
+        <mesh geometry={geos.canopyGlass} material={mats.canopyGlass} renderOrder={2} />
+        <mesh geometry={geos.aPillarLeft} material={mats.bodySecondary} />
+        <mesh geometry={geos.aPillarRight} material={mats.bodySecondary} />
+        <mesh geometry={geos.roofSpine} material={mats.forgedCarbon} castShadow={shadows} />
+
+        {/* 3. Sculpted Swept Flying Aero Buttresses (C-Pillar to Muscular Rear Haunches) */}
+        <mesh geometry={geos.buttressLeft} material={mats.bodyPaint} castShadow={shadows} />
+        <mesh geometry={geos.buttressRight} material={mats.bodyPaint} castShadow={shadows} />
+
+        {/* 4. Teardrop Aerodynamic Side Mirrors on Curved Stalks */}
+        <mesh geometry={geos.mirrorStalkLeft} material={mats.forgedCarbon} />
+        <mesh geometry={geos.mirrorStalkRight} material={mats.forgedCarbon} />
+        <mesh position={[0.99, 0.84, 0.59]} rotation={[0, -0.18, 0]} geometry={geos.mirrorPod} material={mats.brushedTitanium} />
+        <mesh position={[-0.99, 0.84, 0.59]} rotation={[0, 0.18, 0]} geometry={geos.mirrorPod} material={mats.brushedTitanium} />
+
+        {/* 5. Curved Carbon Crescent Front Aero Splitter, Canards & Accent Light Bar */}
+        <mesh position={[0, 0.215, 0]} geometry={geos.frontSplitter} material={mats.forgedCarbon} castShadow={shadows} />
+        <mesh position={[0.98, 0.29, 2.08]} rotation={[0, 0.14, 0]} geometry={geos.canardWinglet} material={mats.forgedCarbon} />
+        <mesh position={[-0.98, 0.29, 2.08]} rotation={[0, -0.14, 0]} geometry={geos.canardWinglet} material={mats.forgedCarbon} />
+        <mesh geometry={geos.frontAccentLight}>
+          <meshBasicMaterial color="#38bdf8" toneMapped={false} />
         </mesh>
 
-        {/* 3. Sculpted Wedge Front Hood, Aero Nose & Front Splitter */}
-        <mesh position={[0, 0.62, 1.48]} rotation={[0.14, 0, 0]} material={mats.bodyPaint} castShadow={shadows}>
-          <boxGeometry args={[1.38, 0.16, 1.42]} />
+        {/* 6. Contoured Carbon Side Skirts & Curved Cyan Sill Light Pipes */}
+        <mesh position={[0.92, 0.22, 0]} geometry={geos.sideSkirt} material={mats.forgedCarbon} castShadow={shadows} />
+        <mesh position={[-0.92, 0.22, 0]} geometry={geos.sideSkirt} material={mats.forgedCarbon} castShadow={shadows} />
+        <mesh geometry={geos.sideSillLightLeft}>
+          <meshBasicMaterial color="#38bdf8" />
         </mesh>
-        {/* Recessed Carbon Hood Aero Vent */}
-        <mesh position={[0, 0.68, 1.38]} rotation={[0.14, 0, 0]} material={mats.forgedCarbon}>
-          <boxGeometry args={[0.72, 0.07, 0.78]} />
-        </mesh>
-        {/* Front Nose Cone & Wide Carbon Splitter Lip */}
-        <mesh position={[0, 0.36, 2.2]} rotation={[0.12, 0, 0]} material={mats.bodySecondary} castShadow={shadows}>
-          <boxGeometry args={[1.88, 0.24, 0.36]} />
-        </mesh>
-        <mesh position={[0, 0.18, 2.34]} material={mats.forgedCarbon}>
-          <boxGeometry args={[2.06, 0.055, 0.34]} />
-        </mesh>
-        {/* Front Vertical Aero Dive-Plane Canards */}
-        {([-1.01, 1.01] as const).map((cx, idx) => (
-          <mesh key={`canard-${idx}`} position={[cx, 0.27, 2.24]} material={mats.forgedCarbon}>
-            <boxGeometry args={[0.04, 0.18, 0.28]} />
-          </mesh>
-        ))}
-        {/* Front Twin Radiator Grille Cavity & Cyan Fin */}
-        <mesh position={[0, 0.29, 2.37]} material={mats.forgedCarbon}>
-          <boxGeometry args={[1.54, 0.14, 0.06]} />
-        </mesh>
-        <mesh position={[0, 0.29, 2.39]}>
-          <boxGeometry args={[1.38, 0.025, 0.03]} />
+        <mesh geometry={geos.sideSillLightRight}>
           <meshBasicMaterial color="#38bdf8" />
         </mesh>
 
-        {/* 4. Flared Front & Rear Wheel-Arch Fenders (high & clear of full-lock wheel steering sweep) */}
-        {([-0.94, 0.94] as const).map((fx, fIdx) => (
-          <React.Fragment key={`fenders-${fIdx}`}>
-            {/* Front Flared Fender Arch Crown & Haunch */}
-            <mesh position={[fx, 0.78, 1.43]} material={mats.bodyPaint} castShadow={shadows}>
-              <boxGeometry args={[0.42, 0.11, 0.9]} />
-            </mesh>
-            <mesh position={[fx, 0.56, 2.04]} rotation={[0.28, 0, 0]} material={mats.bodyPaint}>
-              <boxGeometry args={[0.38, 0.22, 0.28]} />
-            </mesh>
-            <mesh position={[fx, 0.56, 0.84]} rotation={[-0.22, 0, 0]} material={mats.bodyPaint}>
-              <boxGeometry args={[0.38, 0.22, 0.24]} />
-            </mesh>
-
-            {/* Rear Wide-Body Flared Fender Arch & Buttress */}
-            <mesh position={[fx, 0.8, -1.43]} material={mats.bodyPaint} castShadow={shadows}>
-              <boxGeometry args={[0.44, 0.12, 0.96]} />
-            </mesh>
-            <mesh position={[fx, 0.58, -2.02]} rotation={[-0.25, 0, 0]} material={mats.bodyPaint}>
-              <boxGeometry args={[0.38, 0.28, 0.3]} />
-            </mesh>
-            {/* Sculpted Flying Aero Buttress Connecting Roof to Rear Fender */}
-            <mesh
-              position={[fx * 0.72, 0.9, -1.06]}
-              rotation={[-0.28, 0, fx > 0 ? 0.16 : -0.16]}
-              material={mats.bodyPaint}
-              castShadow={shadows}
-            >
-              <boxGeometry args={[0.16, 0.14, 1.24]} />
-            </mesh>
-          </React.Fragment>
-        ))}
-
-        {/* 5. Panoramic Teardrop Glass Canopy, Pillars & Roof Intake Scoop */}
-        {/* Sloped Windshield */}
-        <mesh position={[0, 0.88, 0.56]} rotation={[-0.95, 0, 0]} material={mats.canopyGlass}>
-          <boxGeometry args={[1.38, 0.94, 0.06]} />
-        </mesh>
-        {/* Main Tinted Glass Greenhouse Roof Dome */}
-        <mesh position={[0, 1.07, -0.22]} material={mats.canopyGlass}>
-          <boxGeometry args={[1.3, 0.24, 1.24]} />
-        </mesh>
-        {/* Carbon Center Roof Spine & Air Intake Scoop */}
-        <mesh position={[0, 1.19, -0.34]} material={mats.forgedCarbon} castShadow={shadows}>
-          <boxGeometry args={[0.42, 0.09, 1.12]} />
-        </mesh>
-        <mesh position={[0, 1.21, 0.18]} material={mats.bodySecondary}>
-          <boxGeometry args={[0.28, 0.08, 0.14]} />
-        </mesh>
-        {/* Structural A-Pillars & B-Pillars */}
-        {([-0.68, 0.68] as const).map((px, pIdx) => (
-          <React.Fragment key={`pillar-${pIdx}`}>
-            <mesh position={[px, 0.89, 0.55]} rotation={[-0.95, 0, px > 0 ? 0.12 : -0.12]} material={mats.bodySecondary}>
-              <boxGeometry args={[0.07, 0.92, 0.08]} />
-            </mesh>
-            <mesh position={[px * 0.96, 0.94, -0.78]} rotation={[0.45, 0, 0]} material={mats.bodySecondary}>
-              <boxGeometry args={[0.09, 0.52, 0.12]} />
-            </mesh>
-            {/* Brushed Titanium Aerodynamic Side Mirror */}
-            <group position={[px * 1.38, 0.78, 0.66]}>
-              <mesh position={[px > 0 ? -0.1 : 0.1, -0.05, 0]} rotation={[0, 0, px > 0 ? 0.45 : -0.45]} material={mats.forgedCarbon}>
-                <boxGeometry args={[0.22, 0.035, 0.05]} />
-              </mesh>
-              <mesh material={mats.brushedTitanium}>
-                <boxGeometry args={[0.18, 0.08, 0.11]} />
-              </mesh>
-            </group>
-          </React.Fragment>
-        ))}
-
-        {/* 6. Visible Cockpit Interior (Bucket Seats, Dashboard HUD, Articulated Steering Yoke) */}
-        <mesh position={[0, 0.68, 0.54]} rotation={[-0.22, 0, 0]} material={mats.forgedCarbon}>
-          <boxGeometry args={[1.28, 0.14, 0.34]} />
-        </mesh>
-        {/* Glowing Cockpit Telemetry Strip */}
-        <mesh position={[0, 0.75, 0.42]} rotation={[-0.3, 0, 0]}>
-          <boxGeometry args={[1.08, 0.05, 0.025]} />
-          <meshBasicMaterial color="#38bdf8" />
-        </mesh>
-        {/* Articulated F1/GT Steering Yoke (left-hand drive at +X = 0.34, rotates with steeringAngle!) */}
-        <group position={[0.34, 0.76, 0.28]} rotation={[-0.28, 0, 0]}>
+        {/* 7. Visible Sculpted Cockpit Interior (Curved Dash, Bucket Seats & Articulated Steering Yoke) */}
+        <mesh position={[0, 0.72, 0.52]} geometry={geos.dashCowl} material={mats.forgedCarbon} />
+        <group position={[0.32, 0.78, 0.28]} rotation={[-0.28, 0, 0]}>
           <group ref={steeringYokeRef}>
-            <mesh material={mats.forgedCarbon}>
-              <boxGeometry args={[0.3, 0.055, 0.04]} />
+            <mesh geometry={geos.steeringYoke} material={mats.brushedTitanium} />
+            <mesh position={[0, -0.015, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.042, 0.042, 0.03, 14]} />
+              <meshStandardMaterial color="#0f172a" metalness={0.8} roughness={0.25} />
             </mesh>
-            <mesh position={[-0.14, 0.03, 0]} material={mats.brushedTitanium}>
-              <boxGeometry args={[0.04, 0.14, 0.045]} />
-            </mesh>
-            <mesh position={[0.14, 0.03, 0]} material={mats.brushedTitanium}>
-              <boxGeometry args={[0.04, 0.14, 0.045]} />
-            </mesh>
-            <mesh position={[0, 0.025, -0.024]}>
-              <boxGeometry args={[0.11, 0.04, 0.01]} />
+            <mesh position={[0, 0.015, -0.018]}>
+              <cylinderGeometry args={[0.022, 0.022, 0.01, 12]} />
               <meshBasicMaterial color="#38bdf8" />
             </mesh>
           </group>
         </group>
-        {/* Twin Bolstered Bucket Seats */}
-        {([-0.34, 0.34] as const).map((sx, sIdx) => (
-          <group key={`seat-${sIdx}`} position={[sx, 0.58, -0.22]}>
-            <mesh material={mats.interiorLeather}>
-              <boxGeometry args={[0.4, 0.14, 0.44]} />
-            </mesh>
-            <mesh position={[0, 0.24, -0.18]} rotation={[-0.22, 0, 0]} material={mats.interiorLeather}>
-              <boxGeometry args={[0.38, 0.46, 0.12]} />
-            </mesh>
-          </group>
+        <mesh position={[0.32, 0.56, -0.16]} geometry={geos.bucketSeat} material={mats.interiorLeather} />
+        <mesh position={[-0.32, 0.56, -0.16]} geometry={geos.bucketSeat} material={mats.interiorLeather} />
+
+        {/* 8. Mid-Engine Curved Cooling Louvers & Luminous Twin Kinetic Energy Conduits */}
+        <mesh geometry={geos.kineticRailLeft}>
+          <meshBasicMaterial ref={coreRailLeftMatRef} color="#38bdf8" toneMapped={false} />
+        </mesh>
+        <mesh geometry={geos.kineticRailRight}>
+          <meshBasicMaterial ref={coreRailRightMatRef} color="#38bdf8" toneMapped={false} />
+        </mesh>
+        {[-1.08, -1.32, -1.56, -1.8].map((lz, lIdx) => (
+          <mesh
+            key={`louver-${lIdx}`}
+            position={[0, 0.855 - lIdx * 0.032, lz]}
+            geometry={geos.engineLouver}
+            material={mats.brushedTitanium}
+          />
         ))}
 
-        {/* 7. Mid-Engine Louvered Glass Deck & Luminous Experimental Kinetic Core Rails */}
-        <mesh position={[0, 0.72, -1.32]} rotation={[-0.14, 0, 0]} material={mats.forgedCarbon}>
-          <boxGeometry args={[1.06, 0.18, 1.38]} />
-        </mesh>
-        {([-0.24, 0.24] as const).map((rx, rIdx) => (
-          <mesh key={`rail-${rIdx}`} position={[rx, 0.83, -1.32]} rotation={[-0.14, 0, 0]}>
-            <boxGeometry args={[0.07, 0.05, 1.2]} />
-            <meshBasicMaterial ref={rIdx === 0 ? coreRailMatRef : undefined} color="#38bdf8" toneMapped={false} />
-          </mesh>
+        {/* 9. Sculpted Rear Venturi Diffuser, Curved Aero Strakes & Twin Bell Titanium Exhausts */}
+        <mesh position={[0, 0.29, -2.14]} rotation={[0.16, 0, 0]} geometry={geos.rearDiffuser} material={mats.forgedCarbon} />
+        {[-0.64, -0.32, 0, 0.32, 0.64].map((dx, dIdx) => (
+          <mesh
+            key={`fin-${dIdx}`}
+            position={[dx, 0.27, -2.24]}
+            geometry={geos.diffuserFin}
+            material={mats.forgedCarbon}
+          />
         ))}
-        {/* Hood Center Spine Kinetic Strip */}
-        <mesh position={[0, 0.69, 1.38]} rotation={[0.16, 0, 0]}>
-          <boxGeometry args={[0.06, 0.025, 0.74]} />
-          <meshBasicMaterial color="#38bdf8" toneMapped={false} />
-        </mesh>
-        {/* Engine Cooling Louver Slats */}
-        {[-0.95, -1.2, -1.45, -1.7].map((lz, lIdx) => (
-          <mesh key={`louver-${lIdx}`} position={[0, 0.86 - lIdx * 0.035, lz]} rotation={[0.25, 0, 0]} material={mats.brushedTitanium}>
-            <boxGeometry args={[0.92, 0.025, 0.12]} />
-          </mesh>
-        ))}
-
-        {/* 8. Rear Fascia, Multi-Fin Venturi Diffuser & Twin Titanium Exhausts */}
-        <mesh position={[0, 0.46, -2.18]} material={mats.bodySecondary} castShadow={shadows}>
-          <boxGeometry args={[1.92, 0.42, 0.22]} />
-        </mesh>
-        {/* Venturi Rear Diffuser Plate & 5 Vertical Aero Strakes */}
-        <mesh position={[0, 0.2, -2.24]} rotation={[0.18, 0, 0]} material={mats.forgedCarbon}>
-          <boxGeometry args={[1.82, 0.14, 0.34]} />
-        </mesh>
-        {[-0.68, -0.34, 0, 0.34, 0.68].map((dx, dIdx) => (
-          <mesh key={`fin-${dIdx}`} position={[dx, 0.21, -2.31]} material={mats.forgedCarbon}>
-            <boxGeometry args={[0.035, 0.18, 0.26]} />
-          </mesh>
-        ))}
-        {/* Twin Brushed Titanium Exhaust Pipes with Dynamic Afterburner Glow */}
-        {([-0.38, 0.38] as const).map((ex, eIdx) => (
-          <group key={`exhaust-${eIdx}`} position={[ex, 0.32, -2.3]} rotation={[Math.PI / 2, 0, 0]}>
-            <mesh material={mats.brushedTitanium}>
-              <cylinderGeometry args={[0.095, 0.105, 0.16, 12]} />
-            </mesh>
-            <mesh position={[0, -0.075, 0]}>
-              <cylinderGeometry args={[0.072, 0.072, 0.04, 12]} />
+        {([-0.36, 0.36] as const).map((ex, eIdx) => (
+          <group key={`exhaust-${eIdx}`} position={[ex, 0.39, -2.2]}>
+            <mesh geometry={geos.exhaustNozzle} material={mats.brushedTitanium} />
+            <mesh position={[0, 0, -0.145]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.068, 0.068, 0.03, 16]} />
               <meshBasicMaterial
-                ref={eIdx === 0 ? exhaustGlowMatRef : undefined}
+                ref={eIdx === 0 ? exhaustGlowLeftMatRef : exhaustGlowRightMatRef}
                 color="#f59e0b"
                 toneMapped={false}
               />
@@ -603,59 +595,33 @@ export const ExperimentalCar: React.FC = () => {
           </group>
         ))}
 
-        {/* 9. Active Swan-Neck Rear GT Aero Wing (tilts forward as airbrake on braking!) */}
-        <group position={[0, 0.88, -2.06]}>
-          {/* Twin Swan-Neck Pylons */}
-          {([-0.52, 0.52] as const).map((px, pIdx) => (
-            <mesh key={`wing-pylon-${pIdx}`} position={[px, -0.1, 0.05]} rotation={[-0.22, 0, 0]} material={mats.forgedCarbon}>
-              <boxGeometry args={[0.06, 0.36, 0.2]} />
-            </mesh>
-          ))}
-          {/* Articulated Airfoil Wing Blade & Endplates */}
-          <group ref={rearWingBladeRef} position={[0, 0.12, -0.02]}>
-            <mesh material={mats.forgedCarbon} castShadow={shadows}>
-              <boxGeometry args={[2.06, 0.055, 0.36]} />
-            </mesh>
-            <mesh position={[0, 0.032, -0.15]}>
-              <boxGeometry args={[1.98, 0.018, 0.03]} />
-              <meshBasicMaterial color="#38bdf8" toneMapped={false} />
-            </mesh>
-            {([-1.04, 1.04] as const).map((ex, eIdx) => (
-              <mesh key={`endplate-${eIdx}`} position={[ex, -0.02, 0]} material={mats.bodyPaint}>
-                <boxGeometry args={[0.04, 0.24, 0.44]} />
-              </mesh>
-            ))}
+        {/* 10. Active Swan-Neck Rear GT Airfoil Wing (True Cambered Airfoil Blade + Curved Endplates) */}
+        <group position={[0, 0.91, -2.02]}>
+          <mesh position={[0.48, -0.02, 0.02]} geometry={geos.wingPylon} material={mats.forgedCarbon} />
+          <mesh position={[-0.48, -0.02, 0.02]} geometry={geos.wingPylon} material={mats.forgedCarbon} />
+          <group ref={rearWingBladeRef} position={[0, 0.14, -0.02]}>
+            <mesh geometry={geos.wingAirfoil} material={mats.forgedCarbon} castShadow={shadows} />
+            <mesh position={[1.02, -0.01, 0]} geometry={geos.wingEndplate} material={mats.bodyPaint} />
+            <mesh position={[-1.02, -0.01, 0]} geometry={geos.wingEndplate} material={mats.bodyPaint} />
           </group>
         </group>
 
-        {/* 10. Dynamic HDR Headlamps, Brake Light Blade & White Reverse Lamps */}
-        {/* Dual Slim Front Laser Headlights (+Z nose) */}
-        {([-0.68, 0.68] as const).map((hx, hIdx) => (
-          <mesh key={`headlight-${hIdx}`} position={[hx, 0.46, 2.24]} rotation={[0, hx > 0 ? 0.16 : -0.16, 0]}>
-            <boxGeometry args={[0.48, 0.065, 0.08]} />
-            <meshBasicMaterial
-              ref={hIdx === 0 ? headLightMatRef : undefined}
-              color="#f0f9ff"
-              toneMapped={false}
-            />
-          </mesh>
-        ))}
-        {/* Full-Width Rear Crimson Taillight & Dynamic Brake Light Blade (-Z tail) */}
-        <mesh position={[0, 0.56, -2.3]}>
-          <boxGeometry args={[1.82, 0.075, 0.04]} />
+        {/* 11. Curved Wraparound HDR Headlamps, Full-Width Brake Blade & Twin Reverse Lenses */}
+        <mesh geometry={geos.headlightLeft}>
+          <meshBasicMaterial ref={headLightLeftMatRef} color="#f0f9ff" toneMapped={false} />
+        </mesh>
+        <mesh geometry={geos.headlightRight}>
+          <meshBasicMaterial ref={headLightRightMatRef} color="#f0f9ff" toneMapped={false} />
+        </mesh>
+        <mesh geometry={geos.rearTaillight}>
           <meshBasicMaterial ref={brakeLightMatRef} color="#f43f5e" toneMapped={false} />
         </mesh>
-        {/* Dedicated Twin Crisp White HDR Reverse Lamps (illuminate bright white in Reverse gear!) */}
-        {([-0.62, 0.62] as const).map((rx, rIdx) => (
-          <mesh key={`revlamp-${rIdx}`} position={[rx, 0.45, -2.3]}>
-            <boxGeometry args={[0.28, 0.055, 0.04]} />
-            <meshBasicMaterial
-              ref={rIdx === 0 ? reverseLightMatRef : undefined}
-              color="#1e293b"
-              toneMapped={false}
-            />
-          </mesh>
-        ))}
+        <mesh geometry={geos.reverseLightLeft}>
+          <meshBasicMaterial ref={reverseLightLeftMatRef} color="#1e293b" toneMapped={false} />
+        </mesh>
+        <mesh geometry={geos.reverseLightRight}>
+          <meshBasicMaterial ref={reverseLightRightMatRef} color="#1e293b" toneMapped={false} />
+        </mesh>
       </group>
     </group>
   );

@@ -30,6 +30,12 @@ async function systems() {
       export { EmergencyAlertSystem } from './src/world/EmergencyAlertSystem';
       export { WorldPhysicsEngine } from './src/world/WorldPhysicsEngine';
       export { InputManager } from './src/player/InputManager';
+      export {
+        createSculptedHypercarBodyGeometry,
+        createTeardropCanopyGeometry,
+        createSculptedTireGeometry,
+        createAirfoilWingGeometry,
+      } from './src/vehicle/ExperimentalCarGeometry';
     ` },
     bundle: true, platform: 'node', format: 'esm', write: false,
   });
@@ -578,6 +584,66 @@ test('experimental car drives forward, steers, brakes, engages reverse gear with
   vehicle.dismount();
 });
 
+test('sculpted experimental car geometry generates finite smooth outward normals, clear wheel arches, and compound curvature', async () => {
+  const {
+    createSculptedHypercarBodyGeometry,
+    createTeardropCanopyGeometry,
+    createSculptedTireGeometry,
+    createAirfoilWingGeometry,
+  } = await systems();
 
+  const body = createSculptedHypercarBodyGeometry();
+  const canopy = createTeardropCanopyGeometry();
+  const tire = createSculptedTireGeometry(0.37, 0.29);
+  const wing = createAirfoilWingGeometry(2.02);
 
+  for (const geo of [body, canopy, tire, wing]) {
+    const pos = geo.getAttribute('position');
+    const norm = geo.getAttribute('normal');
+    assert.ok(pos && pos.count > 100);
+    assert.ok(norm && norm.count === pos.count);
+    for (let i = 0; i < pos.count; i++) {
+      assert.ok(Number.isFinite(pos.getX(i)) && Number.isFinite(pos.getY(i)) && Number.isFinite(pos.getZ(i)));
+      assert.ok(Number.isFinite(norm.getX(i)) && Number.isFinite(norm.getY(i)) && Number.isFinite(norm.getZ(i)));
+    }
+  }
 
+  body.computeBoundingBox();
+  assert.ok(body.boundingBox.min.y >= 0.16, `Expected clean underbody clearance >= 0.16m, got ${body.boundingBox.min.y}`);
+  assert.ok(body.boundingBox.max.y >= 0.85, `Expected sculpted fender haunch height >= 0.85m, got ${body.boundingBox.max.y}`);
+  assert.ok(body.boundingBox.max.z > 2.3 && body.boundingBox.min.z < -2.25);
+
+  const canopyPos = canopy.getAttribute('position');
+  const canopyNorm = canopy.getAttribute('normal');
+  let maxCrownY = -Infinity;
+  let crownNormalY = 0;
+  for (let i = 0; i < canopyPos.count; i++) {
+    if (canopyPos.getY(i) > maxCrownY) {
+      maxCrownY = canopyPos.getY(i);
+      crownNormalY = canopyNorm.getY(i);
+    }
+  }
+  assert.ok(maxCrownY > 1.1 && maxCrownY < 1.25, `Expected sleek canopy height, got ${maxCrownY}`);
+  assert.ok(crownNormalY > 0.8, `Expected outward upward normal on canopy crown, got ${crownNormalY}`);
+
+  // Verify outward normals on body top centerline (+Y) and flanks (+X/-X)
+  const bodyPos = body.getAttribute('position');
+  const bodyNorm = body.getAttribute('normal');
+  let rightFlankSamples = 0;
+  let rightFlankOutward = 0;
+  for (let i = 0; i < bodyPos.count; i++) {
+    const x = bodyPos.getX(i);
+    const y = bodyPos.getY(i);
+    const z = bodyPos.getZ(i);
+    if (Math.abs(z) < 0.8 && x > 0.75 && y > 0.35 && y < 0.65) {
+      rightFlankSamples++;
+      if (bodyNorm.getX(i) > 0.5) rightFlankOutward++;
+    }
+  }
+  assert.ok(rightFlankSamples > 10 && rightFlankOutward === rightFlankSamples, 'Expected outward normals on sculpted body flanks');
+
+  body.dispose();
+  canopy.dispose();
+  tire.dispose();
+  wing.dispose();
+});
