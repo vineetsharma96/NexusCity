@@ -12,7 +12,7 @@ export interface TerminalNode {
     id: string;
     title: string;
     detail: string;
-    kind: 'LORE' | 'SCAN' | 'MISSION';
+    kind: 'LORE' | 'SCAN';
   };
 }
 

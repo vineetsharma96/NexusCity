@@ -7,7 +7,6 @@ import { WeatherSystem } from './WeatherSystem';
 import { WindSystem } from './WindSystem';
 import { EmergencyAlertSystem } from './EmergencyAlertSystem';
 import { LivingCityEventState, LivingCityEventSystem } from './LivingCityEventSystem';
-import { MissionSystem } from '../gameplay/MissionSystem';
 import { StreamedCityChunks } from '../city/StreamedCityChunks';
 import { AudioManager } from '../audio/AudioManager';
 import { QualityManager } from '../rendering/QualityManager';
@@ -29,7 +28,6 @@ export const WorldManager: React.FC<WorldManagerProps> = ({ playerPosRef }) => {
   const windSystem = useRef(WindSystem.getInstance());
   const emergencySystem = useRef(EmergencyAlertSystem.getInstance());
   const eventSystem = useRef(LivingCityEventSystem.getInstance());
-  const missionSystem = useRef(MissionSystem.getInstance());
   const audioManager = useRef(AudioManager.getInstance());
 
   const [cityEvent, setCityEvent] = useState<LivingCityEventState>(() => eventSystem.current.getState());
@@ -48,10 +46,6 @@ export const WorldManager: React.FC<WorldManagerProps> = ({ playerPosRef }) => {
     emergencySystem.current.update(wState, tState);
     eventSystem.current.update(delta);
     const currentEvent = eventSystem.current.getState();
-    missionSystem.current.update(
-      chunkManager.current.getCurrentDistrict().type,
-      currentEvent
-    );
 
     const trafficFactor = QualityManager.current.trafficEnabled
       ? currentEvent.trafficSpeedMultiplier

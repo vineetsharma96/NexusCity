@@ -12,18 +12,9 @@ export interface SavedTerminalObjective {
   objectiveId: string;
   title: string;
   detail: string;
-  kind: 'LORE' | 'SCAN' | 'MISSION';
+  kind: 'LORE' | 'SCAN';
   revealed: boolean;
   active: boolean;
-  updatedAt: number;
-}
-
-export type MissionStatus = 'AVAILABLE' | 'ACCEPTED' | 'COMPLETED';
-
-export interface SavedMissionState {
-  id: string;
-  status: MissionStatus;
-  progress: number;
   updatedAt: number;
 }
 
@@ -53,9 +44,6 @@ export interface SaveData {
   interactedNodes: string[];
   cityHistory: CityHistoryEntry[];
   terminalObjectives: Record<string, SavedTerminalObjective>;
-  districtReputation: Record<string, number>;
-  factionRelations: Record<string, number>;
-  missionStates: Record<string, SavedMissionState>;
   vehicleUpgrades: VehicleUpgradeState;
   stats: {
     totalPlayTimeSeconds: number;
@@ -85,26 +73,12 @@ const DEFAULT_SAVE: SaveData = {
   interactedNodes: [],
   cityHistory: [],
   terminalObjectives: {},
-  districtReputation: {},
-  factionRelations: {},
-  missionStates: {},
   vehicleUpgrades: { speed: 0, handling: 0, neon: 0 },
   stats: {
     totalPlayTimeSeconds: 0,
     distanceTraveledMeters: 0,
   },
 };
-
-function sanitizeNumberMap(val: unknown): Record<string, number> {
-  if (!val || typeof val !== 'object') return {};
-  const result: Record<string, number> = {};
-  for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
-    if (typeof v === 'number' && Number.isFinite(v)) {
-      result[k] = Math.max(-100, Math.min(100, Math.round(v)));
-    }
-  }
-  return result;
-}
 
 function sanitizeTerminalObjectives(val: unknown): Record<string, SavedTerminalObjective> {
   if (!val || typeof val !== 'object') return {};
@@ -114,7 +88,7 @@ function sanitizeTerminalObjectives(val: unknown): Record<string, SavedTerminalO
     if (!entry || typeof entry.terminalId !== 'string' || typeof entry.objectiveId !== 'string' || typeof entry.title !== 'string') {
       continue;
     }
-    const kind = entry.kind === 'LORE' || entry.kind === 'SCAN' || entry.kind === 'MISSION' ? entry.kind : 'SCAN';
+    const kind = entry.kind === 'LORE' || entry.kind === 'SCAN' ? entry.kind : 'SCAN';
     result[k] = {
       terminalId: entry.terminalId,
       objectiveId: entry.objectiveId,
@@ -123,23 +97,6 @@ function sanitizeTerminalObjectives(val: unknown): Record<string, SavedTerminalO
       kind,
       revealed: Boolean(entry.revealed),
       active: Boolean(entry.active),
-      updatedAt: typeof entry.updatedAt === 'number' && Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
-    };
-  }
-  return result;
-}
-
-function sanitizeMissionStates(val: unknown): Record<string, SavedMissionState> {
-  if (!val || typeof val !== 'object') return {};
-  const result: Record<string, SavedMissionState> = {};
-  for (const [k, raw] of Object.entries(val as Record<string, unknown>)) {
-    const entry = raw as Partial<SavedMissionState>;
-    if (!entry || typeof entry.id !== 'string') continue;
-    if (entry.status !== 'AVAILABLE' && entry.status !== 'ACCEPTED' && entry.status !== 'COMPLETED') continue;
-    result[k] = {
-      id: entry.id,
-      status: entry.status,
-      progress: typeof entry.progress === 'number' && Number.isFinite(entry.progress) ? Math.max(0, Math.min(1, entry.progress)) : 0,
       updatedAt: typeof entry.updatedAt === 'number' && Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
     };
   }
@@ -217,9 +174,6 @@ export class SaveSystem {
               ? parsed.cityHistory.filter((item: Partial<CityHistoryEntry>) => item && typeof item.id === 'string' && typeof item.title === 'string')
               : [],
             terminalObjectives: sanitizeTerminalObjectives(parsed.terminalObjectives),
-            districtReputation: sanitizeNumberMap(parsed.districtReputation),
-            factionRelations: sanitizeNumberMap(parsed.factionRelations),
-            missionStates: sanitizeMissionStates(parsed.missionStates),
             vehicleUpgrades: {
               speed: clampUpgrade(parsed.vehicleUpgrades?.speed, 3),
               handling: clampUpgrade(parsed.vehicleUpgrades?.handling, 3),
@@ -315,26 +269,6 @@ export class SaveSystem {
       }
     }
     this.data.terminalObjectives[objective.terminalId] = { ...objective };
-    this.saveToStorage();
-  }
-
-  public setReputation(district: string, value: number): void {
-    if (!Number.isFinite(value)) return;
-    this.data.districtReputation[district] = Math.max(-100, Math.min(100, Math.round(value)));
-    this.saveToStorage();
-  }
-
-  public setFactionRelation(faction: string, value: number): void {
-    if (!Number.isFinite(value)) return;
-    this.data.factionRelations[faction] = Math.max(-100, Math.min(100, Math.round(value)));
-    this.saveToStorage();
-  }
-
-  public setMissionState(mission: SavedMissionState): void {
-    this.data.missionStates[mission.id] = {
-      ...mission,
-      progress: Math.max(0, Math.min(1, mission.progress)),
-    };
     this.saveToStorage();
   }
 

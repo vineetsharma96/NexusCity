@@ -43,10 +43,9 @@ On touchscreens, drag the left side to move and the right side to rotate the cam
 
 ## Explore and use the city
 
-- **World menu:** choose dawn/day/dusk/night or clear/cloudy/rain/storm/fog weather.
-- **Missions:** accept one assignment at a time. Speaking with residents, reaching districts, and witnessing city events can complete assignments and update faction standing and district reputation.
+- **World menu:** choose dawn/day/dusk/night or clear/cloudy/rain/storm/snow/fog weather.
 - **View:** choose Auto, Lite, Low, Medium, High, or Ultra graphics; toggle audio and street lights; open the map. Custom appears when settings have been changed programmatically. Rendering speed depends on the device, browser, and selected profile.
-- **Vehicles:** approach a hover vehicle or transit node and interact. Pilot the hover vehicle with movement controls, or follow the shuttle while transit-linked. Interact again to leave. The vehicle menu cycles speed, handling, and neon upgrades.
+- **Vehicles:** approach the experimental coupe, hover vehicle, or transit node and interact. Drive forward or in reverse with dynamic steering, wheel animation, and world air drag/surface friction, or follow the shuttle while transit-linked. Interact again to leave. The vehicle menu cycles speed, handling, and neon upgrades.
 - **Codex and history:** review discovered landmarks and recorded city events.
 - **City map:** drag to pan, use the wheel or zoom buttons, and recenter on the player. Select a marker or choose a landmark from the inspector. Set a waypoint, cancel it, or fast travel.
 - **Conversations and terminals:** use the nearby interaction prompt to speak with residents or inspect terminal information. Additional interactions include repair stations and rooftop access points.
@@ -55,7 +54,7 @@ Audio begins after a click or touch, subject to the browser's audio permissions.
 
 ## Saved progress
 
-Progress is stored in the current browser's `localStorage`, including position, discoveries, city history, mission state, reputation, vehicle configuration, and travel statistics. Position saves run approximately every 45 seconds; several progression changes save immediately. Graphics settings are stored separately. Clearing the site's browser data removes these local saves.
+Progress is stored in the current browser's `localStorage`, including position, discoveries, city history, vehicle configuration, and travel statistics. Position saves run automatically; several progression changes save immediately. Graphics settings are stored separately. Clearing the site's browser data removes these local saves.
 
 ## Code layout
 
@@ -63,8 +62,8 @@ Progress is stored in the current browser's `localStorage`, including position, 
 | --- | --- |
 | `src/city`, `src/environment`, `src/lighting` | Scene geometry, traffic, atmosphere, and lighting |
 | `src/player` | Input, touch controls, movement, collision, avatar, and camera |
-| `src/world` | Chunk streaming, time, weather, discoveries, and city events |
-| `src/interaction`, `src/npc`, `src/gameplay`, `src/vehicle` | Interactions, dialogue, missions, and mobility |
+| `src/world` | Chunk streaming, physics, time, weather, discoveries, and city events |
+| `src/interaction`, `src/npc`, `src/vehicle` | Interactions, dialogue, and mobility |
 | `src/map`, `src/ui`, `src/styles` | Navigation, map, HUD, overlays, and styling |
 | `src/core`, `src/audio`, `src/rendering` | Saves, procedural audio, quality settings, and rendering |
 | `tests` | Player/input/collision and simulation/save regression tests |

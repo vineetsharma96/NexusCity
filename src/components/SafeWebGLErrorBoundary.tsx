@@ -1,4 +1,4 @@
-import React, { Component, ReactNode } from 'react';
+import { Component, ReactNode } from 'react';
 import { WebGLCapabilities } from '../rendering/WebGLCapabilities';
 import { QualityManager } from '../rendering/QualityManager';
 

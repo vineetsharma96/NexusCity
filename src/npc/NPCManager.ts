@@ -3,7 +3,6 @@ import { SeedRandom } from '../core/SeedRandom';
 import { DialogueSystem } from './DialogueSystem';
 import { InteractionSystem } from '../interaction/InteractionSystem';
 import { NavigationSystem } from '../map/NavigationSystem';
-import { MissionSystem } from '../gameplay/MissionSystem';
 import { TrafficLightSystem } from '../city/TrafficLightSystem';
 import { WeatherSystem } from '../world/WeatherSystem';
 
@@ -562,7 +561,6 @@ export class NPCManager {
           position: npc.position,
           radius: 3.0,
           onInteract: () => {
-            MissionSystem.getInstance().recordInteraction();
             DialogueSystem.getInstance().startDialogue(npc.id);
           },
         });

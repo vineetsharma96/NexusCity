@@ -43,7 +43,7 @@ const TERMINALS: TerminalNode[] = [
       id: 'obj_helix_north',
       title: 'NEURAL BANDWIDTH LOG',
       detail: 'Sub-millisecond optical relays link the Northern Crossing to Helix Citadel.',
-      kind: 'MISSION',
+      kind: 'SCAN',
     },
   },
   {
@@ -79,7 +79,7 @@ const TERMINALS: TerminalNode[] = [
       id: 'obj_neural_nexus',
       title: 'CRYO-CORE SYNAPSE MATRIX',
       detail: 'Sub-zero photonic processors coordinate city-wide autonomous drone and shuttle navigation.',
-      kind: 'MISSION',
+      kind: 'SCAN',
     },
   },
   {
@@ -115,7 +115,7 @@ const TERMINALS: TerminalNode[] = [
       id: 'obj_foundry_west',
       title: 'TITANIUM ALLOY FABRICATION',
       detail: 'Automated plasma smelters extrude structural diagrid members for outer ring expansion.',
-      kind: 'MISSION',
+      kind: 'SCAN',
     },
   },
 ];

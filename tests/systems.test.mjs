@@ -40,13 +40,12 @@ async function systems() {
 
 test('save load rejects malformed coordinates and collection fields, caps upgrades', async () => {
   const { SaveSystem, data } = await systems();
-  data.set('nexus_city_flagship_save_v2', JSON.stringify({ version: 2, player: { position: [0, 'bad', 10], rotationY: 'bad' }, discoveredDistricts: null, discoveredLandmarks: null, cityHistory: null, terminalObjectives: null, missionStates: { invalid: { id: 'invalid', status: 'BROKEN' } }, stats: { distanceTraveledMeters: 'bad' }, vehicleUpgrades: { speed: 999, handling: true, neon: -4 } }));
+  data.set('nexus_city_flagship_save_v2', JSON.stringify({ version: 2, player: { position: [0, 'bad', 10], rotationY: 'bad' }, discoveredDistricts: null, discoveredLandmarks: null, cityHistory: null, terminalObjectives: null, stats: { distanceTraveledMeters: 'bad' }, vehicleUpgrades: { speed: 999, handling: true, neon: -4 } }));
   const save = SaveSystem.getInstance();
   assert.deepEqual(save.getData().player.position, [0, 0.2, 10]);
   assert.equal(save.getData().player.rotationY, 0);
   assert.deepEqual(save.getData().vehicleUpgrades, { speed: 3, handling: 1, neon: 0 });
   assert.equal(save.getData().stats.distanceTraveledMeters, 0);
-  assert.deepEqual(save.getData().missionStates, {});
   assert.doesNotThrow(() => save.updateDistrict('NEURAL_DISTRICT'));
   assert.doesNotThrow(() => save.recordHistory('test', 'TEST', 'Valid history after recovery'));
 });
@@ -218,7 +217,7 @@ test('navigation and discovery share targets and initialize route distance immed
 test('saved telemetry objectives resume and replacement deactivates the old objective', async () => {
   const { SaveSystem, TerminalSystem, InteractionSystem } = await systems();
   const save = SaveSystem.getInstance();
-  const original = { terminalId: 'first', objectiveId: 'scan_first', title: 'SCAN', detail: 'Telemetry', kind: 'MISSION', revealed: true, active: true, updatedAt: 1 };
+  const original = { terminalId: 'first', objectiveId: 'scan_first', title: 'SCAN', detail: 'Telemetry', kind: 'SCAN', revealed: true, active: true, updatedAt: 1 };
   save.setTerminalObjective(original);
   const terminals = TerminalSystem.getInstance();
   assert.equal(terminals.getActiveObjective().terminalId, 'first');

@@ -345,7 +345,6 @@ export class TimeSystem {
 
   private colA = new THREE.Color();
   private colB = new THREE.Color();
-  private colEnv = new THREE.Color();
   private sunDir = new THREE.Vector3();
   private moonDir = new THREE.Vector3();
   private notifyAccum = 0;

@@ -44,7 +44,6 @@ export const ExperimentalCar: React.FC = () => {
   const reverseLightMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const exhaustGlowMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const coreRailMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const underglowMatRef = useRef<THREE.MeshBasicMaterial>(null);
 
   const system = VehicleInteractionSystem.getInstance();
   const shadows = QualityManager.current.shadows;
@@ -137,15 +136,6 @@ export const ExperimentalCar: React.FC = () => {
       metalness: 0.15,
       roughness: 0.68,
     });
-    const contactShadow = new THREE.MeshBasicMaterial({
-      color: '#020617',
-      transparent: true,
-      opacity: 0.52,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -4,
-      polygonOffsetUnits: -4,
-    });
 
     return {
       bodyPaint,
@@ -159,7 +149,6 @@ export const ExperimentalCar: React.FC = () => {
       brakeCaliper,
       canopyGlass,
       interiorLeather,
-      contactShadow,
     };
   }, []);
 
@@ -303,33 +292,10 @@ export const ExperimentalCar: React.FC = () => {
       const pulse = 1.25 + Math.sin(t * (isBoosting ? 12 : 3.2)) * 0.25 + (isBoosting ? 1.4 : 0);
       coreRailMatRef.current.color.set(isReversing ? '#f8fafc' : '#38bdf8').multiplyScalar(pulse);
     }
-
-    if (underglowMatRef.current) {
-      underglowMatRef.current.opacity = isActive ? (isBoosting ? 0.42 : 0.24) : 0.14;
-      underglowMatRef.current.color.set(isBraking ? '#f43f5e' : isReversing ? '#e2e8f0' : '#38bdf8');
-    }
   }, -1);
 
   return (
     <group ref={rootRef} name="ExperimentalCar_VX01">
-      {/* Grounded Contact Shadow & Kinetic Underglow Projection (above EW road plane to avoid Z-fighting) */}
-      <mesh position={[0, 0.056, 0]} rotation={[-Math.PI / 2, 0, 0]} material={mats.contactShadow}>
-        <planeGeometry args={[2.55, 5.1]} />
-      </mesh>
-      <mesh position={[0, 0.062, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[2.15, 4.4]} />
-        <meshBasicMaterial
-          ref={underglowMatRef}
-          color="#38bdf8"
-          transparent
-          opacity={0.18}
-          depthWrite={false}
-          polygonOffset
-          polygonOffsetFactor={-4}
-          polygonOffsetUnits={-4}
-        />
-      </mesh>
-
       {/* ==================== 4 ARTICULATED MOVING WHEELS ==================== */}
       {WHEEL_MOUNTS.map((w, idx) => {
         const steerRef = w.key === 'FL' ? frontLeftSteerRef : w.key === 'FR' ? frontRightSteerRef : undefined;

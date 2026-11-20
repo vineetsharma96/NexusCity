@@ -12,7 +12,6 @@ import { WindSystem } from '../world/WindSystem';
 import { NavigationSystem } from '../map/NavigationSystem';
 import { CityHistoryEntry, SaveSystem } from '../core/SaveSystem';
 import { VehicleInteractionSystem } from '../vehicle/VehicleInteractionSystem';
-import { MissionSystem, MissionSystemState } from '../gameplay/MissionSystem';
 import { useModalFocus } from './useModalFocus';
 
 interface CyberSideMenuProps {
@@ -20,7 +19,7 @@ interface CyberSideMenuProps {
   onClose: () => void;
 }
 
-type Section = 'WORLD' | 'MISSIONS' | 'VIEW' | 'VEHICLE' | 'CODEX' | 'HISTORY' | 'CONTROLS';
+type Section = 'WORLD' | 'VIEW' | 'VEHICLE' | 'CODEX' | 'HISTORY' | 'CONTROLS';
 
 interface GraphicsToggleItem {
   key: keyof QualitySettings;
@@ -128,13 +127,13 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
   const [history, setHistory] = useState<CityHistoryEntry[]>(() => SaveSystem.getInstance().getData().cityHistory);
   const [landmarks, setLandmarks] = useState(() => SaveSystem.getInstance().getData().discoveredLandmarks);
   const [vehicleState, setVehicleState] = useState(() => VehicleInteractionSystem.getInstance().getState());
-  const [missionState, setMissionState] = useState<MissionSystemState>(() => MissionSystem.getInstance().getState());
   const [weatherState, setWeatherState] = useState(() => ({ ...WeatherSystem.getInstance().getState() }));
   const [timeState, setTimeState] = useState(() => TimeSystem.getInstance().getState());
   const menuRef = useModalFocus(isOpen, onClose);
   const currentWeather = weatherState.currentWeather;
 
   useEffect(() => {
+    if (!isOpen) return;
     const uQual = QualityManager.subscribe((s) => {
       setQuality(QualityManager.preset);
       setQualitySettings(s);
@@ -151,7 +150,6 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
       setLandmarks(d.discoveredLandmarks);
     });
     const uVeh = VehicleInteractionSystem.getInstance().subscribe(setVehicleState);
-    const uMis = MissionSystem.getInstance().subscribe(setMissionState);
     return () => {
       uQual();
       uWea();
@@ -160,9 +158,8 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
       uAmb();
       uSave();
       uVeh();
-      uMis();
     };
-  }, []);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -224,7 +221,7 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
               NEXUS CONSOLE
             </div>
             <div style={{ marginTop: 3, color: 'var(--muted)', fontSize: '0.75rem' }}>
-              Metropolitan simulation directives
+              Metropolitan simulation controls
             </div>
           </div>
           <button
@@ -236,8 +233,8 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
           </button>
         </header>
 
-        <nav aria-label="Menu sections" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
-          {(['WORLD', 'MISSIONS', 'VIEW', 'VEHICLE', 'CODEX', 'HISTORY', 'CONTROLS'] as Section[]).map((item) => (
+        <nav aria-label="Menu sections" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5 }}>
+          {(['WORLD', 'VIEW', 'VEHICLE', 'CODEX', 'HISTORY', 'CONTROLS'] as Section[]).map((item) => (
             <button
               key={item}
               aria-pressed={section === item}
@@ -696,71 +693,6 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
                   />
                 </label>
               </div>
-            </section>
-          )}
-
-          {section === 'MISSIONS' && (
-            <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="section-heading">CIVIC ASSIGNMENTS</div>
-              {missionState.active && (
-                <div
-                  style={{
-                    padding: 12,
-                    border: '1px solid var(--neon-emerald)',
-                    background: 'rgba(16, 185, 129, 0.08)',
-                    borderRadius: 4,
-                  }}
-                >
-                  <div style={{ color: 'var(--neon-emerald)', fontSize: '0.72rem', fontWeight: 700 }}>
-                    ACTIVE // {missionState.active.title}
-                  </div>
-                  <div style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
-                    {missionState.active.targetLabel}
-                  </div>
-                </div>
-              )}
-              {missionState.missions.map((m) => (
-                <article
-                  key={m.id}
-                  style={{ padding: '10px 0', borderBottom: '1px solid var(--border-subtle)' }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      gap: 8,
-                      color: m.status === 'COMPLETED' ? 'var(--text-muted)' : 'var(--neon-amber)',
-                      fontSize: '0.72rem',
-                      fontWeight: 600,
-                    }}
-                  >
-                    <span>{m.title}</span>
-                    <span>{m.status}</span>
-                  </div>
-                  <div style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: '0.72rem', lineHeight: 1.45 }}>
-                    {m.briefing}
-                  </div>
-                  {m.status === 'AVAILABLE' && !missionState.active && (
-                    <button
-                      className="cyber-btn"
-                      onClick={() => MissionSystem.getInstance().acceptMission(m.id)}
-                      style={{ marginTop: 8, padding: '5px 10px', fontSize: '0.66rem' }}
-                    >
-                      ACCEPT CONTRACT // +{m.reward} REP
-                    </button>
-                  )}
-                </article>
-              ))}
-              <div className="section-heading">FACTION STANDING</div>
-              {Object.entries(missionState.factionRelations).map(([faction, value]) => (
-                <div key={faction} className="menu-note" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{faction.replaceAll('_', ' ')}</span>
-                  <span style={{ color: value >= 0 ? 'var(--neon-emerald)' : 'var(--neon-magenta)' }}>
-                    {value > 0 ? '+' : ''}
-                    {value}
-                  </span>
-                </div>
-              ))}
             </section>
           )}
 
