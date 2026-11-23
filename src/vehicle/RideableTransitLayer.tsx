@@ -7,18 +7,24 @@ import { TransitScheduleSystem } from './TransitScheduleSystem';
 import { InteractionSystem } from '../interaction/InteractionSystem';
 import { AudioManager } from '../audio/AudioManager';
 import { ExperimentalCar } from './ExperimentalCar';
+import { SolarisExperimentalCar } from './SolarisExperimentalCar';
+import {
+  createSmoothBeveledBoxGeometry,
+  createSmoothHoverCoupeGeometry,
+  createSmoothMagShuttleGeometry,
+} from '../rendering/SmoothWorldGeometries';
 
 interface RideableTransitLayerProps {
   playerPosRef?: React.MutableRefObject<THREE.Vector3>;
 }
 
 const REPAIR_BAYS = [
-  { id: 'repair-central', name: 'Central Maintenance Bay', position: new THREE.Vector3(9, 0.4, 10) },
-  { id: 'repair-west', name: 'West Avenue Service Bay', position: new THREE.Vector3(-34, 0.4, -8) },
-  { id: 'repair-north', name: 'North Crossing Service Bay', position: new THREE.Vector3(10, 0.4, -84) },
-  { id: 'repair-neural', name: 'Neural Sector Calibration Dock', position: new THREE.Vector3(-152, 0.4, -172) },
-  { id: 'repair-foundry', name: 'Foundry Heavy Overhaul Bay', position: new THREE.Vector3(-152, 0.4, 172) },
-  { id: 'repair-arboretum', name: 'Arboretum Mag-Service Pad', position: new THREE.Vector3(152, 0.4, 172) },
+  { id: 'repair-central', name: 'Central Maintenance Bay', position: new THREE.Vector3(14.4, 0.22, 22) },
+  { id: 'repair-west', name: 'West Avenue Service Bay', position: new THREE.Vector3(-34, 0.22, -14.4) },
+  { id: 'repair-north', name: 'North Crossing Service Bay', position: new THREE.Vector3(14.4, 0.22, -92) },
+  { id: 'repair-neural', name: 'Neural Sector Calibration Dock', position: new THREE.Vector3(-148, 0.22, -152) },
+  { id: 'repair-foundry', name: 'Foundry Heavy Overhaul Bay', position: new THREE.Vector3(-148, 0.22, 152) },
+  { id: 'repair-arboretum', name: 'Arboretum Mag-Service Pad', position: new THREE.Vector3(148, 0.22, 152) },
 ];
 
 const RIDEABLE_FLEET: {
@@ -32,7 +38,7 @@ const RIDEABLE_FLEET: {
   {
     id: 'nexus-hover-01',
     label: 'Solaris Hover-Coupe',
-    position: [4.5, 0.45, 10],
+    position: [13.6, 0.48, 16],
     rotationY: 0,
     bodyColor: '#0b0f19',
     accentColor: '#38bdf8',
@@ -40,7 +46,7 @@ const RIDEABLE_FLEET: {
   {
     id: 'nexus-hover-02',
     label: 'Apex Executive Speeder',
-    position: [26, 0.45, -14],
+    position: [26, 0.48, -14],
     rotationY: -Math.PI / 2,
     bodyColor: '#111827',
     accentColor: '#f59e0b',
@@ -48,7 +54,7 @@ const RIDEABLE_FLEET: {
   {
     id: 'nexus-hover-03',
     label: 'North Crossing Interceptor',
-    position: [-4.5, 0.45, -82],
+    position: [-13.6, 0.48, -88],
     rotationY: 0,
     bodyColor: '#0f172a',
     accentColor: '#38bdf8',
@@ -56,7 +62,7 @@ const RIDEABLE_FLEET: {
   {
     id: 'nexus-hover-04',
     label: 'Sanctuary Eco-Skiff',
-    position: [42, 0.45, 68],
+    position: [42, 0.48, 68],
     rotationY: Math.PI / 2,
     bodyColor: '#064e3b',
     accentColor: '#10b981',
@@ -64,7 +70,7 @@ const RIDEABLE_FLEET: {
   {
     id: 'nexus-hover-05',
     label: 'Neural Quantum Cruiser',
-    position: [-158, 0.45, -158],
+    position: [-148, 0.48, -148],
     rotationY: Math.PI / 4,
     bodyColor: '#172554',
     accentColor: '#38bdf8',
@@ -72,7 +78,7 @@ const RIDEABLE_FLEET: {
   {
     id: 'nexus-hover-06',
     label: 'Aerostrata High-Wing Coupe',
-    position: [158, 0.45, -158],
+    position: [148, 0.48, -148],
     rotationY: -Math.PI / 4,
     bodyColor: '#0f172a',
     accentColor: '#7dd3fc',
@@ -80,7 +86,7 @@ const RIDEABLE_FLEET: {
   {
     id: 'nexus-hover-07',
     label: 'Arboretum Bio-Glider',
-    position: [158, 0.45, 158],
+    position: [148, 0.48, 148],
     rotationY: (-3 * Math.PI) / 4,
     bodyColor: '#052e16',
     accentColor: '#10b981',
@@ -88,7 +94,7 @@ const RIDEABLE_FLEET: {
   {
     id: 'nexus-hover-08',
     label: 'Foundry Heavy Vector',
-    position: [-158, 0.45, 158],
+    position: [-148, 0.48, 148],
     rotationY: (3 * Math.PI) / 4,
     bodyColor: '#1e1b4b',
     accentColor: '#f59e0b',
@@ -102,6 +108,10 @@ const THRUSTER_POD_OFFSETS: [number, number, number][] = [
   [1.04, -0.06, -1.25],
 ];
 
+const SHARED_HOVER_COUPE = createSmoothHoverCoupeGeometry();
+const SHARED_MAG_SHUTTLE = createSmoothMagShuttleGeometry();
+const SHARED_BEVEL_UNIT = createSmoothBeveledBoxGeometry(0.075, 2);
+
 export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
   const [neonUpgraded, setNeonUpgraded] = useState<boolean>(
     () => VehicleInteractionSystem.getInstance().getState().upgrades.neon > 0
@@ -113,7 +123,7 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
   const dwellRef = useRef(0);
 
   const system = VehicleInteractionSystem.getInstance();
-  const initialTransitPos = useMemo(() => new THREE.Vector3(-7, 0.2, 10), []);
+  const initialTransitPos = useMemo(() => new THREE.Vector3(-13.8, 0.2, 22), []);
   const shuttleTargetRef = useRef(new THREE.Vector3());
 
   useEffect(() => {
@@ -132,7 +142,7 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
       );
     });
     if (shuttleRef.current) {
-      shuttleRef.current.position.set(-7, 0.62, 10);
+      shuttleRef.current.position.set(-13.8, 0.62, 22);
     }
     system.registerRideable('central-transit-node', 'Autonomous Mag-Shuttle', initialTransitPos, 'transit');
 
@@ -248,10 +258,11 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
 
   return (
     <group name="RideableTransitAndServiceLayer">
-      {/* 0. Controllable 4-Wheel Experimental GT Prototype (VX-01) */}
+      {/* 0. Controllable 4-Wheel Experimental Prototypes (VX-01 Apex & AX-09 Solaris) */}
       <ExperimentalCar />
+      <SolarisExperimentalCar />
 
-      {/* 1. City-Wide Fleet of Player Rideable Hover-Coupes (Multi-Part Composite Aerodynamic Chassis) */}
+      {/* 1. City-Wide Fleet of Player Rideable Hover-Coupes (Sculpted Compound-Curved Aero Hull) */}
       {RIDEABLE_FLEET.map((vDef, vIdx) => {
         const accent = neon ? '#f59e0b' : vDef.accentColor;
         return (
@@ -261,83 +272,73 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
               fleetRefs.current[vIdx] = el;
             }}
           >
-            {/* Primary Lower Monocoque Body */}
-            <mesh castShadow={shadows}>
-              <boxGeometry args={[1.82, 0.44, 3.65]} />
-              <meshStandardMaterial
+            {/* Primary Sculpted Compound-Curved Monocoque Body */}
+            <mesh geometry={SHARED_HOVER_COUPE.hullGeo} castShadow={shadows}>
+              <meshPhysicalMaterial
                 color={vDef.bodyColor}
-                metalness={0.94}
-                roughness={0.15}
+                metalness={0.86}
+                roughness={0.18}
+                clearcoat={0.85}
+                clearcoatRoughness={0.12}
                 emissive={accent}
-                emissiveIntensity={neon ? 0.38 : 0.12}
+                emissiveIntensity={neon ? 0.36 : 0.1}
               />
             </mesh>
 
-            {/* Sculpted Upper Hood & Side Vent Intake Shoulders */}
-            <mesh position={[0, 0.18, 0.65]} castShadow={shadows}>
-              <boxGeometry args={[1.56, 0.18, 1.85]} />
-              <meshStandardMaterial color="#111827" metalness={0.92} roughness={0.18} />
-            </mesh>
             {/* Front Carbon Aero Splitter Chin */}
-            <mesh position={[0, -0.18, 1.88]}>
-              <boxGeometry args={[1.88, 0.08, 0.28]} />
+            <mesh geometry={SHARED_BEVEL_UNIT} position={[0, -0.17, 1.82]} scale={[1.76, 0.075, 0.28]}>
               <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.22} />
             </mesh>
 
-            {/* Panoramic Gullwing Glass Canopy & Interior Cockpit */}
-            <mesh position={[0, 0.39, -0.12]}>
-              <boxGeometry args={[1.38, 0.35, 1.82]} />
-              <meshStandardMaterial color="#0f172a" transparent opacity={0.78} metalness={0.94} roughness={0.08} />
+            {/* Smooth Sculpted Panoramic Bubble Canopy */}
+            <mesh geometry={SHARED_HOVER_COUPE.canopyGeo}>
+              <meshPhysicalMaterial
+                color="#0f172a"
+                transparent
+                opacity={0.78}
+                metalness={0.92}
+                roughness={0.08}
+                clearcoat={1.0}
+                clearcoatRoughness={0.05}
+              />
             </mesh>
-            {/* Interior Illuminated HUD Dashboard & Bucket Seats */}
-            <mesh position={[0, 0.32, 0.48]} rotation={[-0.35, 0, 0]}>
-              <boxGeometry args={[1.1, 0.14, 0.04]} />
+            {/* Interior Illuminated HUD Dashboard */}
+            <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.28, 0.44]} rotation={[-0.35, 0, 0]} scale={[0.98, 0.12, 0.04]}>
               <meshBasicMaterial color={accent} />
             </mesh>
-            {([-0.34, 0.34] as const).map((sx, sIdx) => (
-              <mesh key={sIdx} position={[sx, 0.3, -0.25]}>
-                <boxGeometry args={[0.38, 0.32, 0.42]} />
-                <meshStandardMaterial color="#1e293b" roughness={0.4} metalness={0.5} />
-              </mesh>
-            ))}
 
             {/* 4 Outboard Articulated Mag-Lev Thruster Nacelles with Glowing Turbine Rings */}
             {THRUSTER_POD_OFFSETS.map(([tx, ty, tz], idx) => (
               <group key={`pod-${idx}`} position={[tx, ty, tz]}>
-                {/* Strut Arm */}
-                <mesh position={[tx > 0 ? -0.12 : 0.12, 0.04, 0]}>
-                  <boxGeometry args={[0.24, 0.09, 0.32]} />
+                {/* Smooth Strut Arm */}
+                <mesh geometry={SHARED_BEVEL_UNIT} position={[tx > 0 ? -0.12 : 0.12, 0.04, 0]} scale={[0.26, 0.09, 0.34]}>
                   <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.22} />
                 </mesh>
                 {/* Outer Turbine Shroud */}
                 <mesh castShadow={shadows}>
-                  <cylinderGeometry args={[0.28, 0.32, 0.24, 14]} />
+                  <cylinderGeometry args={[0.28, 0.32, 0.24, 18]} />
                   <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.18} />
                 </mesh>
                 {/* Glowing Downward Plasma Ring */}
                 <mesh position={[0, -0.125, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                  <ringGeometry args={[0.14, 0.26, 14]} />
+                  <ringGeometry args={[0.14, 0.26, 18]} />
                   <meshBasicMaterial color={accent} side={THREE.DoubleSide} />
                 </mesh>
               </group>
             ))}
 
             {/* Rear Active Aero Wing & Dual Plasma Exhaust Diffuser */}
-            <group position={[0, 0.42, -1.68]}>
-              <mesh position={[-0.58, -0.12, 0]}>
-                <boxGeometry args={[0.08, 0.24, 0.26]} />
+            <group position={[0, 0.42, -1.66]}>
+              <mesh geometry={SHARED_BEVEL_UNIT} position={[-0.58, -0.12, 0]} scale={[0.08, 0.24, 0.26]}>
                 <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.2} />
               </mesh>
-              <mesh position={[0.58, -0.12, 0]}>
-                <boxGeometry args={[0.08, 0.24, 0.26]} />
+              <mesh geometry={SHARED_BEVEL_UNIT} position={[0.58, -0.12, 0]} scale={[0.08, 0.24, 0.26]}>
                 <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.2} />
               </mesh>
-              <mesh castShadow={shadows}>
-                <boxGeometry args={[1.76, 0.06, 0.36]} />
+              <mesh geometry={SHARED_BEVEL_UNIT} scale={[1.72, 0.06, 0.34]} castShadow={shadows}>
                 <meshStandardMaterial color="#0b0f19" metalness={0.94} roughness={0.15} />
               </mesh>
-              <mesh position={[0, 0.035, -0.14]}>
-                <boxGeometry args={[1.72, 0.02, 0.04]} />
+              <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.035, -0.14]} scale={[1.66, 0.022, 0.04]}>
                 <meshBasicMaterial color={accent} />
               </mesh>
             </group>
@@ -346,23 +347,21 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
             {([-0.42, 0.42] as const).map((ex, eIdx) => (
               <group key={eIdx} position={[ex, -0.04, -1.85]} rotation={[Math.PI / 2, 0, 0]}>
                 <mesh>
-                  <cylinderGeometry args={[0.11, 0.14, 0.14, 10]} />
+                  <cylinderGeometry args={[0.11, 0.14, 0.14, 14]} />
                   <meshStandardMaterial color="#1e293b" metalness={0.92} roughness={0.2} />
                 </mesh>
                 <mesh position={[0, -0.09, 0]}>
-                  <coneGeometry args={[0.09, 0.22, 10]} />
+                  <coneGeometry args={[0.09, 0.22, 14]} />
                   <meshBasicMaterial color={accent} transparent opacity={0.85} />
                 </mesh>
               </group>
             ))}
 
             {/* Full-Width Laser Headlamp Matrix & Rear Taillight Blade */}
-            <mesh position={[0, 0.06, 1.84]}>
-              <boxGeometry args={[1.62, 0.085, 0.04]} />
+            <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.04, 1.82]} scale={[1.48, 0.075, 0.045]}>
               <meshBasicMaterial color="#fef3c7" />
             </mesh>
-            <mesh position={[0, 0.08, -1.84]}>
-              <boxGeometry args={[1.66, 0.09, 0.04]} />
+            <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.07, -1.82]} scale={[1.54, 0.08, 0.045]}>
               <meshBasicMaterial color="#f43f5e" />
             </mesh>
 
@@ -375,26 +374,26 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
         );
       })}
 
-      {/* 2. Transit Stops with Cantilevered Canopy & Rotating Holographic Route Beacons */}
+      {/* 2. Transit Stops with Smooth Cylindrical Mast & Rotating Holographic Route Beacons */}
       {stops.map((stop, idx) => (
         <group key={stop.id} position={stop.position}>
           {/* Platform Base Pad */}
           <mesh position={[0, 0.04, 0]} receiveShadow>
-            <cylinderGeometry args={[1.25, 1.35, 0.08, 16]} />
+            <cylinderGeometry args={[1.25, 1.35, 0.08, 20]} />
             <meshStandardMaterial color="#0f172a" metalness={0.88} roughness={0.25} />
           </mesh>
           <mesh position={[0, 0.085, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[1.08, 1.2, 16]} />
+            <ringGeometry args={[1.08, 1.2, 20]} />
             <meshBasicMaterial color="#38bdf8" />
           </mesh>
           {/* Main Pylon Mast */}
           <mesh position={[0, 1.25, 0]}>
-            <cylinderGeometry args={[0.14, 0.22, 2.4, 10]} />
+            <cylinderGeometry args={[0.14, 0.22, 2.4, 16]} />
             <meshStandardMaterial color="#111827" metalness={0.88} roughness={0.2} />
           </mesh>
           {/* Halo Ring */}
           <mesh position={[0, 2.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.45, 0.03, 8, 24]} />
+            <torusGeometry args={[0.45, 0.03, 10, 28]} />
             <meshBasicMaterial color="#f59e0b" />
           </mesh>
           {/* Rotating Holographic Crystal */}
@@ -404,90 +403,90 @@ export const RideableTransitLayer: React.FC<RideableTransitLayerProps> = () => {
             }}
             position={[0, 2.65, 0]}
           >
-            <octahedronGeometry args={[0.28, 0]} />
+            <icosahedronGeometry args={[0.25, 1]} />
             <meshBasicMaterial color="#38bdf8" wireframe />
           </mesh>
         </group>
       ))}
 
-      {/* 3. Autonomous Multi-Window Mag-Shuttle */}
+      {/* 3. Autonomous Streamlined Bullet Mag-Shuttle */}
       <group ref={shuttleRef}>
-        {/* Lower Mag-Lev Chassis */}
-        <mesh castShadow={shadows}>
-          <boxGeometry args={[2.16, 0.68, 5.1]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.88} roughness={0.2} emissive="#38bdf8" emissiveIntensity={0.2} />
+        {/* Smooth Streamlined Lower Monocoque Hull */}
+        <mesh geometry={SHARED_MAG_SHUTTLE.hullGeo} castShadow={shadows}>
+          <meshPhysicalMaterial
+            color="#0f172a"
+            metalness={0.88}
+            roughness={0.18}
+            clearcoat={0.8}
+            clearcoatRoughness={0.12}
+            emissive="#38bdf8"
+            emissiveIntensity={0.18}
+          />
         </mesh>
-        {/* Panoramic Passenger Cabin Glazing */}
-        <mesh position={[0, 0.5, 0]}>
-          <boxGeometry args={[1.88, 0.42, 3.6]} />
-          <meshStandardMaterial color="#1e293b" transparent opacity={0.82} metalness={0.9} roughness={0.1} />
+        {/* Smooth Panoramic Passenger Cabin Glazing */}
+        <mesh geometry={SHARED_MAG_SHUTTLE.cabinGeo}>
+          <meshPhysicalMaterial
+            color="#1e293b"
+            transparent
+            opacity={0.82}
+            metalness={0.92}
+            roughness={0.08}
+            clearcoat={1.0}
+          />
         </mesh>
         {/* Warm Interior Cabin Illumination Core */}
-        <mesh position={[0, 0.46, 0]}>
-          <boxGeometry args={[1.55, 0.26, 3.2]} />
+        <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.44, 0]} scale={[1.5, 0.24, 3.1]}>
           <meshBasicMaterial color="#bae6fd" transparent opacity={0.35} />
         </mesh>
         {/* Rooftop Cryo-HVAC Unit & Telemetry Fin */}
-        <mesh position={[0, 0.78, -0.4]}>
-          <boxGeometry args={[1.2, 0.18, 1.8]} />
+        <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.78, -0.4]} scale={[1.18, 0.16, 1.75]}>
           <meshStandardMaterial color="#0b1120" metalness={0.9} roughness={0.22} />
         </mesh>
-        <mesh position={[0, 0.88, 0.9]}>
-          <boxGeometry args={[0.08, 0.24, 0.55]} />
+        <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.88, 0.9]} scale={[0.08, 0.24, 0.55]}>
           <meshBasicMaterial color="#38bdf8" />
         </mesh>
-        {/* Side Boarding Door Frames */}
-        {([-1.09, 1.09] as const).map((dx, dIdx) => (
-          <mesh key={dIdx} position={[dx, 0.12, 0]}>
-            <boxGeometry args={[0.03, 0.75, 1.25]} />
+        {/* Side Boarding Door Accent Strips */}
+        {([-1.06, 1.06] as const).map((dx, dIdx) => (
+          <mesh key={dIdx} geometry={SHARED_BEVEL_UNIT} position={[dx, 0.12, 0]} scale={[0.035, 0.7, 1.2]}>
             <meshBasicMaterial color="#38bdf8" />
           </mesh>
         ))}
         {/* Front & Rear Light Matrices */}
-        <mesh position={[0, 0.05, 2.56]}>
-          <boxGeometry args={[1.85, 0.12, 0.04]} />
+        <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.04, 2.52]} scale={[1.7, 0.11, 0.05]}>
           <meshBasicMaterial color="#fef3c7" />
         </mesh>
-        <mesh position={[0, 0.05, -2.56]}>
-          <boxGeometry args={[1.85, 0.12, 0.04]} />
+        <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.04, -2.52]} scale={[1.7, 0.11, 0.05]}>
           <meshBasicMaterial color="#f43f5e" />
         </mesh>
         {/* Underbody Mag-Lev Skids */}
         {([-0.78, 0.78] as const).map((sx, sIdx) => (
-          <mesh key={sIdx} position={[sx, -0.36, 0]}>
-            <boxGeometry args={[0.26, 0.08, 4.4]} />
+          <mesh key={sIdx} geometry={SHARED_BEVEL_UNIT} position={[sx, -0.36, 0]} scale={[0.26, 0.08, 4.2]}>
             <meshBasicMaterial color="#38bdf8" />
           </mesh>
         ))}
       </group>
 
-      {/* 4. Robotic Chassis Calibration & Maintenance Bays */}
+      {/* 4. Robotic Chassis Calibration & Maintenance Bays (Smooth Beveled Architecture) */}
       {REPAIR_BAYS.map((bay) => (
         <group key={bay.id} position={bay.position}>
           {/* Diagnostic Deck Platform */}
-          <mesh receiveShadow>
-            <boxGeometry args={[2.8, 0.45, 1.9]} />
+          <mesh geometry={SHARED_BEVEL_UNIT} scale={[2.8, 0.36, 1.9]} receiveShadow>
             <meshStandardMaterial color="#0f172a" metalness={0.88} roughness={0.24} />
           </mesh>
-          <mesh position={[0, 0.24, 0]}>
-            <boxGeometry args={[2.2, 0.05, 1.3]} />
+          <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 0.19, 0]} scale={[2.2, 0.045, 1.3]}>
             <meshBasicMaterial color="#f59e0b" />
           </mesh>
           {/* Twin Diagnostic Gantry Arch */}
-          <mesh position={[-1.25, 1.15, 0]}>
-            <boxGeometry args={[0.18, 1.9, 0.28]} />
+          <mesh geometry={SHARED_BEVEL_UNIT} position={[-1.25, 1.12, 0]} scale={[0.18, 1.9, 0.28]}>
             <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.2} />
           </mesh>
-          <mesh position={[1.25, 1.15, 0]}>
-            <boxGeometry args={[0.18, 1.9, 0.28]} />
+          <mesh geometry={SHARED_BEVEL_UNIT} position={[1.25, 1.12, 0]} scale={[0.18, 1.9, 0.28]}>
             <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.2} />
           </mesh>
-          <mesh position={[0, 2.05, 0]}>
-            <boxGeometry args={[2.68, 0.16, 0.32]} />
+          <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 2.02, 0]} scale={[2.68, 0.16, 0.32]}>
             <meshStandardMaterial color="#0b1120" metalness={0.92} roughness={0.18} />
           </mesh>
-          <mesh position={[0, 1.94, 0]}>
-            <boxGeometry args={[2.1, 0.04, 0.14]} />
+          <mesh geometry={SHARED_BEVEL_UNIT} position={[0, 1.91, 0]} scale={[2.1, 0.04, 0.14]}>
             <meshBasicMaterial color="#38bdf8" />
           </mesh>
         </group>

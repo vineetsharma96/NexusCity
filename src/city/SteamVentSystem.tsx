@@ -1,8 +1,9 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { WindSystem } from '../world/WindSystem';
 import { QualityManager } from '../rendering/QualityManager';
+import { createSmoothBeveledBoxGeometry } from '../rendering/SmoothWorldGeometries';
 
 interface SteamVentSystemProps {
   playerPosRef: React.MutableRefObject<THREE.Vector3>;
@@ -33,31 +34,31 @@ interface SmokeParticle {
 }
 
 const VENT_SOURCES: VentSource[] = [
-  // Central Avenue & Intersection Street Steam Vents
-  { id: 'vent_central_nw', position: [-5.6, 0.03, -22], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.0 },
-  { id: 'vent_central_se', position: [5.6, 0.03, 22], rotationY: 0, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.05 },
-  { id: 'vent_central_ne', position: [22, 0.03, -5.6], rotationY: Math.PI / 2, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 0.95 },
-  { id: 'vent_central_sw', position: [-22, 0.03, 5.6], rotationY: Math.PI / 2, accentColor: '#10b981', smokeTint: '#cbd5e1', intensity: 0.95 },
-  { id: 'vent_north_ave_1', position: [-5.6, 0.03, -52], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.1 },
-  { id: 'vent_south_ave_1', position: [5.6, 0.03, 52], rotationY: 0, accentColor: '#f43f5e', smokeTint: '#e2e8f0', intensity: 1.1 },
-  { id: 'vent_west_alley', position: [-52, 0.03, -5.6], rotationY: Math.PI / 2, accentColor: '#f59e0b', smokeTint: '#cbd5e1', intensity: 1.0 },
-  { id: 'vent_east_sanctuary_entry', position: [36, 0.03, 5.6], rotationY: Math.PI / 2, accentColor: '#10b981', smokeTint: '#ccfbf1', intensity: 1.0 },
+  // Central Avenue & Intersection Curbside Steam Vents (mounted cleanly on raised sidewalks)
+  { id: 'vent_central_nw', position: [-13.0, 0.205, -22], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.0 },
+  { id: 'vent_central_se', position: [13.0, 0.205, 22], rotationY: 0, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.05 },
+  { id: 'vent_central_ne', position: [22, 0.205, -13.0], rotationY: Math.PI / 2, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 0.95 },
+  { id: 'vent_central_sw', position: [-22, 0.205, 13.0], rotationY: Math.PI / 2, accentColor: '#10b981', smokeTint: '#cbd5e1', intensity: 0.95 },
+  { id: 'vent_north_ave_1', position: [-13.0, 0.205, -52], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.1 },
+  { id: 'vent_south_ave_1', position: [13.0, 0.205, 52], rotationY: 0, accentColor: '#f43f5e', smokeTint: '#e2e8f0', intensity: 1.1 },
+  { id: 'vent_west_alley', position: [-52, 0.205, -13.0], rotationY: Math.PI / 2, accentColor: '#f59e0b', smokeTint: '#cbd5e1', intensity: 1.0 },
+  { id: 'vent_east_sanctuary_entry', position: [36, 0.205, 13.0], rotationY: Math.PI / 2, accentColor: '#10b981', smokeTint: '#ccfbf1', intensity: 1.0 },
   // Central Park Sanctuary Geothermal Spring Steam Vents
   { id: 'vent_park_spring_sw', position: [56, 0.26, 92], rotationY: 0.4, accentColor: '#10b981', smokeTint: '#a7f3d0', intensity: 1.2 },
   { id: 'vent_park_spring_se', position: [94, 0.26, 92], rotationY: -0.4, accentColor: '#38bdf8', smokeTint: '#bae6fd', intensity: 1.2 },
-  // Extended Outer Avenue & District Thermal Vents
-  { id: 'vent_north_crossing_w', position: [-5.6, 0.03, -98], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.15 },
-  { id: 'vent_north_crossing_e', position: [5.6, 0.03, -148], rotationY: 0, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.15 },
-  { id: 'vent_south_crossing_w', position: [-5.6, 0.03, 98], rotationY: 0, accentColor: '#f43f5e', smokeTint: '#e2e8f0', intensity: 1.15 },
-  { id: 'vent_south_crossing_e', position: [5.6, 0.03, 148], rotationY: 0, accentColor: '#10b981', smokeTint: '#cbd5e1', intensity: 1.15 },
-  { id: 'vent_west_neural_1', position: [-98, 0.03, -5.6], rotationY: Math.PI / 2, accentColor: '#38bdf8', smokeTint: '#bae6fd', intensity: 1.1 },
-  { id: 'vent_west_neural_2', position: [-148, 0.03, 5.6], rotationY: Math.PI / 2, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.2 },
-  { id: 'vent_east_aero_1', position: [98, 0.03, -5.6], rotationY: Math.PI / 2, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.1 },
-  { id: 'vent_east_aero_2', position: [148, 0.03, 5.6], rotationY: Math.PI / 2, accentColor: '#10b981', smokeTint: '#ccfbf1', intensity: 1.2 },
-  { id: 'vent_nw_sector', position: [-75, 0.03, -95], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#bae6fd', intensity: 1.15 },
-  { id: 'vent_ne_sector', position: [75, 0.03, -95], rotationY: 0, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.15 },
-  { id: 'vent_sw_foundry', position: [-75, 0.03, 95], rotationY: 0, accentColor: '#f43f5e', smokeTint: '#fecdd3', intensity: 1.25 },
-  { id: 'vent_se_arboretum', position: [120, 0.03, 120], rotationY: Math.PI / 4, accentColor: '#10b981', smokeTint: '#a7f3d0', intensity: 1.2 },
+  // Extended Outer Avenue & District Thermal Vents (sidewalk curbs)
+  { id: 'vent_north_crossing_w', position: [-13.0, 0.205, -98], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.15 },
+  { id: 'vent_north_crossing_e', position: [13.0, 0.205, -144], rotationY: 0, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.15 },
+  { id: 'vent_south_crossing_w', position: [-13.0, 0.205, 98], rotationY: 0, accentColor: '#f43f5e', smokeTint: '#e2e8f0', intensity: 1.15 },
+  { id: 'vent_south_crossing_e', position: [13.0, 0.205, 144], rotationY: 0, accentColor: '#10b981', smokeTint: '#cbd5e1', intensity: 1.15 },
+  { id: 'vent_west_neural_1', position: [-98, 0.205, -13.0], rotationY: Math.PI / 2, accentColor: '#38bdf8', smokeTint: '#bae6fd', intensity: 1.1 },
+  { id: 'vent_west_neural_2', position: [-144, 0.205, 13.0], rotationY: Math.PI / 2, accentColor: '#38bdf8', smokeTint: '#cbd5e1', intensity: 1.2 },
+  { id: 'vent_east_aero_1', position: [98, 0.205, -13.0], rotationY: Math.PI / 2, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.1 },
+  { id: 'vent_east_aero_2', position: [144, 0.205, 13.0], rotationY: Math.PI / 2, accentColor: '#10b981', smokeTint: '#ccfbf1', intensity: 1.2 },
+  { id: 'vent_nw_sector', position: [-86.2, 0.205, -95], rotationY: 0, accentColor: '#38bdf8', smokeTint: '#bae6fd', intensity: 1.15 },
+  { id: 'vent_ne_sector', position: [86.2, 0.205, -95], rotationY: 0, accentColor: '#f59e0b', smokeTint: '#e2e8f0', intensity: 1.15 },
+  { id: 'vent_sw_foundry', position: [-86.2, 0.205, 95], rotationY: 0, accentColor: '#f43f5e', smokeTint: '#fecdd3', intensity: 1.25 },
+  { id: 'vent_se_arboretum', position: [120, 0.205, 120], rotationY: Math.PI / 4, accentColor: '#10b981', smokeTint: '#a7f3d0', intensity: 1.2 },
 ];
 
 const PARTICLES_PER_VENT = 30;
@@ -105,7 +106,15 @@ export const SteamVentSystem: React.FC<SteamVentSystemProps> = ({ playerPosRef }
     []
   );
 
-  const puffGeo = useMemo(() => new THREE.DodecahedronGeometry(1, 1), []);
+  const puffGeo = useMemo(() => new THREE.IcosahedronGeometry(1, 2), []);
+  const beveledBoxGeo = useMemo(() => createSmoothBeveledBoxGeometry(0.08, 2), []);
+
+  useEffect(() => {
+    return () => {
+      puffGeo.dispose();
+      beveledBoxGeo.dispose();
+    };
+  }, [puffGeo, beveledBoxGeo]);
 
   useFrame(({ clock }, delta) => {
     const mesh = smokeMeshRef.current;
@@ -209,30 +218,26 @@ export const SteamVentSystem: React.FC<SteamVentSystemProps> = ({ playerPosRef }
       {/* Physical Street & Sanctuary Steam Vent Grates */}
       {VENT_SOURCES.map((v) => (
         <group key={v.id} position={v.position} rotation={[0, v.rotationY, 0]}>
-          {/* Heavy Cast-Titanium Outer Frame */}
-          <mesh position={[0, 0.015, 0]} receiveShadow>
-            <boxGeometry args={[2.2, 0.035, 1.35]} />
+          {/* Heavy Cast-Titanium Smooth Beveled Outer Frame */}
+          <mesh geometry={beveledBoxGeo} position={[0, 0.015, 0]} scale={[2.2, 0.04, 1.35]} receiveShadow>
             <meshStandardMaterial color="#0f172a" metalness={0.92} roughness={0.25} />
           </mesh>
           {/* Glowing Thermal Chamber Under-Core */}
-          <mesh position={[0, 0.022, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[0, 0.024, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <planeGeometry args={[1.85, 1.0]} />
             <meshBasicMaterial color={v.accentColor} transparent opacity={0.42} />
           </mesh>
-          {/* Slotted Louver Bars */}
+          {/* Slotted Smooth Louver Bars */}
           {([-0.68, -0.34, 0, 0.34, 0.68] as const).map((lx, idx) => (
-            <mesh key={idx} position={[lx, 0.032, 0]}>
-              <boxGeometry args={[0.12, 0.02, 1.06]} />
+            <mesh key={idx} geometry={beveledBoxGeo} position={[lx, 0.034, 0]} scale={[0.12, 0.022, 1.06]}>
               <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.22} />
             </mesh>
           ))}
           {/* Hazard Trim Strips */}
-          <mesh position={[0, 0.034, -0.62]}>
-            <boxGeometry args={[2.1, 0.01, 0.06]} />
+          <mesh geometry={beveledBoxGeo} position={[0, 0.036, -0.62]} scale={[2.06, 0.014, 0.06]}>
             <meshBasicMaterial color={v.accentColor} />
           </mesh>
-          <mesh position={[0, 0.034, 0.62]}>
-            <boxGeometry args={[2.1, 0.01, 0.06]} />
+          <mesh geometry={beveledBoxGeo} position={[0, 0.036, 0.62]} scale={[2.06, 0.014, 0.06]}>
             <meshBasicMaterial color={v.accentColor} />
           </mesh>
         </group>

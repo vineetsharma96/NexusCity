@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SeedRandom } from '../core/SeedRandom';
 import { DistrictInfo } from './DistrictGenerator';
+import { isPointOnAnyRoad } from './WorldRoadClearance';
 
 export type TreeSpecies = 'GINKGO' | 'SAKURA' | 'EMERALD' | 'WILLOW' | 'CYBER_NEON';
 
@@ -164,6 +165,7 @@ export class VegetationGenerator {
     ];
 
     coords.forEach(([x, z], idx) => {
+      if (isPointOnAnyRoad(x, z, 1.2)) return;
       const species = speciesOrder[idx % speciesOrder.length];
       trees.push(this.createTree(`core-tree-${idx}`, new THREE.Vector3(x, 0.14, z), species, rng, true));
     });

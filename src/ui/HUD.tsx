@@ -80,6 +80,9 @@ const VehicleTelemetryOverlay: React.FC<{ isMobile: boolean; hidden: boolean }> 
   const gClamped = Math.max(-1, Math.min(1, tel.longitudinalAccelG / 2.2));
   const gWidthPct = Math.abs(gClamped) * 50;
   const isRev = tel.gear === 'R' || tel.isReversing;
+  const carAccent = vehicleState.carAccentColor || '#38bdf8';
+  const carCode = vehicleState.carCodeName || 'VX-01';
+  const streakRgba = carAccent === '#f59e0b' ? 'rgba(245, 158, 11, 0.24)' : 'rgba(56, 189, 248, 0.22)';
 
   return (
     <>
@@ -92,8 +95,7 @@ const VehicleTelemetryOverlay: React.FC<{ isMobile: boolean; hidden: boolean }> 
           zIndex: 24,
           opacity: accelIntensity > 0.04 ? accelIntensity * 0.72 : 0,
           transition: 'opacity 90ms linear',
-          background:
-            'repeating-conic-gradient(from 0deg at 50% 50%, rgba(56, 189, 248, 0.22) 0deg 0.8deg, transparent 0.8deg 6deg)',
+          background: `repeating-conic-gradient(from 0deg at 50% 50%, ${streakRgba} 0deg 0.8deg, transparent 0.8deg 6deg)`,
           WebkitMaskImage: 'radial-gradient(circle at center, transparent 48%, rgba(0, 0, 0, 0.95) 100%)',
           maskImage: 'radial-gradient(circle at center, transparent 48%, rgba(0, 0, 0, 0.95) 100%)',
         }}
@@ -121,8 +123,8 @@ const VehicleTelemetryOverlay: React.FC<{ isMobile: boolean; hidden: boolean }> 
             padding: '11px 14px',
             minWidth: 236,
             background: 'rgba(11, 15, 25, 0.88)',
-            border: `1px solid ${tel.isBraking ? 'rgba(244, 63, 94, 0.7)' : isRev ? 'rgba(248, 250, 252, 0.65)' : 'rgba(56, 189, 248, 0.5)'}`,
-            borderRight: `3px solid ${tel.isBraking ? '#f43f5e' : isRev ? '#f8fafc' : tel.isBoosting ? '#f59e0b' : '#38bdf8'}`,
+            border: `1px solid ${tel.isBraking ? 'rgba(244, 63, 94, 0.7)' : isRev ? 'rgba(248, 250, 252, 0.65)' : `${carAccent}88`}`,
+            borderRight: `3px solid ${tel.isBraking ? '#f43f5e' : isRev ? '#f8fafc' : tel.isBoosting ? '#f59e0b' : carAccent}`,
             borderRadius: 6,
             fontFamily: 'var(--font-mono)',
             display: 'flex',
@@ -139,12 +141,12 @@ const VehicleTelemetryOverlay: React.FC<{ isMobile: boolean; hidden: boolean }> 
                 gap: 5,
                 fontSize: '0.62rem',
                 letterSpacing: '0.14em',
-                color: 'var(--neon-cyan)',
+                color: carAccent,
                 fontWeight: 700,
               }}
             >
               <Gauge size={13} />
-              VX-01 TELEMETRY
+              {carCode} TELEMETRY
             </span>
             <button
               type="button"
@@ -203,7 +205,7 @@ const VehicleTelemetryOverlay: React.FC<{ isMobile: boolean; hidden: boolean }> 
                       background: active
                         ? g === 'R'
                           ? '#f8fafc'
-                          : 'var(--neon-cyan)'
+                          : carAccent
                         : 'rgba(255, 255, 255, 0.06)',
                       color: active ? '#07090e' : 'var(--text-muted)',
                     }}
@@ -317,9 +319,14 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
     () => CinematicManager.getInstance().getState().phase
   );
   const [activeToast, setActiveToast] = useState<{ title: string; message: string } | null>(null);
-  const [vehicleModeInfo, setVehicleModeInfo] = useState<{ mode: VehicleState['mode']; variant: VehicleState['variant'] }>(() => {
+  const [vehicleModeInfo, setVehicleModeInfo] = useState<{
+    mode: VehicleState['mode'];
+    variant: VehicleState['variant'];
+    label: string;
+    carAccentColor: string;
+  }>(() => {
     const s = VehicleInteractionSystem.getInstance().getState();
-    return { mode: s.mode, variant: s.variant };
+    return { mode: s.mode, variant: s.variant, label: s.label, carAccentColor: s.carAccentColor };
   });
   const [isMapOpen, setIsMapOpen] = useState(() => NavigationSystem.getInstance().getState().isMapOpen);
   const [hasDialogue, setHasDialogue] = useState(false);
@@ -398,12 +405,17 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
       }
     });
     const unsubCinematic = CinematicManager.getInstance().subscribe((s) => setCinematicPhase(s.phase));
-    let lastVehicleKey = `${VehicleInteractionSystem.getInstance().getState().mode}:${VehicleInteractionSystem.getInstance().getState().variant}`;
+    let lastVehicleKey = `${VehicleInteractionSystem.getInstance().getState().mode}:${VehicleInteractionSystem.getInstance().getState().variant}:${VehicleInteractionSystem.getInstance().getState().activeId ?? ''}`;
     const unsubVehicle = VehicleInteractionSystem.getInstance().subscribe((vs) => {
-      const key = `${vs.mode}:${vs.variant}`;
+      const key = `${vs.mode}:${vs.variant}:${vs.activeId ?? ''}`;
       if (key !== lastVehicleKey) {
         lastVehicleKey = key;
-        setVehicleModeInfo({ mode: vs.mode, variant: vs.variant });
+        setVehicleModeInfo({
+          mode: vs.mode,
+          variant: vs.variant,
+          label: vs.label,
+          carAccentColor: vs.carAccentColor,
+        });
       }
     });
     const unsubNavigation = NavigationSystem.getInstance().subscribe((s) => setIsMapOpen(s.isMapOpen));
@@ -622,13 +634,13 @@ export const HUD: React.FC<HUDProps> = ({ playerPosRef: externalPosRef }) => {
                 marginTop: 4,
                 fontFamily: 'var(--font-mono)',
                 fontSize: '0.66rem',
-                color: vehicleModeInfo.variant === 'car' ? 'var(--neon-cyan)' : 'var(--neon-emerald)',
+                color: vehicleModeInfo.variant === 'car' ? vehicleModeInfo.carAccentColor : 'var(--neon-emerald)',
                 letterSpacing: '0.1em',
               }}
             >
               {vehicleModeInfo.mode === 'RIDING'
                 ? vehicleModeInfo.variant === 'car'
-                  ? 'VX-01 PROTOTYPE ENGAGED [E TO EXIT]'
+                  ? `${vehicleModeInfo.label.toUpperCase()} ENGAGED [E TO EXIT]`
                   : 'HOVER-COUPE ENGAGED [E TO EXIT]'
                 : 'SHUTTLE LINKED [E TO RELEASE]'}
             </div>

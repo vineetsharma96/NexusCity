@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
+import { createSmoothBeveledBoxGeometry } from '../rendering/SmoothWorldGeometries';
 
 interface StreetSignProps {
   position: [number, number, number];
@@ -8,6 +9,8 @@ interface StreetSignProps {
   direction?: 'N' | 'S' | 'E' | 'W';
   accent?: string;
 }
+
+const SIGN_BEVEL_GEO = createSmoothBeveledBoxGeometry(0.08, 2);
 
 export const StreetSign: React.FC<StreetSignProps> = React.memo(
   ({ position, rotationY = 0, label, direction = 'N', accent = '#f59e0b' }) => {
@@ -39,17 +42,25 @@ export const StreetSign: React.FC<StreetSignProps> = React.memo(
 
     useEffect(() => () => texture.dispose(), [texture]);
 
+    const poleHeight = Math.max(3.2, position[1] - 0.18);
+
     return (
       <group position={position} rotation={[0, rotationY, 0]}>
-        <mesh position={[0, -1.6, 0]}>
-          <cylinderGeometry args={[0.06, 0.08, 3.2, 8]} />
-          <meshStandardMaterial color="#111827" metalness={0.88} roughness={0.25} />
+        {/* Grounded Smooth Cylindrical Mast */}
+        <mesh position={[0, -poleHeight * 0.5, 0]}>
+          <cylinderGeometry args={[0.065, 0.09, poleHeight, 14]} />
+          <meshStandardMaterial color="#111827" metalness={0.88} roughness={0.22} />
         </mesh>
-        <mesh>
-          <boxGeometry args={[3.4, 0.85, 0.1]} />
-          <meshStandardMaterial color="#0b0f19" metalness={0.85} roughness={0.3} />
+        {/* Stepped Sidewalk Base Pedestal */}
+        <mesh position={[0, -poleHeight + 0.09, 0]}>
+          <cylinderGeometry args={[0.18, 0.24, 0.18, 16]} />
+          <meshStandardMaterial color="#1e293b" metalness={0.9} roughness={0.24} />
         </mesh>
-        <mesh position={[0, 0, 0.06]}>
+        {/* Smooth Beveled Sign Housing */}
+        <mesh geometry={SIGN_BEVEL_GEO} scale={[3.4, 0.86, 0.12]}>
+          <meshStandardMaterial color="#0b0f19" metalness={0.88} roughness={0.24} />
+        </mesh>
+        <mesh position={[0, 0, 0.068]}>
           <planeGeometry args={[3.2, 0.72]} />
           <meshBasicMaterial map={texture} toneMapped={false} />
         </mesh>

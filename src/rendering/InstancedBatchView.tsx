@@ -9,6 +9,7 @@ export interface InstanceBucketSpec {
   castShadow?: boolean;
   receiveShadow?: boolean;
   frustumCulled?: boolean;
+  renderOrder?: number;
 }
 
 const SingleBucketMesh: React.FC<{
@@ -47,6 +48,7 @@ const SingleBucketMesh: React.FC<{
       castShadow={Boolean(spec.castShadow)}
       receiveShadow={Boolean(spec.receiveShadow)}
       frustumCulled={spec.frustumCulled ?? false}
+      renderOrder={spec.renderOrder ?? 0}
     />
   );
 });

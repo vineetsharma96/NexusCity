@@ -12,22 +12,36 @@ import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 import { LivingCityEventSystem } from '../world/LivingCityEventSystem';
 import { InstanceBatchBuilder, TreeBucketKeys } from '../rendering/StaticInstanceBatcher';
 import { InstanceBucketSpec, InstancedBatchLayer } from '../rendering/InstancedBatchView';
+import {
+  createSmoothBeveledBoxGeometry,
+  createSmoothBuildingPrismGeometry,
+  createSmoothFoliageCrownGeometry,
+} from '../rendering/SmoothWorldGeometries';
 
-// Shared unit geometries (zero per-chunk geometry allocation)
+// Shared unit geometries (zero per-chunk geometry allocation; smooth beveled & chamfered primitives)
 const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
-const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
-const SHARED_TAPER_POLE = new THREE.CylinderGeometry(0.08, 0.15, 1, 8);
-const SHARED_OCT_PLINTH = new THREE.CylinderGeometry(0.28, 0.38, 1, 8);
-const SHARED_BOLLARD_CAP = new THREE.CylinderGeometry(0.08, 0.14, 1, 8);
-const SHARED_BEACON_SPHERE = new THREE.SphereGeometry(0.65, 8, 8);
-const SHARED_DOME_CAP = new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5);
-const SHARED_MOUND_GEO = new THREE.CylinderGeometry(1.6, 2.0, 0.14, 8);
-const SHARED_ROOT_FLARE_GEO = new THREE.CylinderGeometry(0.9, 1.48, 0.55, 8);
-const SHARED_TRUNK_GEO = new THREE.CylinderGeometry(0.7, 1.0, 1.0, 7);
-const SHARED_BRANCH_GEO = new THREE.CylinderGeometry(0.7, 1.0, 1.0, 5);
-const SHARED_CROWN_GEO = new THREE.DodecahedronGeometry(1, 1);
+const SHARED_BEVELED_BOX = createSmoothBeveledBoxGeometry(0.055, 2);
+const SHARED_BUILDING_PRISM = createSmoothBuildingPrismGeometry(0.032, 2);
+const SHARED_ROAD_PLANE = (() => {
+  const g = new THREE.PlaneGeometry(1, 1);
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, 0.5, 0);
+  return g;
+})();
+const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 14);
+const SHARED_TAPER_POLE = new THREE.CylinderGeometry(0.08, 0.15, 1, 14);
+const SHARED_OCT_PLINTH = new THREE.CylinderGeometry(0.28, 0.38, 1, 16);
+const SHARED_BOLLARD_CAP = new THREE.CylinderGeometry(0.08, 0.14, 1, 14);
+const SHARED_BEACON_SPHERE = new THREE.SphereGeometry(0.65, 14, 10);
+const SHARED_DOME_CAP = new THREE.SphereGeometry(0.5, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5);
+const SHARED_MOUND_GEO = new THREE.CylinderGeometry(1.6, 2.0, 0.14, 14);
+const SHARED_ROOT_FLARE_GEO = new THREE.CylinderGeometry(0.9, 1.48, 0.55, 12);
+const SHARED_TRUNK_GEO = new THREE.CylinderGeometry(0.7, 1.0, 1.0, 12);
+const SHARED_BRANCH_GEO = new THREE.CylinderGeometry(0.7, 1.0, 1.0, 10);
+const SHARED_CROWN_GEO = createSmoothFoliageCrownGeometry();
 
-const CLADDING_NORMAL_SCALE = new THREE.Vector2(0.55, 0.55);
+const CLADDING_NORMAL_SCALE = new THREE.Vector2(0.6, 0.6);
+const SIDEWALK_NORMAL_SCALE = new THREE.Vector2(0.4, 0.4);
 
 // Static shared materials (never re-created per chunk or per frame)
 const MAT_PODIUM = new THREE.MeshStandardMaterial({ color: '#0b1120', metalness: 0.88, roughness: 0.26 });
@@ -56,8 +70,8 @@ const MAT_FOLIAGE = new THREE.MeshStandardMaterial({
   color: '#ffffff',
   emissive: '#064e3b',
   emissiveIntensity: 0.14,
-  roughness: 0.5,
-  flatShading: true,
+  roughness: 0.58,
+  metalness: 0.04,
 });
 const MAT_DOME_FOLIAGE = new THREE.MeshStandardMaterial({ color: '#065f46', metalness: 0.1, roughness: 0.75 });
 const MAT_TRIM_BASIC = new THREE.MeshBasicMaterial({ color: '#ffffff' });
@@ -123,7 +137,6 @@ export const StreamedCityChunks: React.FC = () => {
   );
   const [quality, setQuality] = useState<QualitySettings>(() => QualityManager.current);
 
-  const asphaltTex = useMemo(() => RoadGenerator.getAsphaltTexture(), []);
   const facadeTextures = useMemo<Record<FacadeStyleVariant, THREE.CanvasTexture>>(
     () => ({
       CURTAIN_GLASS: ProceduralTextures.getBuildingFacadeTexture(0.58, 'CURTAIN_GLASS'),
@@ -142,18 +155,40 @@ export const StreamedCityChunks: React.FC = () => {
     }),
     []
   );
+  const facadeRoughnessMaps = useMemo<Record<FacadeStyleVariant, THREE.CanvasTexture>>(
+    () => ({
+      CURTAIN_GLASS: ProceduralTextures.getBuildingRoughnessMap('CURTAIN_GLASS'),
+      DIAGRID_HEX: ProceduralTextures.getBuildingRoughnessMap('DIAGRID_HEX'),
+      BRUTALIST_RIBBED: ProceduralTextures.getBuildingRoughnessMap('BRUTALIST_RIBBED'),
+      ARCOLOGY_TERRACE: ProceduralTextures.getBuildingRoughnessMap('ARCOLOGY_TERRACE'),
+    }),
+    []
+  );
+  const sidewalkTex = useMemo(() => RoadGenerator.getSidewalkTexture(), []);
   const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
+  const sidewalkNormal = useMemo(() => ProceduralTextures.getSidewalkNormalMap(), []);
   const claddingNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
   const prevSigRef = useRef('');
 
   // Dynamic shared materials updated in-place inside useFrame (zero React re-renders on time/weather ticks)
   const dynamicMats = useMemo(() => {
-    const roadMat = new THREE.MeshStandardMaterial({
-      map: asphaltTex,
+    const chunkAsphaltTex = RoadGenerator.getAsphaltTexture(8);
+    const roadNsMat = new THREE.MeshStandardMaterial({
+      map: chunkAsphaltTex,
       normalMap: asphaltNormal,
       roughness: 0.45,
       metalness: 0.55,
       envMapIntensity: 0.9,
+    });
+    const roadEwMat = new THREE.MeshStandardMaterial({
+      map: chunkAsphaltTex,
+      normalMap: asphaltNormal,
+      roughness: 0.45,
+      metalness: 0.55,
+      envMapIntensity: 0.9,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -2,
     });
     const junctionMat = new THREE.MeshStandardMaterial({
       color: '#090d16',
@@ -162,14 +197,16 @@ export const StreamedCityChunks: React.FC = () => {
       metalness: 0.55,
       envMapIntensity: 0.65,
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -4,
     });
     const sidewalkMat = new THREE.MeshStandardMaterial({
-      color: '#111827',
+      map: sidewalkTex,
+      normalMap: sidewalkNormal,
+      normalScale: SIDEWALK_NORMAL_SCALE,
       roughness: 0.5,
-      metalness: 0.35,
-      envMapIntensity: 0.4,
+      metalness: 0.3,
+      envMapIntensity: 0.45,
     });
     const lowDetailMat = new THREE.MeshStandardMaterial({
       map: facadeTextures.CURTAIN_GLASS,
@@ -188,8 +225,9 @@ export const StreamedCityChunks: React.FC = () => {
         emissiveIntensity: 0.3,
         normalMap: claddingNormal,
         normalScale: CLADDING_NORMAL_SCALE,
-        roughness: 0.3,
-        metalness: 0.84,
+        roughnessMap: facadeRoughnessMaps.CURTAIN_GLASS,
+        roughness: 0.92,
+        metalness: 0.72,
       }),
       DIAGRID_HEX: new THREE.MeshStandardMaterial({
         map: facadeTextures.DIAGRID_HEX,
@@ -198,8 +236,9 @@ export const StreamedCityChunks: React.FC = () => {
         emissiveIntensity: 0.3,
         normalMap: claddingNormal,
         normalScale: CLADDING_NORMAL_SCALE,
-        roughness: 0.3,
-        metalness: 0.84,
+        roughnessMap: facadeRoughnessMaps.DIAGRID_HEX,
+        roughness: 0.92,
+        metalness: 0.74,
       }),
       BRUTALIST_RIBBED: new THREE.MeshStandardMaterial({
         map: facadeTextures.BRUTALIST_RIBBED,
@@ -208,8 +247,9 @@ export const StreamedCityChunks: React.FC = () => {
         emissiveIntensity: 0.3,
         normalMap: claddingNormal,
         normalScale: CLADDING_NORMAL_SCALE,
-        roughness: 0.3,
-        metalness: 0.84,
+        roughnessMap: facadeRoughnessMaps.BRUTALIST_RIBBED,
+        roughness: 0.96,
+        metalness: 0.48,
       }),
       ARCOLOGY_TERRACE: new THREE.MeshStandardMaterial({
         map: facadeTextures.ARCOLOGY_TERRACE,
@@ -218,8 +258,9 @@ export const StreamedCityChunks: React.FC = () => {
         emissiveIntensity: 0.3,
         normalMap: claddingNormal,
         normalScale: CLADDING_NORMAL_SCALE,
-        roughness: 0.3,
-        metalness: 0.84,
+        roughnessMap: facadeRoughnessMaps.ARCOLOGY_TERRACE,
+        roughness: 0.92,
+        metalness: 0.64,
       }),
     };
     const hdrAlwaysMat = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
@@ -229,7 +270,8 @@ export const StreamedCityChunks: React.FC = () => {
     const storefrontGlowMat = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
 
     return {
-      roadMat,
+      roadNsMat,
+      roadEwMat,
       junctionMat,
       sidewalkMat,
       lowDetailMat,
@@ -240,11 +282,12 @@ export const StreamedCityChunks: React.FC = () => {
       hdrBeaconMat,
       storefrontGlowMat,
     };
-  }, [asphaltTex, asphaltNormal, claddingNormal, facadeTextures, facadeEmissiveTextures]);
+  }, [asphaltNormal, sidewalkTex, sidewalkNormal, claddingNormal, facadeTextures, facadeEmissiveTextures, facadeRoughnessMaps]);
 
   useEffect(() => {
     return () => {
-      dynamicMats.roadMat.dispose();
+      dynamicMats.roadNsMat.dispose();
+      dynamicMats.roadEwMat.dispose();
       dynamicMats.junctionMat.dispose();
       dynamicMats.sidewalkMat.dispose();
       dynamicMats.lowDetailMat.dispose();
@@ -268,17 +311,26 @@ export const StreamedCityChunks: React.FC = () => {
         ? 0.35
         : 0;
     const useNormals = quality.normalMapsEnabled;
-    if ((dynamicMats.roadMat.normalMap !== null) !== useNormals) {
-      dynamicMats.roadMat.normalMap = useNormals ? asphaltNormal : null;
-      dynamicMats.roadMat.needsUpdate = true;
+    if ((dynamicMats.roadNsMat.normalMap !== null) !== useNormals) {
+      dynamicMats.roadNsMat.normalMap = useNormals ? asphaltNormal : null;
+      dynamicMats.roadNsMat.needsUpdate = true;
+    }
+    if ((dynamicMats.roadEwMat.normalMap !== null) !== useNormals) {
+      dynamicMats.roadEwMat.normalMap = useNormals ? asphaltNormal : null;
+      dynamicMats.roadEwMat.needsUpdate = true;
     }
     if ((dynamicMats.junctionMat.normalMap !== null) !== useNormals) {
       dynamicMats.junctionMat.normalMap = useNormals ? asphaltNormal : null;
       dynamicMats.junctionMat.needsUpdate = true;
     }
-    dynamicMats.roadMat.envMapIntensity = envScale;
+    if ((dynamicMats.sidewalkMat.normalMap !== null) !== useNormals) {
+      dynamicMats.sidewalkMat.normalMap = useNormals ? sidewalkNormal : null;
+      dynamicMats.sidewalkMat.needsUpdate = true;
+    }
+    dynamicMats.roadNsMat.envMapIntensity = envScale;
+    dynamicMats.roadEwMat.envMapIntensity = envScale;
     dynamicMats.junctionMat.envMapIntensity = envScale * 0.7;
-    dynamicMats.sidewalkMat.envMapIntensity = envScale * 0.4;
+    dynamicMats.sidewalkMat.envMapIntensity = envScale * 0.45;
 
     Object.values(dynamicMats.facadeMats).forEach((fm) => {
       fm.envMapIntensity = envScale;
@@ -287,7 +339,7 @@ export const StreamedCityChunks: React.FC = () => {
         fm.needsUpdate = true;
       }
     });
-  }, [quality.normalMapsEnabled, quality.reflectionQuality, dynamicMats, asphaltNormal, claddingNormal]);
+  }, [quality.normalMapsEnabled, quality.reflectionQuality, dynamicMats, asphaltNormal, sidewalkNormal, claddingNormal]);
 
   useEffect(() => {
     const uQual = QualityManager.subscribe(setQuality);
@@ -361,7 +413,8 @@ export const StreamedCityChunks: React.FC = () => {
       // Roads, Junctions, Sidewalks
       for (let i = 0; i < data.roads.length; i++) {
         const r = data.roads[i];
-        builder.addWorld('road', r.position.x, r.position.y, r.position.z, r.size.x, r.size.y, r.size.z, 0, r.rotationY, 0);
+        const isEw = Math.abs(r.rotationY) > 0.1;
+        builder.addWorld(isEw ? 'road_ew' : 'road_ns', r.position.x, r.position.y, r.position.z, r.size.x, r.size.y, r.size.z, 0, r.rotationY, 0);
       }
       for (let i = 0; i < data.junctions.length; i++) {
         const j = data.junctions[i];
@@ -639,77 +692,78 @@ export const StreamedCityChunks: React.FC = () => {
 
   const bucketSpecs = useMemo<InstanceBucketSpec[]>(
     () => [
-      { key: 'road', geometry: SHARED_UNIT_BOX, material: dynamicMats.roadMat, receiveShadow: quality.shadows },
-      { key: 'junction', geometry: SHARED_UNIT_BOX, material: dynamicMats.junctionMat, receiveShadow: quality.shadows },
-      { key: 'sidewalk', geometry: SHARED_UNIT_BOX, material: dynamicMats.sidewalkMat, receiveShadow: quality.shadows },
+      { key: 'road_ns', geometry: SHARED_ROAD_PLANE, material: dynamicMats.roadNsMat, receiveShadow: quality.shadows, renderOrder: 1 },
+      { key: 'road_ew', geometry: SHARED_ROAD_PLANE, material: dynamicMats.roadEwMat, receiveShadow: quality.shadows, renderOrder: 2 },
+      { key: 'junction', geometry: SHARED_ROAD_PLANE, material: dynamicMats.junctionMat, receiveShadow: quality.shadows, renderOrder: 3 },
+      { key: 'sidewalk', geometry: SHARED_BEVELED_BOX, material: dynamicMats.sidewalkMat, receiveShadow: quality.shadows },
 
-      // Primary HIGH-LOD building hulls (only these 4 draw calls cast shadows for the entire streamed world!)
+      // Primary HIGH-LOD building hulls (smooth chamfered architectural prisms)
       {
         key: 'facade_high_CURTAIN_GLASS',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.CURTAIN_GLASS,
         castShadow: quality.shadows,
         receiveShadow: quality.shadows,
       },
       {
         key: 'facade_high_DIAGRID_HEX',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.DIAGRID_HEX,
         castShadow: quality.shadows,
         receiveShadow: quality.shadows,
       },
       {
         key: 'facade_high_BRUTALIST_RIBBED',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.BRUTALIST_RIBBED,
         castShadow: quality.shadows,
         receiveShadow: quality.shadows,
       },
       {
         key: 'facade_high_ARCOLOGY_TERRACE',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.ARCOLOGY_TERRACE,
         castShadow: quality.shadows,
         receiveShadow: quality.shadows,
       },
 
-      // MEDIUM-LOD building hulls (no shadow casting to keep shadow pass lightning-fast)
+      // MEDIUM-LOD building hulls (smooth chamfered prisms, no shadow casting for fast shadow pass)
       {
         key: 'facade_med_CURTAIN_GLASS',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.CURTAIN_GLASS,
         receiveShadow: quality.shadows,
       },
       {
         key: 'facade_med_DIAGRID_HEX',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.DIAGRID_HEX,
         receiveShadow: quality.shadows,
       },
       {
         key: 'facade_med_BRUTALIST_RIBBED',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.BRUTALIST_RIBBED,
         receiveShadow: quality.shadows,
       },
       {
         key: 'facade_med_ARCOLOGY_TERRACE',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.ARCOLOGY_TERRACE,
         receiveShadow: quality.shadows,
       },
 
-      // Shared structural box materials
-      { key: 'box_podium', geometry: SHARED_UNIT_BOX, material: MAT_PODIUM, receiveShadow: quality.shadows },
-      { key: 'box_navy', geometry: SHARED_UNIT_BOX, material: MAT_NAVY },
-      { key: 'box_slate', geometry: SHARED_UNIT_BOX, material: MAT_SLATE },
-      { key: 'box_fin', geometry: SHARED_UNIT_BOX, material: MAT_FIN },
-      { key: 'box_concrete', geometry: SHARED_UNIT_BOX, material: MAT_CONCRETE, receiveShadow: quality.shadows },
-      { key: 'box_chrome', geometry: SHARED_UNIT_BOX, material: MAT_CHROME },
-      { key: 'box_timber', geometry: SHARED_UNIT_BOX, material: MAT_TIMBER },
-      { key: 'box_glass', geometry: SHARED_UNIT_BOX, material: MAT_GLASS },
-      { key: 'box_colored_std', geometry: SHARED_UNIT_BOX, material: MAT_COLORED_STD },
-      { key: 'box_colored_metal', geometry: SHARED_UNIT_BOX, material: MAT_COLORED_METAL },
+      // Shared structural box materials (smooth beveled boxes)
+      { key: 'box_podium', geometry: SHARED_BEVELED_BOX, material: MAT_PODIUM, receiveShadow: quality.shadows },
+      { key: 'box_navy', geometry: SHARED_BEVELED_BOX, material: MAT_NAVY },
+      { key: 'box_slate', geometry: SHARED_BEVELED_BOX, material: MAT_SLATE },
+      { key: 'box_fin', geometry: SHARED_BEVELED_BOX, material: MAT_FIN },
+      { key: 'box_concrete', geometry: SHARED_BEVELED_BOX, material: MAT_CONCRETE, receiveShadow: quality.shadows },
+      { key: 'box_chrome', geometry: SHARED_BEVELED_BOX, material: MAT_CHROME },
+      { key: 'box_timber', geometry: SHARED_BEVELED_BOX, material: MAT_TIMBER },
+      { key: 'box_glass', geometry: SHARED_BEVELED_BOX, material: MAT_GLASS },
+      { key: 'box_colored_std', geometry: SHARED_BEVELED_BOX, material: MAT_COLORED_STD },
+      { key: 'box_colored_metal', geometry: SHARED_BEVELED_BOX, material: MAT_COLORED_METAL },
 
       // Shared HDR / emissive strips, storefronts, streetlights, beacons
       { key: 'box_storefront', geometry: SHARED_UNIT_BOX, material: dynamicMats.storefrontGlowMat },
@@ -732,9 +786,9 @@ export const StreamedCityChunks: React.FC = () => {
       { key: 'dome_chrome', geometry: SHARED_DOME_CAP, material: MAT_CHROME },
       { key: 'dome_foliage', geometry: SHARED_DOME_CAP, material: MAT_DOME_FOLIAGE },
 
-      // Batched trees across all streamed chunks
-      { key: 'tree_planter_plinth', geometry: SHARED_UNIT_BOX, material: MAT_PLANTER_PLINTH, receiveShadow: quality.shadows },
-      { key: 'tree_planter_coping', geometry: SHARED_UNIT_BOX, material: MAT_PLANTER_COPING },
+      // Batched trees across all streamed chunks (beveled planters + smooth organic crowns)
+      { key: 'tree_planter_plinth', geometry: SHARED_BEVELED_BOX, material: MAT_PLANTER_PLINTH, receiveShadow: quality.shadows },
+      { key: 'tree_planter_coping', geometry: SHARED_BEVELED_BOX, material: MAT_PLANTER_COPING },
       { key: 'tree_soil', geometry: SHARED_UNIT_BOX, material: MAT_SOIL_BED },
       { key: 'tree_trim', geometry: SHARED_UNIT_BOX, material: MAT_TRIM_BASIC },
       { key: 'tree_mound', geometry: SHARED_MOUND_GEO, material: MAT_MOUND },
@@ -763,8 +817,10 @@ export const StreamedCityChunks: React.FC = () => {
     const effectiveWetness = QualityManager.current.wetReflectionsEnabled ? weatherState.wetnessFactor : 0;
     const roadRough = THREE.MathUtils.lerp(0.45, 0.08, effectiveWetness);
     const roadMetal = THREE.MathUtils.lerp(0.55, 0.88, effectiveWetness);
-    dynamicMats.roadMat.roughness = roadRough;
-    dynamicMats.roadMat.metalness = roadMetal;
+    dynamicMats.roadNsMat.roughness = roadRough;
+    dynamicMats.roadNsMat.metalness = roadMetal;
+    dynamicMats.roadEwMat.roughness = roadRough;
+    dynamicMats.roadEwMat.metalness = roadMetal;
     dynamicMats.junctionMat.roughness = roadRough;
     dynamicMats.junctionMat.metalness = roadMetal;
 

@@ -576,38 +576,73 @@ export class NPCManager {
 
   /**
    * Checks if moving from `pos` toward `target` is about to step off a sidewalk curb
-   * onto a primary vehicular avenue where the pedestrian walk signal is currently RED.
+   * onto a signalized vehicular avenue where the pedestrian walk signal is currently RED.
    */
   private shouldWaitAtCrosswalk(pos: THREE.Vector3, target: THREE.Vector3): boolean {
-    const lights = TrafficLightSystem.getInstance().getState();
+    const trafficLights = TrafficLightSystem.getInstance();
     const dx = target.x - pos.x;
     const dz = target.z - pos.z;
     const dist = Math.hypot(dx, dz);
     if (dist < 0.01) return false;
 
-    // Crossing the North-South Grand Boulevard (22m road spans x in [-11, 11])
-    const crossesNSAvenue =
-      (Math.abs(pos.x) >= 7.8 && Math.abs(pos.x) <= 17.5) &&
-      (pos.x * target.x < 0 || Math.abs(target.x) < 10.5) &&
-      Math.abs(dx) > Math.abs(dz);
-    if (crossesNSAvenue && !lights.ewWalk) {
-      return true;
+    const avenues = [-165, -75, 0, 75, 165];
+    const snapNearest = (val: number) => {
+      let best = 0;
+      let bestD = Infinity;
+      for (const a of avenues) {
+        const d = Math.abs(val - a);
+        if (d < bestD) {
+          bestD = d;
+          best = a;
+        }
+      }
+      return best;
+    };
+
+    // Crossing a North-South Avenue (x ≈ 0, ±75, ±165)
+    if (Math.abs(dx) > Math.abs(dz)) {
+      const aveX = snapNearest((pos.x + target.x) * 0.5);
+      const halfW = aveX === 0 ? 11 : 9;
+      const relPos = pos.x - aveX;
+      const relTarget = target.x - aveX;
+      const approachingCurb =
+        Math.abs(relPos) >= halfW - 3.2 &&
+        Math.abs(relPos) <= halfW + 6.5 &&
+        (relPos * relTarget < 0 || Math.abs(relTarget) < halfW - 0.5);
+      if (approachingCurb) {
+        const nearZ = snapNearest(pos.z);
+        const lights = trafficLights.getSignalAtIntersection(aveX, nearZ);
+        if (!lights.ewWalk) return true;
+      }
     }
 
-    // Crossing the East-West Grand Boulevard (22m road spans z in [-11, 11])
-    const crossesEWAvenue =
-      (Math.abs(pos.z) >= 7.8 && Math.abs(pos.z) <= 17.5) &&
-      (pos.z * target.z < 0 || Math.abs(target.z) < 10.5) &&
-      Math.abs(dz) > Math.abs(dx);
-    if (crossesEWAvenue && !lights.nsWalk) {
-      return true;
+    // Crossing an East-West Avenue (z ≈ 0, ±75, ±165)
+    if (Math.abs(dz) > Math.abs(dx)) {
+      const aveZ = snapNearest((pos.z + target.z) * 0.5);
+      const halfW = aveZ === 0 ? 11 : 9;
+      const relPos = pos.z - aveZ;
+      const relTarget = target.z - aveZ;
+      const approachingCurb =
+        Math.abs(relPos) >= halfW - 3.2 &&
+        Math.abs(relPos) <= halfW + 6.5 &&
+        (relPos * relTarget < 0 || Math.abs(relTarget) < halfW - 0.5);
+      if (approachingCurb) {
+        const nearX = snapNearest(pos.x);
+        const lights = trafficLights.getSignalAtIntersection(nearX, aveZ);
+        if (!lights.nsWalk) return true;
+      }
     }
 
     return false;
   }
 
   private isInsideRoadwayCrosswalk(pos: THREE.Vector3): boolean {
-    return Math.abs(pos.x) < 11.4 || Math.abs(pos.z) < 11.4;
+    return (
+      Math.abs(pos.x) < 11.4 ||
+      Math.abs(pos.z) < 11.4 ||
+      Math.abs(Math.abs(pos.x) - 75) < 9.4 ||
+      Math.abs(Math.abs(pos.z) - 75) < 9.4
+    );
   }
 
   /**

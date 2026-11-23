@@ -8,6 +8,10 @@ import { WindSystem } from '../world/WindSystem';
 import { QualityManager, QualitySettings } from '../rendering/QualityManager';
 import { InstanceBatchBuilder } from '../rendering/StaticInstanceBatcher';
 import { InstanceBucketSpec, InstancedBatchLayer } from '../rendering/InstancedBatchView';
+import {
+  createSmoothBeveledBoxGeometry,
+  createSmoothFoliageCrownGeometry,
+} from '../rendering/SmoothWorldGeometries';
 
 interface ParkSanctuaryProps {
   position?: [number, number, number];
@@ -75,16 +79,20 @@ const BENCH_SPECS: readonly [number, number, number][] = [
   [18, 10, -(3 * Math.PI) / 4],
 ];
 
-// Shared static geometries & materials across both ParkSanctuary instances
-const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
-const UNIT_CYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 10);
-const UNIT_TRUNK = new THREE.CylinderGeometry(0.22, 0.44, 1, 8);
-const UNIT_CROWN = new THREE.DodecahedronGeometry(1, 1);
-const UNIT_SPHERE = new THREE.SphereGeometry(0.2, 8, 8);
-const STEP_STONE_GEO = new THREE.CylinderGeometry(1.15, 1.25, 0.1, 12);
-const STEP_RING_GEO = new THREE.RingGeometry(0.98, 1.08, 12);
-const LILY_PAD_GEO = new THREE.CircleGeometry(1, 14);
-const LILY_FLOWER_GEO = new THREE.OctahedronGeometry(0.22, 0);
+// Shared static smooth geometries & materials across both ParkSanctuary instances
+const UNIT_BOX = createSmoothBeveledBoxGeometry(0.06, 2);
+const UNIT_CYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+const UNIT_TRUNK = new THREE.CylinderGeometry(0.22, 0.44, 1, 14);
+const UNIT_CROWN = createSmoothFoliageCrownGeometry();
+const UNIT_SPHERE = new THREE.SphereGeometry(0.2, 14, 12);
+const STEP_STONE_GEO = new THREE.CylinderGeometry(1.15, 1.25, 0.1, 20);
+const STEP_RING_GEO = new THREE.RingGeometry(0.98, 1.08, 20);
+const LILY_PAD_GEO = new THREE.CircleGeometry(1, 24);
+const LILY_FLOWER_GEO = (() => {
+  const g = new THREE.SphereGeometry(0.22, 14, 10);
+  g.scale(1.0, 0.72, 1.0);
+  return g;
+})();
 
 const MAT_WALL = new THREE.MeshStandardMaterial({ color: '#0b1120', roughness: 0.28, metalness: 0.86 });
 const MAT_NAVY = new THREE.MeshStandardMaterial({ color: '#0f172a', metalness: 0.9, roughness: 0.2 });

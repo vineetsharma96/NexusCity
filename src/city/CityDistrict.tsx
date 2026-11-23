@@ -15,34 +15,47 @@ import { LivingCityEventSystem } from '../world/LivingCityEventSystem';
 import { KinematicCollisionSolver } from '../player/KinematicCollision';
 import { InstanceBatchBuilder, TreeBucketKeys } from '../rendering/StaticInstanceBatcher';
 import { InstanceBucketSpec, InstancedBatchLayer } from '../rendering/InstancedBatchView';
+import {
+  createSmoothBeveledBoxGeometry,
+  createSmoothBuildingPrismGeometry,
+  createSmoothFoliageCrownGeometry,
+} from '../rendering/SmoothWorldGeometries';
 
-// Shared static unit geometries
+// Shared static unit geometries (smooth beveled prisms, high-segment cylinders, organic foliage)
 const SHARED_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
-const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 10);
-const SHARED_TAPER_POLE = new THREE.CylinderGeometry(0.08, 0.15, 1, 8);
-const SHARED_OCT_PLINTH = new THREE.CylinderGeometry(0.28, 0.38, 1, 8);
-const SHARED_BOLLARD_CAP = new THREE.CylinderGeometry(0.08, 0.14, 1, 10);
-const SHARED_MAST_TAPER = new THREE.CylinderGeometry(0.07, 0.28, 1, 8);
-const SHARED_BEACON_SPHERE = new THREE.SphereGeometry(1, 8, 8);
-const SHARED_CROWN_TORUS = new THREE.TorusGeometry(1, 0.08, 8, 24);
-const SHARED_DISH_CONE = new THREE.ConeGeometry(1.0, 0.55, 12, 1, true);
-const SHARED_FLAT_RING = new THREE.RingGeometry(0.84, 1.0, 20);
+const SHARED_BEVELED_BOX = createSmoothBeveledBoxGeometry(0.055, 2);
+const SHARED_BUILDING_PRISM = createSmoothBuildingPrismGeometry(0.032, 2);
+const SHARED_ROAD_PLANE = (() => {
+  const g = new THREE.PlaneGeometry(1, 1);
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, 0.5, 0);
+  return g;
+})();
+const SHARED_UNIT_CYLINDER = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+const SHARED_TAPER_POLE = new THREE.CylinderGeometry(0.08, 0.15, 1, 14);
+const SHARED_OCT_PLINTH = new THREE.CylinderGeometry(0.28, 0.38, 1, 16);
+const SHARED_BOLLARD_CAP = new THREE.CylinderGeometry(0.08, 0.14, 1, 14);
+const SHARED_MAST_TAPER = new THREE.CylinderGeometry(0.07, 0.28, 1, 14);
+const SHARED_BEACON_SPHERE = new THREE.SphereGeometry(1, 14, 10);
+const SHARED_CROWN_TORUS = new THREE.TorusGeometry(1, 0.08, 12, 32);
+const SHARED_DISH_CONE = new THREE.ConeGeometry(1.0, 0.55, 20, 1, true);
+const SHARED_FLAT_RING = new THREE.RingGeometry(0.84, 1.0, 28);
 const SHARED_STEAM_PLANE = new THREE.PlaneGeometry(1.8, 1.1);
-const SHARED_STEAM_CONE = new THREE.ConeGeometry(0.85, 2.4, 8, 1, true);
-const SHARED_DRONE_SPHERE = new THREE.SphereGeometry(0.14, 8, 8);
-const SHARED_DRONE_CONE = new THREE.ConeGeometry(2.2, 8.2, 10, 1, true);
-const SHARED_MOUND_GEO = new THREE.CylinderGeometry(1.6, 2.0, 0.14, 8);
-const SHARED_ROOT_FLARE_GEO = new THREE.CylinderGeometry(0.9, 1.48, 0.55, 8);
-const SHARED_TRUNK_GEO = new THREE.CylinderGeometry(0.7, 1.0, 1.0, 7);
-const SHARED_BRANCH_GEO = new THREE.CylinderGeometry(0.7, 1.0, 1.0, 5);
-const SHARED_CROWN_GEO = new THREE.DodecahedronGeometry(1, 1);
+const SHARED_STEAM_CONE = new THREE.ConeGeometry(0.85, 2.4, 14, 1, true);
+const SHARED_DRONE_SPHERE = new THREE.SphereGeometry(0.14, 12, 10);
+const SHARED_DRONE_CONE = new THREE.ConeGeometry(2.2, 8.2, 16, 1, true);
+const SHARED_MOUND_GEO = new THREE.CylinderGeometry(1.6, 2.0, 0.14, 14);
+const SHARED_ROOT_FLARE_GEO = new THREE.CylinderGeometry(0.9, 1.48, 0.55, 12);
+const SHARED_TRUNK_GEO = new THREE.CylinderGeometry(0.7, 1.0, 1.0, 12);
+const SHARED_BRANCH_GEO = new THREE.CylinderGeometry(0.7, 1.0, 1.0, 10);
+const SHARED_CROWN_GEO = createSmoothFoliageCrownGeometry();
 
-const PLAZA_NORMAL_SCALE = new THREE.Vector2(0.4, 0.4);
-const AVE_NORMAL_SCALE = new THREE.Vector2(0.65, 0.65);
-const AVE_ULTRA_NORMAL_SCALE = new THREE.Vector2(0.85, 0.85);
-const SW_NORMAL_SCALE = new THREE.Vector2(0.32, 0.32);
-const BLDG_NORMAL_SCALE = new THREE.Vector2(0.58, 0.58);
-const BLDG_ULTRA_NORMAL_SCALE = new THREE.Vector2(0.8, 0.8);
+const PLAZA_NORMAL_SCALE = new THREE.Vector2(0.36, 0.36);
+const AVE_NORMAL_SCALE = new THREE.Vector2(0.38, 0.38);
+const AVE_ULTRA_NORMAL_SCALE = new THREE.Vector2(0.52, 0.52);
+const SW_NORMAL_SCALE = new THREE.Vector2(0.42, 0.42);
+const BLDG_NORMAL_SCALE = new THREE.Vector2(0.62, 0.62);
+const BLDG_ULTRA_NORMAL_SCALE = new THREE.Vector2(0.85, 0.85);
 
 // Shared static PBR materials (never re-created per building or per render)
 const MAT_PODIUM = new THREE.MeshStandardMaterial({ color: '#0b1120', metalness: 0.88, roughness: 0.26 });
@@ -94,8 +107,8 @@ const MAT_FOLIAGE = new THREE.MeshStandardMaterial({
   color: '#ffffff',
   emissive: '#064e3b',
   emissiveIntensity: 0.14,
-  roughness: 0.5,
-  flatShading: true,
+  roughness: 0.58,
+  metalness: 0.04,
 });
 
 const TREE_BUCKET_KEYS: TreeBucketKeys = {
@@ -128,7 +141,7 @@ const OVERHEAD_GANTRIES: readonly [number, number, number, string][] = [
   [-135, 0, Math.PI / 2, '#f59e0b'],
   [135, 0, Math.PI / 2, '#10b981'],
   [0, -225, 0, '#4a8ad6'],
-  [0, 190, 0, '#10b981'],
+  [0, 195, 0, '#10b981'],
   [-225, 0, Math.PI / 2, '#10b981'],
   [225, 0, Math.PI / 2, '#f59e0b'],
 ];
@@ -183,7 +196,10 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
   const isUltra = quality.name === 'ULTRA';
   const showFineMolding = quality.LODQuality !== 'LOW';
 
-  const asphaltTex = useMemo(() => RoadGenerator.getAsphaltTexture(), []);
+  const asphaltTexLongNs = useMemo(() => RoadGenerator.getAsphaltTexture(76), []);
+  const asphaltTexLongEw = useMemo(() => RoadGenerator.getAsphaltTexture(124), []);
+  const asphaltTexMed = useMemo(() => RoadGenerator.getAsphaltTexture(16), []);
+  const asphaltTexShort = useMemo(() => RoadGenerator.getAsphaltTexture(4), []);
   const sidewalkTex = useMemo(() => RoadGenerator.getSidewalkTexture(), []);
   const facadeTextures = useMemo<Record<FacadeStyleVariant, THREE.CanvasTexture>>(
     () => ({
@@ -203,8 +219,18 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
     }),
     []
   );
+  const facadeRoughnessMaps = useMemo<Record<FacadeStyleVariant, THREE.CanvasTexture>>(
+    () => ({
+      CURTAIN_GLASS: ProceduralTextures.getBuildingRoughnessMap('CURTAIN_GLASS'),
+      DIAGRID_HEX: ProceduralTextures.getBuildingRoughnessMap('DIAGRID_HEX'),
+      BRUTALIST_RIBBED: ProceduralTextures.getBuildingRoughnessMap('BRUTALIST_RIBBED'),
+      ARCOLOGY_TERRACE: ProceduralTextures.getBuildingRoughnessMap('ARCOLOGY_TERRACE'),
+    }),
+    []
+  );
   const plazaTex = useMemo(() => ProceduralTextures.getPlazaGridTexture(), []);
   const asphaltNormal = useMemo(() => ProceduralTextures.getAsphaltNormalMap(), []);
+  const sidewalkNormal = useMemo(() => ProceduralTextures.getSidewalkNormalMap(), []);
   const puddleRoughness = useMemo(() => ProceduralTextures.getWetPuddleRoughnessMap(), []);
   const claddingNormal = useMemo(() => ProceduralTextures.getBuildingCladdingNormalMap(), []);
   const landmarkNames = useMemo(
@@ -217,36 +243,54 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
     const groundMat = new THREE.MeshStandardMaterial({ color: '#05080f', roughness: 0.56, metalness: 0.38 });
     const plazaMat = new THREE.MeshStandardMaterial({
       map: plazaTex,
-      normalMap: asphaltNormal,
+      normalMap: sidewalkNormal,
       normalScale: PLAZA_NORMAL_SCALE,
       roughness: 0.39,
       metalness: 0.36,
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -4,
     });
-    const avenueMat = new THREE.MeshStandardMaterial({
-      map: asphaltTex,
-      normalMap: asphaltNormal,
-      normalScale: AVE_NORMAL_SCALE,
-      roughness: 0.38,
-      metalness: 0.68,
-    });
+    const makeAvenueMat = (map: THREE.CanvasTexture, isEw: boolean) =>
+      new THREE.MeshStandardMaterial({
+        map,
+        normalMap: asphaltNormal,
+        normalScale: AVE_NORMAL_SCALE,
+        roughness: 0.38,
+        metalness: 0.68,
+        polygonOffset: isEw,
+        polygonOffsetFactor: isEw ? -1 : 0,
+        polygonOffsetUnits: isEw ? -2 : 0,
+      });
+    const avenueNsLongMat = makeAvenueMat(asphaltTexLongNs, false);
+    const avenueEwLongMat = makeAvenueMat(asphaltTexLongEw, true);
+    const avenueNsMedMat = makeAvenueMat(asphaltTexMed, false);
+    const avenueEwMedMat = makeAvenueMat(asphaltTexMed, true);
+    const avenueNsShortMat = makeAvenueMat(asphaltTexShort, false);
+    const avenueEwShortMat = makeAvenueMat(asphaltTexShort, true);
+    const allAvenueMats = [
+      avenueNsLongMat,
+      avenueEwLongMat,
+      avenueNsMedMat,
+      avenueEwMedMat,
+      avenueNsShortMat,
+      avenueEwShortMat,
+    ];
     const junctionMat = new THREE.MeshStandardMaterial({
       color: '#090d16',
       normalMap: asphaltNormal,
       roughness: 0.38,
       metalness: 0.68,
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -4,
     });
     const sidewalkMat = new THREE.MeshStandardMaterial({
       map: sidewalkTex,
-      normalMap: asphaltNormal,
+      normalMap: sidewalkNormal,
       normalScale: SW_NORMAL_SCALE,
       roughness: 0.52,
-      metalness: 0.36,
+      metalness: 0.32,
     });
     const meridianMat = new THREE.MeshStandardMaterial({
       color: '#042f2e',
@@ -255,8 +299,8 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
       roughness: 0.05,
       metalness: 0.95,
       polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -6,
     });
 
     const facadeMats: Record<FacadeStyleVariant, THREE.MeshStandardMaterial> = {
@@ -267,8 +311,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         emissiveIntensity: 0.3,
         normalMap: claddingNormal,
         normalScale: BLDG_NORMAL_SCALE,
-        roughness: 0.3,
-        metalness: 0.86,
+        roughnessMap: facadeRoughnessMaps.CURTAIN_GLASS,
+        roughness: 0.92,
+        metalness: 0.72,
       }),
       DIAGRID_HEX: new THREE.MeshStandardMaterial({
         map: facadeTextures.DIAGRID_HEX,
@@ -277,8 +322,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         emissiveIntensity: 0.3,
         normalMap: claddingNormal,
         normalScale: BLDG_NORMAL_SCALE,
-        roughness: 0.3,
-        metalness: 0.86,
+        roughnessMap: facadeRoughnessMaps.DIAGRID_HEX,
+        roughness: 0.92,
+        metalness: 0.74,
       }),
       BRUTALIST_RIBBED: new THREE.MeshStandardMaterial({
         map: facadeTextures.BRUTALIST_RIBBED,
@@ -287,8 +333,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         emissiveIntensity: 0.3,
         normalMap: claddingNormal,
         normalScale: BLDG_NORMAL_SCALE,
-        roughness: 0.3,
-        metalness: 0.86,
+        roughnessMap: facadeRoughnessMaps.BRUTALIST_RIBBED,
+        roughness: 0.96,
+        metalness: 0.48,
       }),
       ARCOLOGY_TERRACE: new THREE.MeshStandardMaterial({
         map: facadeTextures.ARCOLOGY_TERRACE,
@@ -297,8 +344,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         emissiveIntensity: 0.3,
         normalMap: claddingNormal,
         normalScale: BLDG_NORMAL_SCALE,
-        roughness: 0.3,
-        metalness: 0.86,
+        roughnessMap: facadeRoughnessMaps.ARCOLOGY_TERRACE,
+        roughness: 0.92,
+        metalness: 0.64,
       }),
     };
 
@@ -314,7 +362,13 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
     return {
       groundMat,
       plazaMat,
-      avenueMat,
+      avenueNsLongMat,
+      avenueEwLongMat,
+      avenueNsMedMat,
+      avenueEwMedMat,
+      avenueNsShortMat,
+      avenueEwShortMat,
+      allAvenueMats,
       junctionMat,
       sidewalkMat,
       meridianMat,
@@ -328,13 +382,26 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
       astrolabeCyanMat,
       astrolabeAmberMat,
     };
-  }, [asphaltTex, sidewalkTex, plazaTex, asphaltNormal, claddingNormal, facadeTextures, facadeEmissiveTextures]);
+  }, [
+    asphaltTexLongNs,
+    asphaltTexLongEw,
+    asphaltTexMed,
+    asphaltTexShort,
+    sidewalkTex,
+    plazaTex,
+    asphaltNormal,
+    sidewalkNormal,
+    claddingNormal,
+    facadeTextures,
+    facadeEmissiveTextures,
+    facadeRoughnessMaps,
+  ]);
 
   useEffect(() => {
     return () => {
       dynamicMats.groundMat.dispose();
       dynamicMats.plazaMat.dispose();
-      dynamicMats.avenueMat.dispose();
+      dynamicMats.allAvenueMats.forEach((m) => m.dispose());
       dynamicMats.junctionMat.dispose();
       dynamicMats.sidewalkMat.dispose();
       dynamicMats.meridianMat.dispose();
@@ -370,23 +437,24 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
       if (scale) m.normalScale.copy(scale);
     };
 
-    setNormal(dynamicMats.plazaMat, asphaltNormal, PLAZA_NORMAL_SCALE);
-    setNormal(dynamicMats.avenueMat, asphaltNormal, isUltra ? AVE_ULTRA_NORMAL_SCALE : AVE_NORMAL_SCALE);
+    setNormal(dynamicMats.plazaMat, sidewalkNormal, PLAZA_NORMAL_SCALE);
+    const aveNormalScale = isUltra ? AVE_ULTRA_NORMAL_SCALE : AVE_NORMAL_SCALE;
+    dynamicMats.allAvenueMats.forEach((m) => setNormal(m, asphaltNormal, aveNormalScale));
     setNormal(dynamicMats.junctionMat, asphaltNormal);
-    setNormal(dynamicMats.sidewalkMat, asphaltNormal, SW_NORMAL_SCALE);
+    setNormal(dynamicMats.sidewalkMat, sidewalkNormal, SW_NORMAL_SCALE);
 
     dynamicMats.plazaMat.envMapIntensity = envScale;
-    dynamicMats.sidewalkMat.envMapIntensity = envScale * 0.5;
+    dynamicMats.sidewalkMat.envMapIntensity = envScale * 0.55;
     dynamicMats.junctionMat.envMapIntensity = envScale * 0.7;
     dynamicMats.meridianMat.envMapIntensity = envScale * 1.4;
     MAT_BRIDGE_GLASS.envMapIntensity = envScale;
 
     Object.values(dynamicMats.facadeMats).forEach((fm) => {
       setNormal(fm, claddingNormal, isUltra ? BLDG_ULTRA_NORMAL_SCALE : BLDG_NORMAL_SCALE);
-      fm.roughness = isUltra ? 0.22 : 0.3;
+      fm.roughness = isUltra ? 0.86 : 0.94;
       fm.envMapIntensity = envScale;
     });
-  }, [quality.normalMapsEnabled, quality.reflectionQuality, isUltra, dynamicMats, asphaltNormal, claddingNormal]);
+  }, [quality.normalMapsEnabled, quality.reflectionQuality, isUltra, dynamicMats, asphaltNormal, sidewalkNormal, claddingNormal]);
 
   // Central avenue intersections (excluding (0,0) plaza and (75,75) park)
   const centralJunctions = useMemo(() => {
@@ -416,7 +484,20 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
     for (let i = 0; i < cityData.avenues.length; i++) {
       const ave = cityData.avenues[i];
-      builder.addWorld('avenue', ave.position.x, ave.position.y, ave.position.z, ave.size.x, ave.size.y, ave.size.z, 0, ave.rotationY, 0);
+      const isEw = Math.abs(ave.rotationY) > 0.1;
+      const len = ave.size.z;
+      const bucketKey = isEw
+        ? len >= 600
+          ? 'avenue_ew_long'
+          : len >= 120
+          ? 'avenue_ew_med'
+          : 'avenue_ew_short'
+        : len >= 600
+        ? 'avenue_ns_long'
+        : len >= 120
+        ? 'avenue_ns_med'
+        : 'avenue_ns_short';
+      builder.addWorld(bucketKey, ave.position.x, ave.position.y, ave.position.z, ave.size.x, ave.size.y, ave.size.z, 0, ave.rotationY, 0);
     }
 
     for (let i = 0; i < cityData.sidewalks.length; i++) {
@@ -752,53 +833,58 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
   const bucketSpecs = useMemo<InstanceBucketSpec[]>(
     () => [
-      { key: 'avenue', geometry: SHARED_UNIT_BOX, material: dynamicMats.avenueMat, receiveShadow: quality.shadows },
-      { key: 'junction', geometry: SHARED_UNIT_BOX, material: dynamicMats.junctionMat, receiveShadow: quality.shadows },
-      { key: 'sidewalk', geometry: SHARED_UNIT_BOX, material: dynamicMats.sidewalkMat, receiveShadow: quality.shadows },
+      { key: 'avenue_ns_long', geometry: SHARED_ROAD_PLANE, material: dynamicMats.avenueNsLongMat, receiveShadow: quality.shadows, renderOrder: 1 },
+      { key: 'avenue_ns_med', geometry: SHARED_ROAD_PLANE, material: dynamicMats.avenueNsMedMat, receiveShadow: quality.shadows, renderOrder: 1 },
+      { key: 'avenue_ns_short', geometry: SHARED_ROAD_PLANE, material: dynamicMats.avenueNsShortMat, receiveShadow: quality.shadows, renderOrder: 1 },
+      { key: 'avenue_ew_long', geometry: SHARED_ROAD_PLANE, material: dynamicMats.avenueEwLongMat, receiveShadow: quality.shadows, renderOrder: 2 },
+      { key: 'avenue_ew_med', geometry: SHARED_ROAD_PLANE, material: dynamicMats.avenueEwMedMat, receiveShadow: quality.shadows, renderOrder: 2 },
+      { key: 'avenue_ew_short', geometry: SHARED_ROAD_PLANE, material: dynamicMats.avenueEwShortMat, receiveShadow: quality.shadows, renderOrder: 2 },
+      { key: 'junction', geometry: SHARED_ROAD_PLANE, material: dynamicMats.junctionMat, receiveShadow: quality.shadows, renderOrder: 3 },
+      { key: 'sidewalk', geometry: SHARED_BEVELED_BOX, material: dynamicMats.sidewalkMat, receiveShadow: quality.shadows },
 
-      // Primary Building Curtain-Wall Hulls (4 draw calls total, cast & receive shadows!)
+      // Primary Building Curtain-Wall Hulls (smooth chamfered architectural prisms, 4 draw calls total)
       {
         key: 'facade_CURTAIN_GLASS',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.CURTAIN_GLASS,
         castShadow: quality.shadows,
         receiveShadow: quality.shadows,
       },
       {
         key: 'facade_DIAGRID_HEX',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.DIAGRID_HEX,
         castShadow: quality.shadows,
         receiveShadow: quality.shadows,
       },
       {
         key: 'facade_BRUTALIST_RIBBED',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.BRUTALIST_RIBBED,
         castShadow: quality.shadows,
         receiveShadow: quality.shadows,
       },
       {
         key: 'facade_ARCOLOGY_TERRACE',
-        geometry: SHARED_UNIT_BOX,
+        geometry: SHARED_BUILDING_PRISM,
         material: dynamicMats.facadeMats.ARCOLOGY_TERRACE,
         castShadow: quality.shadows,
         receiveShadow: quality.shadows,
       },
 
-      // Architectural structural trims & street furniture
-      { key: 'box_podium', geometry: SHARED_UNIT_BOX, material: MAT_PODIUM, castShadow: quality.shadows, receiveShadow: quality.shadows },
-      { key: 'box_canopy', geometry: SHARED_UNIT_BOX, material: MAT_CANOPY },
-      { key: 'box_pier', geometry: SHARED_UNIT_BOX, material: MAT_PIER },
-      { key: 'box_fin', geometry: SHARED_UNIT_BOX, material: MAT_FIN },
-      { key: 'box_parapet', geometry: SHARED_UNIT_BOX, material: MAT_PARAPET },
-      { key: 'box_pole', geometry: SHARED_UNIT_BOX, material: MAT_POLE },
-      { key: 'box_concrete', geometry: SHARED_UNIT_BOX, material: MAT_CONCRETE, receiveShadow: quality.shadows },
-      { key: 'box_chrome', geometry: SHARED_UNIT_BOX, material: MAT_CHROME },
-      { key: 'box_timber', geometry: SHARED_UNIT_BOX, material: MAT_TIMBER },
-      { key: 'box_solar', geometry: SHARED_UNIT_BOX, material: MAT_SOLAR },
-      { key: 'box_glass', geometry: SHARED_UNIT_BOX, material: MAT_GLASS },
-      { key: 'box_bridge_glass', geometry: SHARED_UNIT_BOX, material: MAT_BRIDGE_GLASS },
+      // Architectural structural trims & street furniture (smooth beveled boxes)
+      { key: 'box_podium', geometry: SHARED_BEVELED_BOX, material: MAT_PODIUM, castShadow: quality.shadows, receiveShadow: quality.shadows },
+      { key: 'box_canopy', geometry: SHARED_BEVELED_BOX, material: MAT_CANOPY },
+      { key: 'box_pier', geometry: SHARED_BEVELED_BOX, material: MAT_PIER },
+      { key: 'box_fin', geometry: SHARED_BEVELED_BOX, material: MAT_FIN },
+      { key: 'box_parapet', geometry: SHARED_BEVELED_BOX, material: MAT_PARAPET },
+      { key: 'box_pole', geometry: SHARED_BEVELED_BOX, material: MAT_POLE },
+      { key: 'box_concrete', geometry: SHARED_BEVELED_BOX, material: MAT_CONCRETE, receiveShadow: quality.shadows },
+      { key: 'box_chrome', geometry: SHARED_BEVELED_BOX, material: MAT_CHROME },
+      { key: 'box_timber', geometry: SHARED_BEVELED_BOX, material: MAT_TIMBER },
+      { key: 'box_solar', geometry: SHARED_BEVELED_BOX, material: MAT_SOLAR },
+      { key: 'box_glass', geometry: SHARED_BEVELED_BOX, material: MAT_GLASS },
+      { key: 'box_bridge_glass', geometry: SHARED_BEVELED_BOX, material: MAT_BRIDGE_GLASS },
       { key: 'box_basic', geometry: SHARED_UNIT_BOX, material: MAT_BASIC_COLORED },
 
       // HDR Glowing Strips, Lobbies, Curbs, Bulbs, Crowns & Beacons
@@ -825,9 +911,9 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
       { key: 'steam_plane', geometry: SHARED_STEAM_PLANE, material: MAT_CANOPY },
       { key: 'steam_cone', geometry: SHARED_STEAM_CONE, material: MAT_STEAM_PLUME },
 
-      // Batched Avenue Trees
-      { key: 'tree_planter_plinth', geometry: SHARED_UNIT_BOX, material: MAT_PLANTER_PLINTH, receiveShadow: quality.shadows },
-      { key: 'tree_planter_coping', geometry: SHARED_UNIT_BOX, material: MAT_PLANTER_COPING },
+      // Batched Avenue Trees (beveled planters + smooth organic crowns)
+      { key: 'tree_planter_plinth', geometry: SHARED_BEVELED_BOX, material: MAT_PLANTER_PLINTH, receiveShadow: quality.shadows },
+      { key: 'tree_planter_coping', geometry: SHARED_BEVELED_BOX, material: MAT_PLANTER_COPING },
       { key: 'tree_soil', geometry: SHARED_UNIT_BOX, material: MAT_SOIL_BED },
       { key: 'tree_trim', geometry: SHARED_UNIT_BOX, material: MAT_BASIC_COLORED },
       { key: 'tree_mound', geometry: SHARED_MOUND_GEO, material: MAT_MOUND },
@@ -955,14 +1041,18 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
     dynamicMats.groundMat.roughness = roadRough + 0.18;
     dynamicMats.plazaMat.roughness = swRough * 0.75;
     dynamicMats.plazaMat.metalness = swMetal;
-    dynamicMats.avenueMat.roughness = roadRough;
-    dynamicMats.avenueMat.metalness = roadMetal;
-    dynamicMats.avenueMat.envMapIntensity = effectiveWetness > 0.05 ? envScale : envScale * 0.65;
     const wantPuddle =
       q.wetReflectionsEnabled && q.reflectionQuality !== 'OFF' && (effectiveWetness > 0.05 || ultra);
-    if ((dynamicMats.avenueMat.roughnessMap !== null) !== wantPuddle) {
-      dynamicMats.avenueMat.roughnessMap = wantPuddle ? puddleRoughness : null;
-      dynamicMats.avenueMat.needsUpdate = true;
+    const aveEnv = effectiveWetness > 0.05 ? envScale : envScale * 0.65;
+    for (let i = 0; i < dynamicMats.allAvenueMats.length; i++) {
+      const m = dynamicMats.allAvenueMats[i];
+      m.roughness = roadRough;
+      m.metalness = roadMetal;
+      m.envMapIntensity = aveEnv;
+      if ((m.roughnessMap !== null) !== wantPuddle) {
+        m.roughnessMap = wantPuddle ? puddleRoughness : null;
+        m.needsUpdate = true;
+      }
     }
     dynamicMats.junctionMat.roughness = roadRough;
     dynamicMats.junctionMat.metalness = roadMetal;
@@ -999,33 +1089,40 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
 
   return (
     <group name="CityDistrictCentral">
-      {/* Ground Substrate */}
+      {/* Ground Substrate (pushed well below road planes to eliminate grazing depth-precision Z-fighting) */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.04, 0]}
+        position={[0, -0.14, 0]}
         receiveShadow={quality.shadows}
         material={dynamicMats.groundMat}
+        renderOrder={0}
       >
         <planeGeometry args={[2800, 2800]} />
       </mesh>
 
-      {/* Central Intersection & Civic Plaza Pad */}
-      <mesh position={[0, 0.072, 0]} receiveShadow={quality.shadows} material={dynamicMats.plazaMat}>
-        <boxGeometry args={[25.6, 0.02, 25.6]} />
+      {/* Central Intersection & Civic Plaza Pad (single-sided top deck, zero bottom-face Z-fighting) */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.082, 0]}
+        receiveShadow={quality.shadows}
+        material={dynamicMats.plazaMat}
+        renderOrder={3}
+      >
+        <planeGeometry args={[25.6, 25.6]} />
       </mesh>
 
       {/* Central Plaza Sunken Reflective Meridian Ring & Overhead Astrolabe */}
       <group name="CentralPlazaPavilion">
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.088, 0]} material={dynamicMats.meridianMat}>
-          <ringGeometry args={[6.2, 9.4, 48]} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.100, 0]} material={dynamicMats.meridianMat} renderOrder={4}>
+          <ringGeometry args={[6.25, 9.35, 48]} />
         </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.094, 0]}>
-          <ringGeometry args={[6.0, 6.2, 48]} />
-          <meshBasicMaterial color="#f59e0b" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.106, 0]} renderOrder={5}>
+          <ringGeometry args={[5.95, 6.20, 48]} />
+          <meshBasicMaterial color="#f59e0b" polygonOffset polygonOffsetFactor={-4} polygonOffsetUnits={-8} />
         </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.094, 0]}>
-          <ringGeometry args={[9.4, 9.6, 48]} />
-          <meshBasicMaterial color="#38bdf8" polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.106, 0]} renderOrder={5}>
+          <ringGeometry args={[9.40, 9.65, 48]} />
+          <meshBasicMaterial color="#38bdf8" polygonOffset polygonOffsetFactor={-4} polygonOffsetUnits={-8} />
         </mesh>
 
         {/* Suspended Kinetic Meridian Astrolabe */}
@@ -1060,12 +1157,12 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         </>
       )}
 
-      {/* Wayfinding Signage across Central & Outer Sectors */}
-      <StreetSign position={[0, 4.25, -14.2]} rotationY={Math.PI} label={landmarkNames.get('central_plaza') ?? 'Central Plaza Hub'} direction="S" />
-      <StreetSign position={[0, 4.25, -62]} rotationY={Math.PI} label={landmarkNames.get('north_crossway') ?? 'North Crossing Avenue'} direction="N" accent="#38bdf8" />
+      {/* Wayfinding Signage across Central & Outer Sectors (mounted on clear raised sidewalks) */}
+      <StreetSign position={[-13.6, 4.25, -14.2]} rotationY={Math.PI} label={landmarkNames.get('central_plaza') ?? 'Central Plaza Hub'} direction="S" />
+      <StreetSign position={[-13.6, 4.25, -62]} rotationY={Math.PI} label={landmarkNames.get('north_crossway') ?? 'North Crossing Avenue'} direction="N" accent="#38bdf8" />
       <StreetSign position={[28, 4.25, 28]} rotationY={Math.PI / 2} label={landmarkNames.get('apex_tower') ?? 'Apex Monolith Tower'} direction="E" accent="#f59e0b" />
       <StreetSign position={[62, 4.25, 62]} rotationY={-Math.PI / 2} label={landmarkNames.get('park_sanctuary') ?? 'Central Park Sanctuary'} direction="E" accent="#10b981" />
-      <StreetSign position={[0, 4.25, 62]} rotationY={0} label={landmarkNames.get('south_crossway') ?? 'South Crossing Avenue'} direction="S" accent="#38bdf8" />
+      <StreetSign position={[13.6, 4.25, 62]} rotationY={0} label={landmarkNames.get('south_crossway') ?? 'South Crossing Avenue'} direction="S" accent="#38bdf8" />
       <StreetSign position={[-62, 4.25, -14.2]} rotationY={Math.PI / 2} label="Neural Quantum Sector" direction="W" accent="#4a8ad6" />
       <StreetSign position={[-62, 4.25, 62]} rotationY={Math.PI / 2} label="Solaris Foundry Sector" direction="W" accent="#f59e0b" />
       <StreetSign position={[120, 4.25, -14.2]} rotationY={-Math.PI / 2} label="Aerostrata Spires" direction="E" accent="#38bdf8" />
@@ -1075,7 +1172,7 @@ export const CityDistrict: React.FC<CityDistrictProps> = ({ seed = 847291 }) => 
         <group name="AerialReconDrones">
           <instancedMesh
             ref={droneBodyRef}
-            args={[SHARED_UNIT_BOX, MAT_CANOPY, DRONE_COUNT]}
+            args={[SHARED_BEVELED_BOX, MAT_CANOPY, DRONE_COUNT]}
             dispose={null}
             frustumCulled={false}
           />

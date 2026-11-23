@@ -13,7 +13,11 @@ async function systems() {
       export { SaveSystem } from './src/core/SaveSystem';
       export { LivingCityEventSystem } from './src/world/LivingCityEventSystem';
       export { DialogueSystem } from './src/npc/DialogueSystem';
-      export { VehicleInteractionSystem } from './src/vehicle/VehicleInteractionSystem';
+      export {
+        VehicleInteractionSystem,
+        DEFAULT_CAR_PERFORMANCE_SPEC,
+        SOLARIS_CAR_PERFORMANCE_SPEC,
+      } from './src/vehicle/VehicleInteractionSystem';
       export { InteractionSystem } from './src/interaction/InteractionSystem';
       export { TerminalSystem } from './src/interaction/TerminalSystem';
       export { NavigationSystem } from './src/map/NavigationSystem';
@@ -36,6 +40,35 @@ async function systems() {
         createSculptedTireGeometry,
         createAirfoilWingGeometry,
       } from './src/vehicle/ExperimentalCarGeometry';
+      export {
+        createSolarisFormulaFuselageGeometry,
+        createSolarisSidepodGeometry,
+        createSolarisCanopyGeometry,
+        createSolarisTireGeometry,
+        createSolarisDorsalFinGeometry,
+        createSolarisAirbrakeFlapGeometry,
+      } from './src/vehicle/SolarisCarGeometry';
+      export {
+        createTrafficCarModelSet,
+        createSkyCruiserGeometry,
+      } from './src/city/TrafficCarGeometry';
+      export {
+        createInitialTrafficFleet,
+        stepTrafficFleet,
+        buildIntersectionTurnBezier,
+        getRightHandLaneOffset,
+        getHeadingYaw,
+      } from './src/city/TrafficNavigation';
+      export { isPointOnAnyRoad } from './src/city/WorldRoadClearance';
+      export { VegetationGenerator } from './src/city/VegetationGenerator';
+      export { TransitScheduleSystem } from './src/vehicle/TransitScheduleSystem';
+      export {
+        createSmoothBeveledBoxGeometry,
+        createSmoothBuildingPrismGeometry,
+        createSmoothFoliageCrownGeometry,
+        createSmoothHoverCoupeGeometry,
+        createSmoothMagShuttleGeometry,
+      } from './src/rendering/SmoothWorldGeometries';
     ` },
     bundle: true, platform: 'node', format: 'esm', write: false,
   });
@@ -647,3 +680,511 @@ test('sculpted experimental car geometry generates finite smooth outward normals
   tire.dispose();
   wing.dispose();
 });
+
+test('AX-09 Solaris Formula-X geometry generates finite smooth outward normals, elongated silhouette, and zero block artifacts', async () => {
+  const {
+    createSolarisFormulaFuselageGeometry,
+    createSolarisSidepodGeometry,
+    createSolarisCanopyGeometry,
+    createSolarisTireGeometry,
+    createSolarisDorsalFinGeometry,
+    createSolarisAirbrakeFlapGeometry,
+  } = await systems();
+
+  const body = createSolarisFormulaFuselageGeometry();
+  const sidepod = createSolarisSidepodGeometry(1);
+  const canopy = createSolarisCanopyGeometry();
+  const tire = createSolarisTireGeometry(0.39, 0.31);
+  const dorsalFin = createSolarisDorsalFinGeometry();
+  const airbrake = createSolarisAirbrakeFlapGeometry(1);
+
+  for (const geo of [body, sidepod, canopy, tire, dorsalFin, airbrake]) {
+    const pos = geo.getAttribute('position');
+    const norm = geo.getAttribute('normal');
+    assert.ok(pos && pos.count > 40);
+    assert.ok(norm && norm.count === pos.count);
+    for (let i = 0; i < pos.count; i++) {
+      assert.ok(Number.isFinite(pos.getX(i)) && Number.isFinite(pos.getY(i)) && Number.isFinite(pos.getZ(i)));
+      assert.ok(Number.isFinite(norm.getX(i)) && Number.isFinite(norm.getY(i)) && Number.isFinite(norm.getZ(i)));
+    }
+  }
+
+  body.computeBoundingBox();
+  const bodyLength = body.boundingBox.max.z - body.boundingBox.min.z;
+  assert.ok(bodyLength > 5.0, `Expected elongated Formula-X fuselage > 5.0m, got ${bodyLength}`);
+  assert.ok(body.boundingBox.min.y >= 0.14, `Expected clean underbody clearance >= 0.14m, got ${body.boundingBox.min.y}`);
+  assert.ok(body.boundingBox.max.y >= 1.1, `Expected sculpted roll-hoop airbox >= 1.1m, got ${body.boundingBox.max.y}`);
+
+  const canopyPos = canopy.getAttribute('position');
+  const canopyNorm = canopy.getAttribute('normal');
+  let maxCrownY = -Infinity;
+  let crownNormalY = 0;
+  for (let i = 0; i < canopyPos.count; i++) {
+    if (canopyPos.getY(i) > maxCrownY) {
+      maxCrownY = canopyPos.getY(i);
+      crownNormalY = canopyNorm.getY(i);
+    }
+  }
+  assert.ok(maxCrownY > 0.95 && maxCrownY < 1.28, `Expected low-slung fighter canopy height, got ${maxCrownY}`);
+  assert.ok(crownNormalY > 0.75, `Expected outward upward normal on Solaris canopy crown, got ${crownNormalY}`);
+
+  const sidepodPos = sidepod.getAttribute('position');
+  const sidepodNorm = sidepod.getAttribute('normal');
+  let rightFlankSamples = 0;
+  let rightFlankOutward = 0;
+  for (let i = 0; i < sidepodPos.count; i++) {
+    const x = sidepodPos.getX(i);
+    const y = sidepodPos.getY(i);
+    const z = sidepodPos.getZ(i);
+    if (Math.abs(z + 0.4) < 0.7 && x > 0.85 && y > 0.28 && y < 0.58) {
+      rightFlankSamples++;
+      if (sidepodNorm.getX(i) > 0.2) rightFlankOutward++;
+    }
+  }
+  assert.ok(rightFlankSamples > 10 && rightFlankOutward === rightFlankSamples, 'Expected outward normals on Solaris sidepod flank');
+
+  body.dispose();
+  sidepod.dispose();
+  canopy.dispose();
+  tire.dispose();
+  dorsalFin.dispose();
+  airbrake.dispose();
+});
+
+test('AX-09 Solaris has distinct speed/acceleration/braking/reverse/telemetry from VX-01 and outer chunks emit Grand Boulevard junction pads', async () => {
+  const {
+    VehicleInteractionSystem,
+    DEFAULT_CAR_PERFORMANCE_SPEC,
+    SOLARIS_CAR_PERFORMANCE_SPEC,
+    InteractionSystem,
+    InputManager,
+    WeatherSystem,
+    ProceduralChunkGenerator,
+  } = await systems();
+
+  WeatherSystem.getInstance().setWeather('CLEAR');
+
+  const simulateProfile = (id, label, spec, spawnX) => {
+    const vehicle = VehicleInteractionSystem.getInstance();
+    const interactions = InteractionSystem.getInstance();
+    const spawnPos = new Vector3(spawnX, 0.02, 5.0);
+    vehicle.registerRideable(id, label, spawnPos, 'vehicle', Math.PI, 'car', spec);
+    interactions.updatePlayerPosition(spawnPos);
+    assert.equal(interactions.triggerInteract(), true);
+    const mountedState = vehicle.getState();
+
+    // 1. Launch acceleration test (1.0s full throttle)
+    InputManager.setVirtualMovement(0, 1);
+    for (let i = 0; i < 30; i++) {
+      vehicle.updateMounted(1 / 30, 0);
+    }
+    const afterLaunchMs = vehicle.getTelemetry().forwardSpeedMs;
+
+    // 2. Cruise top speed (5.0s full throttle)
+    for (let i = 0; i < 150; i++) {
+      vehicle.updateMounted(1 / 30, 0);
+    }
+    const cruiseTopMs = vehicle.getTelemetry().forwardSpeedMs;
+
+    // 3. Hard braking test (0.5s full brake from cruise)
+    const beforeBrakeMs = cruiseTopMs;
+    InputManager.setVirtualMovement(0, -1);
+    for (let i = 0; i < 15; i++) {
+      vehicle.updateMounted(1 / 30, 0);
+    }
+    const brakeDropMs = beforeBrakeMs - vehicle.getTelemetry().forwardSpeedMs;
+
+    // 4. Reverse top speed (continue holding reverse for 3.5s)
+    for (let i = 0; i < 105; i++) {
+      vehicle.updateMounted(1 / 30, 0);
+    }
+    const reverseSpeedMs = Math.abs(vehicle.getTelemetry().forwardSpeedMs);
+    const reverseGear = vehicle.getTelemetry().gear;
+
+    InputManager.setVirtualMovement(0, 0);
+    vehicle.dismount();
+    vehicle.unregisterRideable(id);
+
+    return {
+      codeName: mountedState.carCodeName,
+      accentColor: mountedState.carAccentColor,
+      afterLaunchMs,
+      cruiseTopMs,
+      brakeDropMs,
+      reverseSpeedMs,
+      reverseGear,
+    };
+  };
+
+  const vx01 = simulateProfile('vx-01-test', 'VX-01 Apex Prototype', DEFAULT_CAR_PERFORMANCE_SPEC, -8.8);
+  const solaris = simulateProfile('ax-09-test', 'AX-09 Solaris Prototype', SOLARIS_CAR_PERFORMANCE_SPEC, 8.8);
+
+  assert.equal(vx01.codeName, 'VX-01');
+  assert.equal(vx01.accentColor, '#38bdf8');
+  assert.equal(solaris.codeName, 'AX-09');
+  assert.equal(solaris.accentColor, '#f59e0b');
+  assert.equal(solaris.reverseGear, 'R');
+
+  assert.ok(solaris.afterLaunchMs > vx01.afterLaunchMs + 3.0, `Expected Solaris faster launch (${solaris.afterLaunchMs} vs ${vx01.afterLaunchMs})`);
+  assert.ok(solaris.cruiseTopMs > vx01.cruiseTopMs + 5.0, `Expected Solaris higher cruise top speed (${solaris.cruiseTopMs} vs ${vx01.cruiseTopMs})`);
+  assert.ok(solaris.brakeDropMs > vx01.brakeDropMs + 2.0, `Expected Solaris stronger braking (${solaris.brakeDropMs} vs ${vx01.brakeDropMs})`);
+  assert.ok(solaris.reverseSpeedMs > vx01.reverseSpeedMs + 2.0, `Expected Solaris higher reverse speed (${solaris.reverseSpeedMs} vs ${vx01.reverseSpeedMs})`);
+  assert.ok(SOLARIS_CAR_PERFORMANCE_SPEC.maxBoostSpeedMs > DEFAULT_CAR_PERFORMANCE_SPEC.maxBoostSpeedMs + 10);
+  assert.ok(SOLARIS_CAR_PERFORMANCE_SPEC.aeroDownforceCoeff > DEFAULT_CAR_PERFORMANCE_SPEC.aeroDownforceCoeff);
+
+  // Verify outer streamed chunks generate junction pads over the x=0 and z=0 Grand Boulevards at y=0.072
+  const northChunk = ProceduralChunkGenerator.getChunkData(0, 2);
+  const eastChunk = ProceduralChunkGenerator.getChunkData(2, 0);
+  const northBlvdPad = northChunk.junctions.find(
+    (j) => Math.abs(j.position.x) < 0.01 && Math.abs(j.position.z - 300) < 0.01,
+  );
+  const eastBlvdPad = eastChunk.junctions.find(
+    (j) => Math.abs(j.position.x - 300) < 0.01 && Math.abs(j.position.z) < 0.01,
+  );
+  assert.ok(northBlvdPad && Math.abs(northBlvdPad.position.y - 0.072) < 0.001, 'Expected outer north chunk Grand Boulevard junction pad at y=0.072');
+  assert.ok(eastBlvdPad && Math.abs(eastBlvdPad.position.y - 0.072) < 0.001, 'Expected outer east chunk Grand Boulevard junction pad at y=0.072');
+});
+
+test('NPC traffic car models (SEDAN, SUV, COUPE, VAN) and sky cruiser are smooth, grounded, and distinct', async () => {
+  const { createTrafficCarModelSet, createSkyCruiserGeometry } = await systems();
+  const archetypes = ['SEDAN', 'SUV', 'COUPE', 'VAN'];
+  const dims = {};
+
+  for (const arch of archetypes) {
+    const model = createTrafficCarModelSet(arch);
+    for (const partName of ['bodyGeo', 'glassGeo', 'wheelsGeo', 'headlightGeo', 'taillightGeo']) {
+      const geo = model[partName];
+      const pos = geo.getAttribute('position');
+      const norm = geo.getAttribute('normal');
+      assert.ok(pos && pos.count > 0, `Expected vertices for ${arch}.${partName}`);
+      assert.ok(norm && norm.count === pos.count, `Expected smooth normals for ${arch}.${partName}`);
+      for (let i = 0; i < pos.count; i++) {
+        assert.ok(Number.isFinite(pos.getX(i)) && Number.isFinite(pos.getY(i)) && Number.isFinite(pos.getZ(i)));
+        assert.ok(Number.isFinite(norm.getX(i)) && Number.isFinite(norm.getY(i)) && Number.isFinite(norm.getZ(i)));
+      }
+      geo.computeBoundingBox();
+    }
+
+    // Sculpted loft body must have high smooth vertex count (not a boxy 24-vertex cube)
+    assert.ok(model.bodyGeo.getAttribute('position').count >= 400, `Expected smooth sculpted loft for ${arch}.bodyGeo`);
+
+    // Wheels must sit grounded at y ≈ 0
+    const wheelBox = model.wheelsGeo.boundingBox;
+    assert.ok(Math.abs(wheelBox.min.y) < 0.04, `Expected ${arch} wheels grounded near y=0, got ${wheelBox.min.y}`);
+    assert.ok(wheelBox.max.y > 0.5, `Expected realistic wheel diameter for ${arch}`);
+
+    const bodyBox = model.bodyGeo.boundingBox;
+    const cabinBox = model.glassGeo.boundingBox;
+    dims[arch] = {
+      height: Math.max(bodyBox.max.y, cabinBox.max.y),
+      length: bodyBox.max.z - bodyBox.min.z,
+      width: bodyBox.max.x - bodyBox.min.x,
+    };
+
+    model.bodyGeo.dispose();
+    model.glassGeo.dispose();
+    model.wheelsGeo.dispose();
+    model.headlightGeo.dispose();
+    model.taillightGeo.dispose();
+  }
+
+  // Distinct vehicle silhouettes across the 4 NPC car classes
+  assert.ok(dims.VAN.height > dims.SEDAN.height + 0.25, `Expected VAN taller than SEDAN (${dims.VAN.height} vs ${dims.SEDAN.height})`);
+  assert.ok(dims.SUV.height > dims.SEDAN.height + 0.12, `Expected SUV taller than SEDAN (${dims.SUV.height} vs ${dims.SEDAN.height})`);
+  assert.ok(dims.SEDAN.height > dims.COUPE.height + 0.08, `Expected SEDAN taller than COUPE (${dims.SEDAN.height} vs ${dims.COUPE.height})`);
+  assert.ok(dims.VAN.length > dims.COUPE.length + 0.4, `Expected VAN longer than COUPE (${dims.VAN.length} vs ${dims.COUPE.length})`);
+
+  const cruiser = createSkyCruiserGeometry();
+  assert.ok(cruiser.fuselageGeo.getAttribute('position').count >= 120, 'Expected smooth sculpted sky cruiser fuselage');
+  assert.ok(cruiser.canopyGeo.getAttribute('position').count > 0);
+  assert.ok(cruiser.wingGeo.getAttribute('position').count > 0);
+  assert.ok(cruiser.thrusterGeo.getAttribute('position').count > 0);
+  cruiser.fuselageGeo.dispose();
+  cruiser.canopyGeo.dispose();
+  cruiser.wingGeo.dispose();
+  cruiser.thrusterGeo.dispose();
+});
+
+test('NPC traffic obeys multi-intersection traffic lights, queues cleanly, executes smooth Bezier turns, and avoids parks', async () => {
+  const {
+    TrafficLightSystem,
+    createInitialTrafficFleet,
+    stepTrafficFleet,
+    getRightHandLaneOffset,
+    getHeadingYaw,
+  } = await systems();
+
+  const lights = TrafficLightSystem.getInstance();
+
+  // 1. Multi-intersection green-wave signal phases
+  const plazaSig = lights.getSignalAtIntersection(0, 0);
+  const northSig = lights.getSignalAtIntersection(0, 75);
+  assert.equal(plazaSig.nsSignal, 'GREEN');
+  assert.equal(plazaSig.ewSignal, 'RED');
+  assert.equal(northSig.nsSignal, 'RED');
+  assert.equal(northSig.ewSignal, 'GREEN');
+
+  const redStop = lights.evaluateStopControl('EW', -28, 1, 0, 22, 0);
+  assert.equal(redStop.shouldStop, true);
+  assert.equal(redStop.signal, 'RED');
+  const clearedStop = lights.evaluateStopControl('EW', -15, 1, 0, 22, 0);
+  assert.equal(clearedStop.shouldStop, false);
+  const greenStop = lights.evaluateStopControl('NS', -28, 1, 0, 22, 0);
+  assert.equal(greenStop.shouldStop, false);
+
+  // 2. Red-light stopping & same-lane queuing without stacking
+  const laneOff = getRightHandLaneOffset('EW', 1, 0, 0);
+  const lead = {
+    id: 1,
+    archetype: 'SEDAN',
+    archetypeIndex: 0,
+    axis: 'EW',
+    avenueCoord: 0,
+    dir: 1,
+    laneIndex: 0,
+    coord: -34,
+    x: -34,
+    z: laneOff,
+    yaw: getHeadingYaw('EW', 1),
+    roll: 0,
+    pitch: 0,
+    speed: 13,
+    maxSpeed: 14,
+    isBraking: false,
+    bodyColor: '#cbd5e1',
+    trimColor: '#f8fafc',
+    length: 4.58,
+    activeTurn: null,
+    plannedIntersection: 0,
+    plannedManeuver: 'LEFT',
+    decisionSeed: 1,
+  };
+  const follower = {
+    ...lead,
+    id: 2,
+    archetype: 'SUV',
+    coord: -46,
+    x: -46,
+    length: 4.82,
+    plannedManeuver: 'STRAIGHT',
+  };
+
+  const queuePair = [lead, follower];
+  for (let i = 0; i < 140; i++) {
+    stepTrafficFleet(queuePair, { dt: 1 / 30, lights });
+  }
+  assert.ok(lead.speed < 0.08, `Expected lead car stopped at RED light, got speed=${lead.speed}`);
+  assert.equal(lead.isBraking, true);
+  assert.ok(lead.x < -17.5 && lead.x > -24.0, `Expected lead car stopped cleanly before crosswalk stop bar, got x=${lead.x}`);
+  assert.ok(follower.speed < 0.08, `Expected follower stopped behind lead car, got speed=${follower.speed}`);
+  assert.equal(follower.isBraking, true);
+  assert.ok(lead.x - follower.x >= (lead.length + follower.length) * 0.5 + 1.8, `Expected non-overlapping queue gap, got ${lead.x - follower.x}`);
+
+  // 3. Switch EW signal to GREEN and verify smooth C1 Bezier LEFT turn onto NS Northbound lane
+  lights.update(13.0);
+  assert.equal(lights.getSignalAtIntersection(0, 0).ewSignal, 'GREEN');
+
+  let enteredTurn = false;
+  let maxYawStep = 0;
+  let maxAbsRoll = 0;
+  let prevYaw = lead.yaw;
+
+  for (let i = 0; i < 200; i++) {
+    stepTrafficFleet([lead], { dt: 1 / 30, lights });
+    if (lead.activeTurn) enteredTurn = true;
+    let dYaw = lead.yaw - prevYaw;
+    while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+    while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+    maxYawStep = Math.max(maxYawStep, Math.abs(dYaw));
+    maxAbsRoll = Math.max(maxAbsRoll, Math.abs(lead.roll));
+    prevYaw = lead.yaw;
+  }
+
+  assert.equal(enteredTurn, true, 'Expected car to enter smooth Bezier turn after GREEN light');
+  assert.equal(lead.activeTurn, null, 'Expected car to finish turn cleanly');
+  assert.equal(lead.axis, 'NS', 'Expected LEFT turn from Eastbound EW to land on NS');
+  assert.equal(lead.dir, -1, 'Expected LEFT turn from Eastbound EW to head North (-Z)');
+  assert.ok(maxYawStep < 0.22, `Expected continuous smooth turning without heading snap, got maxYawStep=${maxYawStep}`);
+  assert.ok(maxAbsRoll > 0.004, `Expected subtle suspension body roll during cornering, got maxAbsRoll=${maxAbsRoll}`);
+  const expectedDestX = getRightHandLaneOffset('NS', -1, 0, 0);
+  assert.ok(Math.abs(lead.x - expectedDestX) < 0.35, `Expected car aligned in destination right-hand lane x=${expectedDestX}, got ${lead.x}`);
+
+  // 4. Full 88-car fleet diversity & park sanctuary avoidance over 10s of live cycling lights
+  const fleet = createInitialTrafficFleet(88);
+  const seenArchetypes = new Set(fleet.map((c) => c.archetype));
+  assert.deepEqual([...seenArchetypes].sort(), ['COUPE', 'SEDAN', 'SUV', 'VAN']);
+
+  for (let tick = 0; tick < 300; tick++) {
+    lights.update(1 / 30);
+    stepTrafficFleet(fleet, { dt: 1 / 30, lights });
+    for (const c of fleet) {
+      const inEastPark = Math.abs(c.x - 75) < 20 && Math.abs(c.z - 75) < 20;
+      const inNorthPark = Math.abs(c.x) < 18 && c.z > 210 && c.z < 270;
+      assert.equal(inEastPark, false, `NPC car ${c.id} entered East Park Sanctuary at (${c.x.toFixed(1)}, ${c.z.toFixed(1)})`);
+      assert.equal(inNorthPark, false, `NPC car ${c.id} entered North Park Sanctuary at (${c.x.toFixed(1)}, ${c.z.toFixed(1)})`);
+    }
+  }
+});
+
+test('World map road clearance guarantees zero static objects on any central or streamed roadway', async () => {
+  const {
+    CityGenerator,
+    ProceduralChunkGenerator,
+    VegetationGenerator,
+    TransitScheduleSystem,
+    isPointOnAnyRoad,
+  } = await systems();
+
+  // 1. Sanity-check road corridor detector on known asphalt vs sidewalk points
+  assert.equal(isPointOnAnyRoad(0, -40, 0), true, 'Grand Boulevard NS centerline must register as road');
+  assert.equal(isPointOnAnyRoad(-5.6, -22, 0), true, 'Inner Grand Boulevard driving lane must register as road');
+  assert.equal(isPointOnAnyRoad(75, -95, 0), true, 'Secondary avenue x=75 must register as road');
+  assert.equal(isPointOnAnyRoad(180, 0, 0), true, 'Outer streamed NS/EW crossing at (180,0) must register as road');
+  assert.equal(isPointOnAnyRoad(75, 75, 0), false, 'East Park Sanctuary interior must not register as road');
+  assert.equal(isPointOnAnyRoad(0, 240, 0), false, 'North Park Sanctuary interior must not register as road');
+  assert.equal(isPointOnAnyRoad(13.6, -22, 0.5), false, 'Raised sidewalk curb at x=13.6 must be clear of road');
+
+  // 2. Central District buildings, streetlights, streetProps, avenue trees & transit stops
+  const city = CityGenerator.generateDistrict(847291);
+  for (const b of city.buildings) {
+    assert.equal(
+      isPointOnAnyRoad(b.position.x, b.position.z, 0.2),
+      false,
+      `Central building ${b.id} center overlaps road at (${b.position.x}, ${b.position.z})`
+    );
+  }
+  for (const sl of city.streetlights) {
+    assert.equal(
+      isPointOnAnyRoad(sl.position.x, sl.position.z, 0.5),
+      false,
+      `Central streetlight overlaps road at (${sl.position.x}, ${sl.position.z})`
+    );
+  }
+  for (const prop of city.streetProps) {
+    assert.equal(
+      isPointOnAnyRoad(prop.position.x, prop.position.z, 0.5),
+      false,
+      `Central street prop ${prop.id} (${prop.type}) overlaps road at (${prop.position.x}, ${prop.position.z})`
+    );
+  }
+  const centralTrees = VegetationGenerator.generateTrees(847291);
+  assert.ok(centralTrees.length >= 30, 'Expected populated central avenue tree canopy');
+  for (const tree of centralTrees) {
+    assert.equal(
+      isPointOnAnyRoad(tree.position.x, tree.position.z, 0.8),
+      false,
+      `Central tree ${tree.id} overlaps road at (${tree.position.x}, ${tree.position.z})`
+    );
+  }
+  const stops = TransitScheduleSystem.getInstance().getStops();
+  for (const stop of stops) {
+    assert.equal(
+      isPointOnAnyRoad(stop.position[0], stop.position[2], 0.5),
+      false,
+      `Transit stop ${stop.id} overlaps road at (${stop.position[0]}, ${stop.position[2]})`
+    );
+  }
+
+  // 3. Outer Streamed Chunks across 5x5 grid (cx, cz in [-2..2]): buildings, trees, bushes, furniture, biomeProps
+  let auditedChunks = 0;
+  for (let cx = -2; cx <= 2; cx++) {
+    for (let cz = -2; cz <= 2; cz++) {
+      if ((cx === -1 || cx === 0) && (cz === -1 || cz === 0)) continue;
+      auditedChunks++;
+      const chunk = ProceduralChunkGenerator.getChunkData(cx, cz, 847291);
+      for (const b of chunk.buildings) {
+        assert.equal(
+          isPointOnAnyRoad(b.position.x, b.position.z, 0.2),
+          false,
+          `Streamed building ${b.id} overlaps road at (${b.position.x}, ${b.position.z})`
+        );
+      }
+      for (const t of chunk.trees) {
+        assert.equal(
+          isPointOnAnyRoad(t.position.x, t.position.z, 0.8),
+          false,
+          `Streamed tree ${t.id} overlaps road at (${t.position.x}, ${t.position.z})`
+        );
+      }
+      for (const bush of chunk.bushes) {
+        assert.equal(
+          isPointOnAnyRoad(bush.position.x, bush.position.z, 0.6),
+          false,
+          `Streamed bush ${bush.id} overlaps road at (${bush.position.x}, ${bush.position.z})`
+        );
+      }
+      for (const f of chunk.furniture) {
+        assert.equal(
+          isPointOnAnyRoad(f.position.x, f.position.z, 0.6),
+          false,
+          `Streamed furniture ${f.id} (${f.type}) overlaps road at (${f.position.x}, ${f.position.z})`
+        );
+      }
+      for (const bp of chunk.biomeProps) {
+        assert.equal(
+          isPointOnAnyRoad(bp.position.x, bp.position.z, 0.6),
+          false,
+          `Streamed biome prop ${bp.id} (${bp.type}) overlaps road at (${bp.position.x}, ${bp.position.z})`
+        );
+      }
+    }
+  }
+  assert.equal(auditedChunks, 21, 'Expected all 21 outer chunks in 5x5 ring to be audited');
+});
+
+test('Smooth procedural world geometries produce finite vertices, smooth normals, UVs, and richer topology than raw cubes', async () => {
+  const {
+    createSmoothBeveledBoxGeometry,
+    createSmoothBuildingPrismGeometry,
+    createSmoothFoliageCrownGeometry,
+    createSmoothHoverCoupeGeometry,
+    createSmoothMagShuttleGeometry,
+  } = await systems();
+
+  const validateGeo = (label, geo, minVerts) => {
+    const pos = geo.getAttribute('position');
+    const norm = geo.getAttribute('normal');
+    assert.ok(pos && pos.count >= minVerts, `${label} expected >= ${minVerts} vertices, got ${pos?.count}`);
+    assert.ok(norm && norm.count === pos.count, `${label} must have matching vertex normals`);
+    for (let i = 0; i < pos.count; i++) {
+      assert.ok(Number.isFinite(pos.getX(i)) && Number.isFinite(pos.getY(i)) && Number.isFinite(pos.getZ(i)), `${label} finite pos`);
+      const nLen = Math.hypot(norm.getX(i), norm.getY(i), norm.getZ(i));
+      assert.ok(Math.abs(nLen - 1) < 0.05, `${label} unit normal at ${i}, got len=${nLen}`);
+    }
+    geo.computeBoundingBox();
+    assert.ok(geo.boundingBox && !geo.boundingBox.isEmpty(), `${label} non-empty bounding box`);
+  };
+
+  const bevelBox = createSmoothBeveledBoxGeometry(0.06, 2);
+  const prism = createSmoothBuildingPrismGeometry(0.032, 2);
+  const crown = createSmoothFoliageCrownGeometry();
+  const hover = createSmoothHoverCoupeGeometry();
+  const shuttle = createSmoothMagShuttleGeometry();
+
+  validateGeo('BeveledBox', bevelBox, 48);
+  validateGeo('BuildingPrism', prism, 40);
+  validateGeo('FoliageCrown', crown, 120);
+  validateGeo('HoverCoupeHull', hover.hullGeo, 200);
+  validateGeo('HoverCoupeCanopy', hover.canopyGeo, 80);
+  validateGeo('MagShuttleHull', shuttle.hullGeo, 200);
+  validateGeo('MagShuttleCabin', shuttle.cabinGeo, 80);
+
+  // Verify unit bounds on instanced architectural primitives ([-0.5..0.5]^3)
+  assert.ok(Math.abs(bevelBox.boundingBox.max.x - 0.5) < 0.02);
+  assert.ok(Math.abs(bevelBox.boundingBox.min.y + 0.5) < 0.02);
+  assert.ok(Math.abs(prism.boundingBox.max.y - 0.5) < 0.01);
+  assert.ok(Math.abs(prism.boundingBox.min.y + 0.5) < 0.01);
+  assert.ok(prism.getAttribute('uv'), 'BuildingPrism must preserve wrap-around curtain wall UVs');
+
+  // Verify clean disposal
+  bevelBox.dispose();
+  prism.dispose();
+  crown.dispose();
+  hover.hullGeo.dispose();
+  hover.canopyGeo.dispose();
+  shuttle.hullGeo.dispose();
+  shuttle.cabinGeo.dispose();
+});
+
+
+

@@ -9,14 +9,14 @@ export interface TransitStop {
 }
 
 const STOPS: TransitStop[] = [
-  { id: 'central-transit-node', name: 'Central Plaza Station', district: 'CENTRAL_CITY', position: [-7, 0.2, 10], dwellSeconds: 4 },
-  { id: 'north-crossing-node', name: 'North Crossing Hub', district: 'CENTRAL_CITY', position: [-7, 0.2, -58], dwellSeconds: 3 },
-  { id: 'neural-sector-node', name: 'Neural Quantum Station', district: 'NEURAL_DISTRICT', position: [-165, 0.2, -148], dwellSeconds: 4 },
-  { id: 'aerostrata-sector-node', name: 'Aerostrata Spire Station', district: 'SKY_DISTRICT', position: [165, 0.2, -148], dwellSeconds: 4 },
-  { id: 'east-sanctuary-node', name: 'Sanctuary West Gate', district: 'CENTRAL_CITY', position: [38, 0.2, 10], dwellSeconds: 4 },
-  { id: 'arboretum-sector-node', name: 'Biosphere Arboretum Gate', district: 'GREEN_DISTRICT', position: [165, 0.2, 148], dwellSeconds: 4 },
-  { id: 'solaris-foundry-node', name: 'Solaris Foundry Platform', district: 'INDUSTRIAL_DISTRICT', position: [-165, 0.2, 148], dwellSeconds: 4 },
-  { id: 'south-arcade-node', name: 'Synth Lounge Platform', district: 'CENTRAL_CITY', position: [-38, 0.2, 10], dwellSeconds: 3 },
+  { id: 'central-transit-node', name: 'Central Plaza Station', district: 'CENTRAL_CITY', position: [-13.8, 0.2, 22], dwellSeconds: 4 },
+  { id: 'north-crossing-node', name: 'North Crossing Hub', district: 'CENTRAL_CITY', position: [-13.8, 0.2, -56], dwellSeconds: 3 },
+  { id: 'neural-sector-node', name: 'Neural Quantum Station', district: 'NEURAL_DISTRICT', position: [-152, 0.2, -142], dwellSeconds: 4 },
+  { id: 'aerostrata-sector-node', name: 'Aerostrata Spire Station', district: 'SKY_DISTRICT', position: [152, 0.2, -142], dwellSeconds: 4 },
+  { id: 'east-sanctuary-node', name: 'Sanctuary West Gate', district: 'CENTRAL_CITY', position: [38, 0.2, 13.8], dwellSeconds: 4 },
+  { id: 'arboretum-sector-node', name: 'Biosphere Arboretum Gate', district: 'GREEN_DISTRICT', position: [152, 0.2, 142], dwellSeconds: 4 },
+  { id: 'solaris-foundry-node', name: 'Solaris Foundry Platform', district: 'INDUSTRIAL_DISTRICT', position: [-152, 0.2, 142], dwellSeconds: 4 },
+  { id: 'south-arcade-node', name: 'Synth Lounge Platform', district: 'CENTRAL_CITY', position: [-38, 0.2, 13.8], dwellSeconds: 3 },
 ];
 
 export class TransitScheduleSystem {

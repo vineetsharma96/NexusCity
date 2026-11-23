@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SeedRandom } from '../core/SeedRandom';
 import { KinematicCollisionSolver, CollisionBox } from '../player/KinematicCollision';
 import { FacadeStyleVariant } from '../core/ProceduralTextures';
+import { isPointOnAnyRoad } from './WorldRoadClearance';
 
 export type BuildingArchetype =
   | 'HELIX_CITADEL'
@@ -501,15 +502,16 @@ export class CityGenerator {
       { type: 'BOLLARD_CLUSTER', pos: [-13.4, 0.2, 62.5], rot: 0, accent: '#f43f5e' },
       { type: 'BOLLARD_CLUSTER', pos: [13.4, 0.2, 62.5], rot: 0, accent: '#f43f5e' },
 
-      { type: 'STEAM_GRATE', pos: [-8.8, 0.088, -22], rot: 0, accent: '#38bdf8' },
-      { type: 'STEAM_GRATE', pos: [8.8, 0.088, 22], rot: 0, accent: '#f59e0b' },
-      { type: 'STEAM_GRATE', pos: [-8.8, 0.088, -95], rot: 0, accent: '#10b981' },
-      { type: 'STEAM_GRATE', pos: [8.8, 0.088, 95], rot: 0, accent: '#f43f5e' },
-      { type: 'STEAM_GRATE', pos: [-95, 0.088, -8.8], rot: Math.PI / 2, accent: '#38bdf8' },
-      { type: 'STEAM_GRATE', pos: [95, 0.088, 8.8], rot: Math.PI / 2, accent: '#f59e0b' },
+      { type: 'STEAM_GRATE', pos: [-13.0, 0.205, -22], rot: 0, accent: '#38bdf8' },
+      { type: 'STEAM_GRATE', pos: [13.0, 0.205, 22], rot: 0, accent: '#f59e0b' },
+      { type: 'STEAM_GRATE', pos: [-13.0, 0.205, -95], rot: 0, accent: '#10b981' },
+      { type: 'STEAM_GRATE', pos: [13.0, 0.205, 95], rot: 0, accent: '#f43f5e' },
+      { type: 'STEAM_GRATE', pos: [-95, 0.205, -13.0], rot: Math.PI / 2, accent: '#38bdf8' },
+      { type: 'STEAM_GRATE', pos: [95, 0.205, 13.0], rot: Math.PI / 2, accent: '#f59e0b' },
     ];
 
     propCoords.forEach((p, idx) => {
+      if (isPointOnAnyRoad(p.pos[0], p.pos[2], 0.8)) return;
       streetProps.push({
         id: `central_prop_${idx}`,
         type: p.type,
@@ -518,6 +520,11 @@ export class CityGenerator {
         accentColor: p.accent,
       });
     });
+
+    const addStreetlightIfClear = (x: number, z: number, rotationY: number) => {
+      if (isPointOnAnyRoad(x, z, 0.8)) return;
+      streetlights.push({ position: new THREE.Vector3(x, 0, z), rotationY });
+    };
 
     for (let z = -300; z <= 300; z += 30) {
       if (
@@ -528,18 +535,18 @@ export class CityGenerator {
       ) {
         continue;
       }
-      streetlights.push({ position: new THREE.Vector3(-12.2, 0, z), rotationY: 0 });
-      streetlights.push({ position: new THREE.Vector3(12.2, 0, z), rotationY: Math.PI });
+      addStreetlightIfClear(-12.4, z, 0);
+      addStreetlightIfClear(12.4, z, Math.PI);
     }
 
     for (let x = -300; x <= 300; x += 30) {
       if (Math.abs(x) < 18 || Math.abs(Math.abs(x) - 75) < 13 || Math.abs(Math.abs(x) - 165) < 13) continue;
-      streetlights.push({ position: new THREE.Vector3(x, 0, -12.2), rotationY: -Math.PI / 2 });
-      streetlights.push({ position: new THREE.Vector3(x, 0, 12.2), rotationY: Math.PI / 2 });
+      addStreetlightIfClear(x, -12.4, -Math.PI / 2);
+      addStreetlightIfClear(x, 12.4, Math.PI / 2);
       if (Math.abs(x) <= 152) {
-        streetlights.push({ position: new THREE.Vector3(x, 0, -64.8), rotationY: -Math.PI / 2 });
+        addStreetlightIfClear(x, -64.6, -Math.PI / 2);
         if (x < 35 || x > 115) {
-          streetlights.push({ position: new THREE.Vector3(x, 0, 85.2), rotationY: Math.PI / 2 });
+          addStreetlightIfClear(x, 85.4, Math.PI / 2);
         }
       }
     }

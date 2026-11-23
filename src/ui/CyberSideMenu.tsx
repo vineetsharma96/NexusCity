@@ -6,6 +6,7 @@ import {
   AmbientSoundscapeState,
 } from '../audio/AmbientAudioManager';
 import { QualityManager, QualityPreset, QualitySettings } from '../rendering/QualityManager';
+import { WebGLCapabilities } from '../rendering/WebGLCapabilities';
 import { TimeSystem } from '../world/TimeSystem';
 import { WeatherSystem, WeatherType } from '../world/WeatherSystem';
 import { WindSystem } from '../world/WindSystem';
@@ -29,7 +30,7 @@ interface GraphicsToggleItem {
 
 const POST_OPTICS_TOGGLES: GraphicsToggleItem[] = [
   { key: 'postProcessing', label: 'POST-PROCESS GRADE', accent: 'var(--neon-cyan)' },
-  { key: 'bloom', label: 'NEON BLOOM GLOW', accent: 'var(--neon-amber)' },
+  { key: 'bloom', label: 'BLOOM EFFECT', accent: 'var(--neon-amber)' },
   { key: 'sharpeningEnabled', label: 'ULTRA CLARITY SHARP', accent: 'var(--neon-cyan)' },
   { key: 'vignetteEnabled', label: 'OPTICAL VIGNETTE', accent: 'var(--neon-emerald)' },
   { key: 'antiAliasing', label: 'ANTI-ALIASING (MSAA)', accent: 'var(--neon-cyan)' },
@@ -784,7 +785,94 @@ export const CyberSideMenu: React.FC<CyberSideMenuProps> = ({ isOpen, onClose })
                 <div>
                   REFLECTIONS: <strong style={{ color: 'var(--neon-cyan)' }}>{qualitySettings.reflectionQuality}</strong>
                 </div>
+                <div>
+                  BLOOM:{' '}
+                  <strong style={{ color: qualitySettings.bloom ? 'var(--neon-amber)' : 'var(--muted)' }}>
+                    {qualitySettings.bloom ? 'ON' : 'OFF'}
+                  </strong>
+                </div>
               </div>
+
+              {/* Dedicated Bloom Effect ON / OFF Control */}
+              {(() => {
+                const caps = WebGLCapabilities.detect();
+                const bloomSupported = caps.supportsHalfFloatRenderTarget && !caps.isVirGL;
+                const bloomActive = bloomSupported && qualitySettings.bloom;
+                return (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      border: `1px solid ${bloomActive ? 'var(--neon-amber)' : 'var(--border-subtle)'}`,
+                      background: bloomActive ? 'rgba(245, 158, 11, 0.08)' : 'rgba(7, 9, 14, 0.65)',
+                      borderRadius: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.08em',
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        BLOOM EFFECT
+                      </span>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--text-secondary)' }}>
+                        {!bloomSupported
+                          ? 'Unavailable on current GPU'
+                          : bloomActive
+                            ? 'HDR light halos & night glow active'
+                            : 'Disabled for crisp raw rendering & extra FPS'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        aria-label="Turn Bloom Effect On"
+                        aria-pressed={bloomActive}
+                        disabled={!bloomSupported}
+                        className="cyber-btn"
+                        onClick={() => QualityManager.updateCustomSettings({ bloom: true })}
+                        style={{
+                          padding: '6px 11px',
+                          fontSize: '0.66rem',
+                          fontWeight: 700,
+                          opacity: bloomSupported ? 1 : 0.45,
+                          color: bloomActive ? '#07090e' : 'var(--text-secondary)',
+                          background: bloomActive ? 'var(--neon-amber)' : 'rgba(255, 255, 255, 0.04)',
+                          borderColor: bloomActive ? 'var(--neon-amber)' : 'var(--border-subtle)',
+                        }}
+                      >
+                        ON
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Turn Bloom Effect Off"
+                        aria-pressed={!bloomActive}
+                        disabled={!bloomSupported}
+                        className="cyber-btn"
+                        onClick={() => QualityManager.updateCustomSettings({ bloom: false })}
+                        style={{
+                          padding: '6px 11px',
+                          fontSize: '0.66rem',
+                          fontWeight: 700,
+                          opacity: bloomSupported ? 1 : 0.45,
+                          color: !bloomActive ? '#07090e' : 'var(--text-secondary)',
+                          background: !bloomActive ? 'var(--neon-cyan)' : 'rgba(255, 255, 255, 0.04)',
+                          borderColor: !bloomActive ? 'var(--neon-cyan)' : 'var(--border-subtle)',
+                        }}
+                      >
+                        OFF
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Custom Graphics Master Quick Actions */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>

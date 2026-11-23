@@ -38,11 +38,36 @@ export interface VehicleTelemetry {
   surfaceGrip: number;
 }
 
+export interface CarPerformanceSpec {
+  codeName: string;
+  accentColor: string;
+  physicsProfile: PhysicsBodyProfile;
+  wheelRadiusM: number;
+  wheelbaseM: number;
+  maxSteerRad: number;
+  steerResponse: number;
+  maxForwardSpeedMs: number;
+  maxBoostSpeedMs: number;
+  maxReverseSpeedMs: number;
+  engineAccel: number;
+  boostAccel: number;
+  reverseAccel: number;
+  brakeDecel: number;
+  handbrakeDecel: number;
+  tractionMultiplier: number;
+  lateralGripScale: number;
+  /** Speed-proportional Venturi aero downforce grip gain */
+  aeroDownforceCoeff: number;
+  collisionRadius: number;
+}
+
 export interface VehicleState {
   mode: VehicleMode;
   activeId: string | null;
   variant: VehicleVariant;
   label: string;
+  carCodeName: string;
+  carAccentColor: string;
   speedMultiplier: number;
   vehiclePosition: [number, number, number];
   vehicleRotationY: number;
@@ -52,11 +77,64 @@ export interface VehicleState {
 
 type VehicleListener = (state: VehicleState) => void;
 
-const EXPERIMENTAL_CAR_PROFILE: PhysicsBodyProfile = {
-  massKg: 1460,
-  dragCoefficient: 0.27,
-  frontalAreaM2: 2.18,
-  surfaceFrictionScale: 1.0,
+export const DEFAULT_CAR_PERFORMANCE_SPEC: CarPerformanceSpec = {
+  codeName: 'VX-01',
+  accentColor: '#38bdf8',
+  physicsProfile: {
+    massKg: 1460,
+    dragCoefficient: 0.27,
+    frontalAreaM2: 2.18,
+    surfaceFrictionScale: 1.0,
+  },
+  wheelRadiusM: 0.37,
+  wheelbaseM: 2.86,
+  maxSteerRad: 0.54,
+  steerResponse: 11.5,
+  maxForwardSpeedMs: 35,
+  maxBoostSpeedMs: 48,
+  maxReverseSpeedMs: 14.5,
+  engineAccel: 17.5,
+  boostAccel: 26.5,
+  reverseAccel: 13.5,
+  brakeDecel: 30.0,
+  handbrakeDecel: 34.0,
+  tractionMultiplier: 2.25,
+  lateralGripScale: 9.8,
+  aeroDownforceCoeff: 0,
+  collisionRadius: 1.12,
+};
+
+/**
+ * Distinct ultra-low-drag, high-velocity ground-effect performance profile for AX-09 Solaris Prototype:
+ * Lighter carbon tub (1240 kg), ultra-slippery long-tail aero (Cd 0.19), explosive launch & overboost
+ * (23.8 / 35.5 m/s^2), 44 m/s (158 km/h) cruise / 62 m/s (223 km/h) boost top speed, 18.5 m/s reverse,
+ * carbon-ceramic + active airbrake deceleration, and speed-scaling Venturi downforce grip.
+ */
+export const SOLARIS_CAR_PERFORMANCE_SPEC: CarPerformanceSpec = {
+  codeName: 'AX-09',
+  accentColor: '#f59e0b',
+  physicsProfile: {
+    massKg: 1240,
+    dragCoefficient: 0.19,
+    frontalAreaM2: 1.92,
+    surfaceFrictionScale: 0.92,
+  },
+  wheelRadiusM: 0.39,
+  wheelbaseM: 3.04,
+  maxSteerRad: 0.48,
+  steerResponse: 14.2,
+  maxForwardSpeedMs: 44,
+  maxBoostSpeedMs: 62,
+  maxReverseSpeedMs: 18.5,
+  engineAccel: 23.8,
+  boostAccel: 35.5,
+  reverseAccel: 17.2,
+  brakeDecel: 37.0,
+  handbrakeDecel: 41.0,
+  tractionMultiplier: 2.65,
+  lateralGripScale: 11.6,
+  aeroDownforceCoeff: 0.015,
+  collisionRadius: 1.16,
 };
 
 const HOVER_COUPE_PROFILE: PhysicsBodyProfile = {
@@ -65,10 +143,6 @@ const HOVER_COUPE_PROFILE: PhysicsBodyProfile = {
   frontalAreaM2: 1.95,
   surfaceFrictionScale: 2.4,
 };
-
-const WHEEL_RADIUS_M = 0.37;
-const WHEELBASE_M = 2.86;
-const MAX_STEER_RAD = 0.54;
 
 function createIdleTelemetry(): VehicleTelemetry {
   return {
@@ -125,6 +199,7 @@ export class VehicleInteractionSystem {
       variant: VehicleVariant;
       position: THREE.Vector3;
       rotationY: number;
+      carSpec: CarPerformanceSpec;
     }
   >();
 
@@ -135,6 +210,8 @@ export class VehicleInteractionSystem {
       activeId: null,
       variant: 'hover',
       label: 'On Foot',
+      carCodeName: DEFAULT_CAR_PERFORMANCE_SPEC.codeName,
+      carAccentColor: DEFAULT_CAR_PERFORMANCE_SPEC.accentColor,
       speedMultiplier: 1,
       vehiclePosition: [4.5, 0.45, 10],
       vehicleRotationY: 0,
@@ -206,11 +283,22 @@ export class VehicleInteractionSystem {
     position: THREE.Vector3,
     kind: 'vehicle' | 'transit',
     rotationY: number = 0,
-    variant: VehicleVariant = 'hover'
+    variant: VehicleVariant = 'hover',
+    carSpec?: Partial<CarPerformanceSpec>
   ): void {
     const stored = position.clone();
     const existing = this.rideables.get(id);
     const vehicleCount = Array.from(this.rideables.values()).filter((r) => r.kind === 'vehicle').length;
+    const resolvedCarSpec: CarPerformanceSpec = carSpec
+      ? {
+          ...DEFAULT_CAR_PERFORMANCE_SPEC,
+          ...carSpec,
+          physicsProfile: {
+            ...DEFAULT_CAR_PERFORMANCE_SPEC.physicsProfile,
+            ...(carSpec.physicsProfile ?? {}),
+          },
+        }
+      : DEFAULT_CAR_PERFORMANCE_SPEC;
     this.rideables.set(id, {
       id,
       label,
@@ -218,6 +306,7 @@ export class VehicleInteractionSystem {
       variant,
       position: existing && this.state.activeId === id ? existing.position : stored,
       rotationY: existing ? existing.rotationY : rotationY,
+      carSpec: resolvedCarSpec,
     });
     if (
       kind === 'vehicle' &&
@@ -308,11 +397,15 @@ export class VehicleInteractionSystem {
       surfaceGrip: surface.frictionMu,
     };
 
+    const spec = entry?.carSpec ?? DEFAULT_CAR_PERFORMANCE_SPEC;
+
     this.state = {
       mode: kind === 'vehicle' ? 'RIDING' : 'TRANSIT_LINKED',
       activeId: id,
       variant,
       label,
+      carCodeName: spec.codeName,
+      carAccentColor: spec.accentColor,
       speedMultiplier,
       vehiclePosition: [this.vehiclePosition.x, this.vehiclePosition.y, this.vehiclePosition.z],
       vehicleRotationY: this.state.vehicleRotationY,
@@ -390,6 +483,8 @@ export class VehicleInteractionSystem {
     input: ReturnType<typeof InputManager.getState>
   ): THREE.Vector3 {
     const physics = WorldPhysicsEngine.getInstance();
+    const activeEntry = this.state.activeId ? this.rideables.get(this.state.activeId) : undefined;
+    const spec = activeEntry?.carSpec ?? DEFAULT_CAR_PERFORMANCE_SPEC;
     const surface = physics.getSurfaceAt(this.vehiclePosition.x, this.vehiclePosition.z);
     const speedUpgrade = 1 + this.state.upgrades.speed * 0.1;
     const handlingUpgrade = 1 + this.state.upgrades.handling * 0.08;
@@ -410,11 +505,11 @@ export class VehicleInteractionSystem {
 
     // Steering wheel response (speed-sensitive clamp so high-speed driving feels planted)
     const speedSteerScale = 1 / (1 + Math.abs(forwardSpeed) * 0.032);
-    const targetSteer = steerInput * MAX_STEER_RAD * speedSteerScale;
+    const targetSteer = steerInput * spec.maxSteerRad * speedSteerScale;
     this.steeringAngle = THREE.MathUtils.lerp(
       this.steeringAngle,
       targetSteer,
-      1 - Math.exp(-11.5 * handlingUpgrade * dt)
+      1 - Math.exp(-spec.steerResponse * handlingUpgrade * dt)
     );
 
     // Determine Drive / Reverse / Braking state cleanly
@@ -422,9 +517,11 @@ export class VehicleInteractionSystem {
     let isReversing = false;
     let gear: CarGear = 'N';
 
-    const maxForwardSpeed = (boost ? 48 : 35) * speedUpgrade;
-    const maxReverseSpeed = 14.5 * speedUpgrade;
-    const tractionAccelLimit = surface.frictionMu * 9.81 * 2.25 * handlingUpgrade;
+    const maxForwardSpeed = (boost ? spec.maxBoostSpeedMs : spec.maxForwardSpeedMs) * speedUpgrade;
+    const maxReverseSpeed = spec.maxReverseSpeedMs * speedUpgrade;
+    const aeroDownforceBonus = 1 + Math.abs(forwardSpeed) * spec.aeroDownforceCoeff;
+    const tractionAccelLimit =
+      surface.frictionMu * 9.81 * spec.tractionMultiplier * aeroDownforceBonus * handlingUpgrade;
 
     // Throttle & Brake / Reverse longitudinal force
     let longitudinalAccel = 0;
@@ -435,16 +532,16 @@ export class VehicleInteractionSystem {
         isReversing = true;
         gear = 'R';
         const revRatio = Math.max(0, 1 - Math.abs(forwardSpeed) / maxReverseSpeed);
-        longitudinalAccel = -throttleInput * Math.min(tractionAccelLimit, 13.5 * (0.45 + 0.55 * revRatio));
+        longitudinalAccel = -throttleInput * Math.min(tractionAccelLimit, spec.reverseAccel * (0.45 + 0.55 * revRatio));
       } else if (forwardSpeed < -0.6) {
         // Pressing forward while rolling backward applies brakes first
         isBraking = true;
         gear = 'R';
-        longitudinalAccel = Math.min(tractionAccelLimit * 1.2, 26.0) * throttleInput;
+        longitudinalAccel = Math.min(tractionAccelLimit * 1.2, spec.brakeDecel * 0.87) * throttleInput;
       } else {
         this.manualReverseLatch = false;
         gear = 'D';
-        const engineBase = boost ? 26.5 : 17.5;
+        const engineBase = boost ? spec.boostAccel : spec.engineAccel;
         const speedRatio = Math.max(0, 1 - Math.max(0, forwardSpeed) / maxForwardSpeed);
         const engineAccel = engineBase * speedUpgrade * (0.32 + 0.68 * speedRatio);
         longitudinalAccel = throttleInput * Math.min(tractionAccelLimit, engineAccel);
@@ -454,13 +551,13 @@ export class VehicleInteractionSystem {
         // Forward motion -> apply strong hydraulic + aero brakes
         isBraking = true;
         gear = 'D';
-        longitudinalAccel = -Math.min(tractionAccelLimit * 1.35, 30.0) * brakeReverseInput;
+        longitudinalAccel = -Math.min(tractionAccelLimit * 1.35, spec.brakeDecel) * brakeReverseInput;
       } else {
         // Stopped or already moving backward -> engage Reverse gear smoothly!
         isReversing = true;
         gear = 'R';
         const revRatio = Math.max(0, 1 - Math.abs(forwardSpeed) / maxReverseSpeed);
-        const revAccel = 13.5 * speedUpgrade * (0.4 + 0.6 * revRatio);
+        const revAccel = spec.reverseAccel * speedUpgrade * (0.4 + 0.6 * revRatio);
         longitudinalAccel = -brakeReverseInput * Math.min(tractionAccelLimit, revAccel);
       }
     } else {
@@ -475,7 +572,7 @@ export class VehicleInteractionSystem {
     if (handbrake) {
       isBraking = true;
       if (Math.abs(forwardSpeed) > 0.15) {
-        const hbDecel = Math.min(tractionAccelLimit * 1.45, 34.0);
+        const hbDecel = Math.min(tractionAccelLimit * 1.45, spec.handbrakeDecel);
         longitudinalAccel -= Math.sign(forwardSpeed) * hbDecel;
       }
     }
@@ -489,7 +586,7 @@ export class VehicleInteractionSystem {
 
     // Ackermann bicycle-model yaw rate (naturally reverses steering direction when backing up!)
     if (Math.abs(forwardSpeed) > 0.12 && Math.abs(this.steeringAngle) > 0.002) {
-      const yawRate = (forwardSpeed / WHEELBASE_M) * Math.tan(this.steeringAngle);
+      const yawRate = (forwardSpeed / spec.wheelbaseM) * Math.tan(this.steeringAngle);
       this.state.vehicleRotationY += yawRate * dt;
     }
 
@@ -498,8 +595,9 @@ export class VehicleInteractionSystem {
     this._heading.set(Math.sin(nextRotY), 0, Math.cos(nextRotY));
     this._right.set(Math.cos(nextRotY), 0, -Math.sin(nextRotY));
 
-    // Tire lateral friction (lowered on wet/snowy asphalt or handbrake for realistic drift feel)
-    const lateralDamp = (handbrake ? 2.4 : 9.8) * surface.lateralGrip * handlingUpgrade;
+    // Tire lateral friction (scaled by surface grip & active ground-effect downforce)
+    const lateralDamp =
+      (handbrake ? 2.4 : spec.lateralGripScale) * surface.lateralGrip * aeroDownforceBonus * handlingUpgrade;
     lateralSpeed *= Math.exp(-lateralDamp * dt);
 
     // Reconstruct world-space velocity before applying unified WorldPhysicsEngine air drag & rolling friction
@@ -512,7 +610,7 @@ export class VehicleInteractionSystem {
       this.vehicleVelocity,
       this.vehiclePosition.x,
       this.vehiclePosition.z,
-      EXPERIMENTAL_CAR_PROFILE,
+      spec.physicsProfile,
       dt,
       true,
       0.28,
@@ -533,7 +631,7 @@ export class VehicleInteractionSystem {
     );
     const resolved = KinematicCollisionSolver.resolveHorizontal(
       this._targetPos,
-      1.12,
+      spec.collisionRadius,
       1.45,
       this.vehiclePosition,
       this._resolvedPos
@@ -548,16 +646,16 @@ export class VehicleInteractionSystem {
     // Update wheel spin from true signed forward distance traveled (spins backward in reverse!)
     const resolvedForwardSpeed = this.vehicleVelocity.dot(this._heading);
     const resolvedSpeed = Math.hypot(actualVx, actualVz);
-    this.wheelSpinRad += (resolvedForwardSpeed * dt) / WHEEL_RADIUS_M;
+    this.wheelSpinRad += (resolvedForwardSpeed * dt) / spec.wheelRadiusM;
 
     // Longitudinal & lateral G-forces for screen effects (FOV/radial blur/brake pulse) & chassis pitch/roll
     const rawLongG = (resolvedForwardSpeed - this.prevForwardSpeed) / (dt * 9.81);
     this.prevForwardSpeed = resolvedForwardSpeed;
-    const clampedLongG = THREE.MathUtils.clamp(rawLongG, -3.2, 3.2);
+    const clampedLongG = THREE.MathUtils.clamp(rawLongG, -3.6, 3.6);
     this.smoothedLongG = THREE.MathUtils.lerp(this.smoothedLongG, clampedLongG, 1 - Math.exp(-9.5 * dt));
 
-    const yawSpeed = (resolvedForwardSpeed / WHEELBASE_M) * Math.tan(this.steeringAngle);
-    const rawLatG = THREE.MathUtils.clamp((resolvedForwardSpeed * yawSpeed) / 9.81, -2.0, 2.0);
+    const yawSpeed = (resolvedForwardSpeed / spec.wheelbaseM) * Math.tan(this.steeringAngle);
+    const rawLatG = THREE.MathUtils.clamp((resolvedForwardSpeed * yawSpeed) / 9.81, -2.4, 2.4);
     this.smoothedLatG = THREE.MathUtils.lerp(this.smoothedLatG, rawLatG, 1 - Math.exp(-8.5 * dt));
 
     const telemetry = this.state.telemetry;

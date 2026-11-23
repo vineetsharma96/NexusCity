@@ -119,6 +119,29 @@ test('CUSTOM preset and granular graphics toggles can be switched on or off inde
   assert.equal(QualityManager.current.reflectionQuality, 'HIGH');
 });
 
+test('bloom effect toggle switches ON and OFF independently of post-process grading and persists', async () => {
+  const first = await graphics(null, { supportsHalfFloatRenderTarget: true });
+  first.QualityManager.setPreset('HIGH');
+  assert.equal(first.QualityManager.current.bloom, true);
+  assert.equal(first.QualityManager.current.postProcessing, true);
+
+  // Turning Bloom OFF preserves post-processing color grading & shadows
+  first.QualityManager.updateCustomSettings({ bloom: false });
+  assert.equal(first.QualityManager.current.bloom, false);
+  assert.equal(first.QualityManager.current.postProcessing, true);
+  assert.equal(first.QualityManager.current.shadows, true);
+
+  // Persisted setting survives reload with Bloom still OFF
+  const savedRaw = first.writes.get('nexus_city_graphics_settings_v3');
+  const reloaded = await graphics(JSON.parse(savedRaw), { supportsHalfFloatRenderTarget: true });
+  assert.equal(reloaded.QualityManager.current.bloom, false);
+  assert.equal(reloaded.QualityManager.current.postProcessing, true);
+
+  // Turning Bloom back ON restores bloom cleanly
+  reloaded.QualityManager.updateCustomSettings({ bloom: true });
+  assert.equal(reloaded.QualityManager.current.bloom, true);
+});
+
 test('performance samples notify with new immutable snapshots', async () => {
   const original = globalThis.performance;
   let time = 0;

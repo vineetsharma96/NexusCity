@@ -146,8 +146,6 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({
     }
   }, [
     canUsePost,
-    quality.postProcessing,
-    quality.bloom,
     quality.antiAliasing,
     quality.dpr[0],
     quality.dpr[1],
@@ -174,6 +172,25 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({
       bloomPassRef.current.resolution.set(bloomDims.width, bloomDims.height);
       bloomPassRef.current.setSize(bloomDims.width, bloomDims.height);
       bloomPassRef.current.enabled = quality.bloom;
+      if (!quality.bloom) {
+        bloomPassRef.current.strength = 0;
+      } else {
+        const timeState = TimeSystem.getInstance().getState();
+        const weatherState = WeatherSystem.getInstance().getState();
+        const eventState = LivingCityEventSystem.getInstance().getState();
+        const targetBloom = computeAtmosphericBloomParams({
+          nightFactor: timeState.nightFactor,
+          goldenHourFactor: timeState.goldenHourFactor,
+          wetnessFactor: weatherState.wetnessFactor,
+          fogDensityMultiplier: weatherState.fogDensityMultiplier,
+          isUltra,
+          gridIsOut: eventState.type === 'POWER_OUTAGE' && eventState.phase === 'ACTIVE',
+          lightScale: eventState.lightScale,
+        });
+        bloomPassRef.current.strength = targetBloom.strength * bloomIntensityMultiplier;
+        bloomPassRef.current.radius = targetBloom.radius;
+        bloomPassRef.current.threshold = targetBloom.threshold;
+      }
     }
     if (gradePassRef.current) {
       gradePassRef.current.enabled = quality.postProcessing;
@@ -197,6 +214,7 @@ export const PostProcessingManager: React.FC<PostProcessingManagerProps> = ({
     quality.dpr[0],
     quality.dpr[1],
     isUltra,
+    bloomIntensityMultiplier,
     gl,
   ]);
 

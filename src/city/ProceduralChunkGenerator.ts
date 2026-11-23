@@ -4,6 +4,7 @@ import { DistrictGenerator, DistrictInfo } from './DistrictGenerator';
 import { CollisionBox } from '../player/KinematicCollision';
 import { VegetationGenerator, TreeDef, PlanterBushDef, TreeSpecies } from './VegetationGenerator';
 import { FacadeStyleVariant } from '../core/ProceduralTextures';
+import { isPointOnAnyRoad } from './WorldRoadClearance';
 
 export interface StreamedBuildingDef {
   id: string;
@@ -192,6 +193,20 @@ export class ProceduralChunkGenerator {
       });
     }
 
+    // Clean junction pads where outer chunk roads intersect the x=0 and z=0 22m Grand Boulevards
+    if (cx === 0 && Math.abs(centerZ) > CENTRAL_LIMIT && (centerZ < 200 || centerZ > 280)) {
+      junctions.push({
+        position: new THREE.Vector3(0, 0.072, centerZ),
+        size: new THREE.Vector3(22.4, 0.02, ewRoadWidth + 0.4),
+      });
+    }
+    if (cz === 0 && Math.abs(centerX) > CENTRAL_LIMIT) {
+      junctions.push({
+        position: new THREE.Vector3(centerX, 0.072, 0),
+        size: new THREE.Vector3(roadWidth + 0.4, 0.02, 22.4),
+      });
+    }
+
     const overlapsBox = (
       x: number,
       z: number,
@@ -369,8 +384,16 @@ export class ProceduralChunkGenerator {
     });
 
     const veg = VegetationGenerator.generateChunkTrees(cx, cz, district, globalSeed);
-    const trees = veg.trees.filter((t) => !isInsideProtectedZone(t.position.x, t.position.z, 2.5, 2.5));
-    const bushes = veg.bushes.filter((b) => !isInsideProtectedZone(b.position.x, b.position.z, 1.5, 1.5));
+    const trees = veg.trees.filter(
+      (t) =>
+        !isInsideProtectedZone(t.position.x, t.position.z, 2.5, 2.5) &&
+        !isPointOnAnyRoad(t.position.x, t.position.z, 1.4)
+    );
+    const bushes = veg.bushes.filter(
+      (b) =>
+        !isInsideProtectedZone(b.position.x, b.position.z, 1.5, 1.5) &&
+        !isPointOnAnyRoad(b.position.x, b.position.z, 1.0)
+    );
     trees.forEach((t) => {
       const r = Math.max(0.4, t.trunkRadius * 1.25);
       collisionBoxes.push({
@@ -555,8 +578,16 @@ export class ProceduralChunkGenerator {
       },
     ];
 
-    const furniture = rawFurniture.filter((f) => !isInsideProtectedZone(f.position.x, f.position.z, 2, 2));
-    const biomeProps = rawBiomeProps.filter((bp) => !isInsideProtectedZone(bp.position.x, bp.position.z, 2, 2));
+    const furniture = rawFurniture.filter(
+      (f) =>
+        !isInsideProtectedZone(f.position.x, f.position.z, 2, 2) &&
+        !isPointOnAnyRoad(f.position.x, f.position.z, 1.0)
+    );
+    const biomeProps = rawBiomeProps.filter(
+      (bp) =>
+        !isInsideProtectedZone(bp.position.x, bp.position.z, 2, 2) &&
+        !isPointOnAnyRoad(bp.position.x, bp.position.z, 1.2)
+    );
 
     const chunkData: StreamedChunkData = {
       key,
