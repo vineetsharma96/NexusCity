@@ -150,6 +150,14 @@ export const FallingLeavesSystem: React.FC<FallingLeavesSystemProps> = ({
     return geo;
   }, []);
 
+  React.useEffect(() => {
+    if (!meshRef.current) return;
+    for (let i = 0; i < leaves.length; i++) {
+      meshRef.current.setColorAt(i, colorObj.set(leaves[i].color));
+    }
+    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+  }, [leaves, colorObj]);
+
   useFrame(({ clock }, delta) => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -279,12 +287,10 @@ export const FallingLeavesSystem: React.FC<FallingLeavesSystemProps> = ({
 
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
-      mesh.setColorAt(i, colorObj.set(leaf.color));
     }
 
     mesh.count = activeCount;
     mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   });
 
   return (
